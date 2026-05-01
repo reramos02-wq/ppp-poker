@@ -408,6 +408,103 @@ const AV = (uid,sz="") => {
   return `<div class="av${sz==="lg"?" avlg":sz==="xl"?" avxl":""}">${ini(p.name)}</div>`;
 };
 
+// ── SHARE MODAL ──────────────────────────────────────────────────────────────
+function openShareModal(stage){
+  const ins = stage.inscriptions||[];
+  const tipo = stage.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout";
+  const dataFmt = fmtD(stage.date);
+  const local = stage.location?" · "+stage.location:"";
+
+  // Text for WhatsApp
+  const lines = [
+    "🃏 *PPP POKER*",
+    "━━━━━━━━━━━━━━━━",
+    "*"+stage.name+(stage.isFinal?" 🏆":"")+"*",
+    tipo,
+    "📅 "+dataFmt+local,
+    "━━━━━━━━━━━━━━━━",
+    "*Lista de Inscritos ("+ins.length+")*",
+    ""
+  ];
+  ins.forEach(function(uid,i){
+    const pl=getP(uid)||{name:uid,nickname:uid};
+    lines.push((i+1)+". "+pl.name+(pl.nickname&&pl.nickname!==pl.name?" ("+pl.nickname+")":""));
+  });
+  lines.push("");
+  lines.push("_Inscreva-se em ppp-poker.vercel.app_");
+  const text = lines.join("\n");
+
+  // Build modal
+  const wrap = document.getElementById("result-modal");
+  wrap.innerHTML="";
+
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  wrap.appendChild(ov);
+
+  const modal=document.createElement("div");
+  modal.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px;padding:20px;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;box-sizing:border-box;";
+  modal.addEventListener("click",function(e){e.stopPropagation();});
+  ov.appendChild(modal);
+
+  // Title
+  const title=document.createElement("div");
+  title.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px";
+  title.textContent="📤 Compartilhar Lista";
+  modal.appendChild(title);
+
+  // Preview card
+  const preview=document.createElement("div");
+  preview.style.cssText="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.9;color:var(--text);white-space:pre-wrap;font-family:'Barlow',sans-serif;max-height:300px;overflow-y:auto;";
+  preview.textContent=text;
+  modal.appendChild(preview);
+
+  // Buttons
+  const btns=document.createElement("div");
+  btns.className="row g8";
+
+  // WhatsApp button
+  const waBtn=document.createElement("button");
+  waBtn.className="btn fw";
+  waBtn.style.cssText="background:#25D366;color:#fff;font-size:15px;";
+  waBtn.innerHTML="<span style='font-size:18px'>💬</span> Abrir no WhatsApp";
+  waBtn.addEventListener("click",function(){
+    const encoded=encodeURIComponent(text);
+    window.open("https://wa.me/?text="+encoded,"_blank");
+  });
+  btns.appendChild(waBtn);
+
+  // Copy button
+  const copyBtn=document.createElement("button");
+  copyBtn.className="btn bo";
+  copyBtn.textContent="📋 Copiar";
+  copyBtn.addEventListener("click",function(){
+    navigator.clipboard.writeText(text).then(function(){
+      copyBtn.textContent="✓ Copiado!";
+      copyBtn.style.color="var(--green)";
+      setTimeout(function(){ copyBtn.textContent="📋 Copiar"; copyBtn.style.color=""; },2000);
+    }).catch(function(){
+      // Fallback for mobile browsers that block clipboard
+      const ta=document.createElement("textarea");
+      ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy");
+      document.body.removeChild(ta);
+      copyBtn.textContent="✓ Copiado!";
+      setTimeout(function(){ copyBtn.textContent="📋 Copiar"; },2000);
+    });
+  });
+  btns.appendChild(copyBtn);
+
+  // Close
+  const closeBtn=document.createElement("button");
+  closeBtn.className="btn bo fw";
+  closeBtn.textContent="Fechar";
+  closeBtn.style.marginTop="8px";
+  closeBtn.addEventListener("click",function(){ wrap.innerHTML=""; });
+  modal.appendChild(btns);
+  modal.appendChild(closeBtn);
+}
+
 // ── RENDER ────────────────────────────────────────────────────────────────────
 const IS_DESKTOP = () => window.innerWidth >= 768;
 
@@ -747,7 +844,10 @@ function renderStages(){
               <div class="av" style="width:20px;height:20px;font-size:8px">${ini(pl.name)}</div>
               ${pl.nickname||uid}${uid===CURRENT_USER_UID?" ✓":""}
             </div>`;}).join("")}${ins.length===0?'<span style="color:var(--muted);font-size:13px">Nenhum inscrito.</span>':""}</div>
-            <button class="btn sm ${iAmIn?"bd":"by"}" data-inscribe="${s.id}">${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}</button>`:""}
+            <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+              <button class="btn sm ${iAmIn?"bd":"by"}" data-inscribe="${s.id}">${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}</button>
+              ${ins.length>0?`<button class="btn bo sm" data-share-ins="${s.id}">📤 Compartilhar lista</button>`:""}
+            </div>`:""}
         </div>`:""}
       </div>`;
     }).join("");
@@ -1138,13 +1238,13 @@ function renderResultModal(){
         sel.style.borderColor="var(--border2)";
       }
       autoSaveDraft();
-      // Auto-reorder DOM rows by selected position
+      // Auto-reorder DOM rows by selected position (use data-uid to read from resultRows)
       var allRows=Array.from(list.querySelectorAll(".result-drag-row"));
       allRows.sort(function(a,b){
-        var selA=a.querySelector("select");
-        var selB=b.querySelector("select");
-        var pa=selA?parseInt(selA.value)||999:999;
-        var pb=selB?parseInt(selB.value)||999:999;
+        var ra=resultRows.find(function(x){return x.uid===a.dataset.uid;});
+        var rb=resultRows.find(function(x){return x.uid===b.dataset.uid;});
+        var pa=ra&&ra.pos&&parseInt(ra.pos)>0?parseInt(ra.pos):999;
+        var pb=rb&&rb.pos&&parseInt(rb.pos)>0?parseInt(rb.pos):999;
         return pa-pb;
       });
       allRows.forEach(function(r){ list.appendChild(r); });
@@ -1307,6 +1407,15 @@ function bindEvents(){
   // Expand stage
   document.querySelectorAll("[data-expand]").forEach(el=>{
     el.addEventListener("click",()=>{ EXPANDED=EXPANDED===el.dataset.expand?null:el.dataset.expand; render(); });
+  });
+  // Share inscriptions list
+  document.querySelectorAll("[data-share-ins]").forEach(btn=>{
+    btn.addEventListener("click",e=>{
+      e.stopPropagation();
+      const sid=btn.dataset.shareIns;
+      const stage=DB.stages.find(s=>s.id===sid); if(!stage)return;
+      openShareModal(stage);
+    });
   });
   // Inscribe button in stage detail
   document.querySelectorAll("[data-inscribe]").forEach(btn=>{
