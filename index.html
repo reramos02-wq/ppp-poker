@@ -1048,187 +1048,246 @@ function autoSaveDraft(){
 
 function renderResultModal(){
   const s=resultStage;
-  const sorted=getSortedRows();
-  const notIn=DB.players.filter(p=>!resultRows.find(r=>r.uid===p.uid));
   const isKO=s.type==="knockout";
   const hasPublished=s.status==="finished";
+  const notIn=DB.players.filter(p=>!resultRows.find(r=>r.uid===p.uid));
 
-  document.getElementById("result-modal").innerHTML=`
-  <div class="ov ov-center" id="rm-ov">
-    <div class="modal" style="padding-bottom:24px;max-height:90vh;" onclick="event.stopPropagation()">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div class="mtitle" style="margin-bottom:0">Resultado — ${s.name}</div>
-        <span id="autosave-ind" style="font-size:11px;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px"></span>
-      </div>
-      ${hasPublished?'<div style="font-size:12px;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.25);color:var(--green);padding:6px 10px;border-radius:2px;margin-bottom:12px">✓ Resultado publicado</div>':'<div style="font-size:12px;background:rgba(245,168,0,.08);border:1px solid rgba(245,168,0,.2);color:var(--yellow);padding:6px 10px;border-radius:2px;margin-bottom:12px">🖊 Modo rascunho — preencha as posições e publique ao final</div>'}
+  const wrap=document.getElementById("result-modal");
+  wrap.innerHTML="";
 
-      <!-- Header -->
-      <div style="display:grid;grid-template-columns:28px 1fr 64px${isKO?" 54px":""};gap:6px;margin-bottom:6px;align-items:center">
-        <div></div>
-        <div class="lbl" style="margin:0">Jogador</div>
-        <div class="lbl" style="margin:0">Posição</div>
-        ${isKO?'<div class="lbl" style="margin:0">KOs</div>':""}
-      </div>
+  // Overlay
+  const ov=document.createElement("div");
+  ov.className="ov ov-center"; ov.id="rm-ov";
+  wrap.appendChild(ov);
 
-      <!-- Rows (drag & drop) -->
-      <div id="result-rows-list">
-        ${sorted.map((row,idx)=>{
-          const pl=getP(row.uid)||{name:"?",nickname:"?"};
-          const hasPos=row.pos&&parseInt(row.pos)>0;
-          return `<div class="result-drag-row" draggable="true" data-uid="${row.uid}"
-            style="display:grid;grid-template-columns:28px 1fr 64px${isKO?" 54px":""};gap:6px;margin-bottom:6px;align-items:center;padding:6px 4px;border-radius:3px;background:${hasPos?"var(--surface2)":"var(--surface)"};border:1px solid ${hasPos?"var(--border2)":"var(--border)"};cursor:grab;transition:background .15s">
-            <div style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px;cursor:grab">⠿</div>
-            <div style="display:flex;align-items:center;gap:7px">
-              <div class="av" style="width:28px;height:28px;font-size:9px;flex-shrink:0">${ini(pl.name)}</div>
-              <div>
-                <div style="font-size:13px;color:#fff;font-weight:600">${pl.nickname}</div>
-                ${hasPos?`<div class="pos-label" style="font-size:10px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700">${row.pos}º lugar · ${getPts(parseInt(row.pos))} pts</div>`:'<div class="pos-label" style="font-size:10px;color:var(--muted)">sem posição</div>'}
-              </div>
-            </div>
-            <input class="inp res-pos-inp" type="number" min="1" max="99" placeholder=""
-              value="${row.pos}" data-uid="${row.uid}"
-              style="padding:10px 6px;text-align:center;font-size:16px;font-family:'Barlow Condensed',sans-serif;font-weight:700;-moz-appearance:textfield;appearance:textfield;" onwheel="this.blur()"/>
-            ${isKO?`<input class="inp res-ko-inp" type="number" min="0" placeholder="0" value="${row.ko}" data-uid="${row.uid}" style="padding:8px 4px;text-align:center;font-size:14px"/>`:""}
-          </div>`;
-        }).join("")}
-      </div>
+  // Modal box
+  const modal=document.createElement("div");
+  modal.className="modal";
+  modal.style.cssText="padding:22px;max-height:92vh;overflow-y:auto;width:100%;max-width:520px;box-sizing:border-box;";
+  modal.addEventListener("click",e=>e.stopPropagation());
+  modal.addEventListener("mousedown",e=>e.stopPropagation());
+  modal.addEventListener("touchstart",e=>e.stopPropagation(),{passive:true});
+  ov.appendChild(modal);
 
-      <!-- Add player -->
-      ${notIn.length?`<div style="margin:12px 0 0">
-        <div class="lbl" style="margin-bottom:6px">Adicionar jogador à etapa</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${notIn.map(p=>`<button class="btn bo sm" data-add-p="${p.uid}">+ ${p.nickname}</button>`).join("")}</div>
-      </div>`:""}
+  // Title
+  const titleRow=document.createElement("div");
+  titleRow.style.cssText="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px";
+  titleRow.innerHTML='<div class="mtitle" style="margin:0">Resultado &mdash; '+s.name+'</div><span id="autosave-ind" style="font-size:11px;color:var(--muted);font-family:\'Barlow Condensed\',sans-serif;letter-spacing:1px"></span>';
+  modal.appendChild(titleRow);
 
-      <div style="font-size:11px;color:var(--muted);margin-top:10px;margin-bottom:14px">
-        Pontos calculados automaticamente. Arraste ⠿ para reordenar ou digite a posição.
-      </div>
+  // Banner
+  const banner=document.createElement("div");
+  if(hasPublished){
+    banner.style.cssText="font-size:12px;padding:8px 12px;border-radius:3px;margin-bottom:14px;background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.3)";
+    banner.textContent="✓ Resultado publicado";
+  } else {
+    banner.style.cssText="font-size:12px;padding:8px 12px;border-radius:3px;margin-bottom:14px;background:rgba(245,168,0,.08);color:var(--yellow);border:1px solid rgba(245,168,0,.2)";
+    banner.textContent="🖊 Rascunho — preencha as posições e publique ao final";
+  }
+  modal.appendChild(banner);
 
-      <!-- Buttons -->
-      <div class="row g8">
-        <button class="btn by fw" id="publish-result" style="background:var(--green);color:#000">
-          ${hasPublished?"✓ Atualizar Publicação":"🏁 Publicar Resultado"}
-        </button>
-        <button class="btn bo" id="cancel-result">Fechar</button>
-      </div>
-    </div>
-  </div>`;
+  // Column headers
+  const hdr=document.createElement("div");
+  hdr.style.cssText="display:grid;grid-template-columns:28px 1fr 80px"+(isKO?" 60px":"")+";gap:8px;margin-bottom:6px;padding:0 4px";
+  hdr.innerHTML="<div></div>"
+    +'<div class="lbl" style="margin:0">Jogador</div>'
+    +'<div class="lbl" style="margin:0">Posição</div>'
+    +(isKO?'<div class="lbl" style="margin:0">KOs</div>':"");
+  modal.appendChild(hdr);
 
-  // Close overlay
-  // Overlay click intentionally disabled on result modal to prevent accidental close while editing
-  document.getElementById("cancel-result").addEventListener("click",closeResultModal);
+  // Row list
+  const list=document.createElement("div");
+  list.id="result-rows-list";
+  modal.appendChild(list);
 
-  // Position inputs — update label inline, auto-save, NO re-render
-  document.querySelectorAll(".res-pos-inp").forEach(inp=>{
-    inp.addEventListener("input",e=>{
-      const uid=e.target.dataset.uid;
-      const row=resultRows.find(r=>r.uid===uid);
-      if(!row)return;
-      row.pos=e.target.value;
-      // Update the points label inline without re-rendering
-      const dragRow=inp.closest(".result-drag-row");
-      if(dragRow){
-        const lbl=dragRow.querySelector(".pos-label");
-        const pos=parseInt(row.pos);
-        if(lbl){
-          if(pos>0){
-            lbl.textContent=pos+"º lugar · "+getPts(pos)+" pts";
-            lbl.style.color="var(--yellow)";
-            dragRow.style.background="var(--surface2)";
-            dragRow.style.borderColor="var(--border2)";
-          } else {
-            lbl.textContent="sem posição";
-            lbl.style.color="var(--muted)";
-            dragRow.style.background="var(--surface)";
-            dragRow.style.borderColor="var(--border)";
-          }
+  // Build each row
+  function buildRows(){
+    list.innerHTML="";
+    const withPos=resultRows.filter(r=>r.pos&&parseInt(r.pos)>0).sort((a,b)=>parseInt(a.pos)-parseInt(b.pos));
+    const noPos=resultRows.filter(r=>!r.pos||parseInt(r.pos)<=0);
+    [...noPos,...withPos].forEach(function(row){
+      const pl=getP(row.uid)||{name:"?",nickname:"?"};
+      const hasPos=row.pos&&parseInt(row.pos)>0;
+      const pts=hasPos?getPts(parseInt(row.pos)):0;
+
+      const div=document.createElement("div");
+      div.className="result-drag-row";
+      div.draggable=true;
+      div.dataset.uid=row.uid;
+      div.style.cssText="display:grid;grid-template-columns:28px 1fr 80px"+(isKO?" 60px":"")+";gap:8px;margin-bottom:8px;align-items:center;padding:10px 8px;border-radius:4px;"
+        +"background:"+(hasPos?"var(--surface2)":"var(--surface)")+";"
+        +"border:2px solid "+(hasPos?"var(--yellow)":"var(--border)")+";";
+
+      // Handle
+      const handle=document.createElement("div");
+      handle.style.cssText="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:18px;cursor:grab;user-select:none;-webkit-user-select:none";
+      handle.textContent="⠿";
+      div.appendChild(handle);
+
+      // Info
+      const info=document.createElement("div");
+      info.style.cssText="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden";
+      const av=document.createElement("div");
+      av.className="av";
+      av.style.cssText="width:30px;height:30px;font-size:10px;flex-shrink:0";
+      av.textContent=ini(pl.name);
+      const nameBlock=document.createElement("div");
+      nameBlock.style.cssText="min-width:0;overflow:hidden";
+      const nameEl=document.createElement("div");
+      nameEl.style.cssText="font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+      nameEl.textContent=pl.nickname;
+      const lblEl=document.createElement("div");
+      lblEl.className="pos-label";
+      lblEl.style.cssText="font-size:10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;color:"+(hasPos?"var(--yellow)":"var(--muted)");
+      lblEl.textContent=hasPos?row.pos+"º · "+pts+" pts":"sem posição";
+      nameBlock.appendChild(nameEl);
+      nameBlock.appendChild(lblEl);
+      info.appendChild(av);
+      info.appendChild(nameBlock);
+      div.appendChild(info);
+
+      // Position input — type=text with inputMode=numeric (works on ALL mobile browsers)
+      const posInp=document.createElement("input");
+      posInp.type="text";
+      posInp.inputMode="numeric";
+      posInp.pattern="[0-9]*";
+      posInp.autocomplete="off";
+      posInp.value=row.pos||"";
+      posInp.placeholder="—";
+      posInp.style.cssText="background:var(--surface);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:12px 4px;text-align:center;font-size:20px;font-family:'Barlow Condensed',sans-serif;font-weight:900;width:100%;box-sizing:border-box;outline:none;";
+      posInp.addEventListener("focus",function(){ this.style.borderColor="var(--yellow)"; this.select(); });
+      posInp.addEventListener("blur",function(){ this.style.borderColor="var(--border2)"; });
+      posInp.addEventListener("input",function(){
+        var val=this.value.replace(/[^0-9]/g,"");
+        this.value=val;
+        var r2=resultRows.find(function(x){return x.uid===row.uid;});
+        if(r2) r2.pos=val;
+        var pos=parseInt(val);
+        if(pos>0){
+          lblEl.textContent=pos+"º · "+getPts(pos)+" pts";
+          lblEl.style.color="var(--yellow)";
+          div.style.background="var(--surface2)";
+          div.style.borderColor="var(--yellow)";
+        } else {
+          lblEl.textContent="sem posição";
+          lblEl.style.color="var(--muted)";
+          div.style.background="var(--surface)";
+          div.style.borderColor="var(--border)";
         }
-      }
-      autoSaveDraft();
-    });
-    // On blur (leave field), re-sort the list
-    inp.addEventListener("blur",()=>{
-      renderResultModal();
-    });
-  });
+        autoSaveDraft();
+      });
+      div.appendChild(posInp);
 
-  // KO inputs — auto-save only
-  document.querySelectorAll(".res-ko-inp").forEach(inp=>{
-    inp.addEventListener("input",e=>{
-      const uid=e.target.dataset.uid;
-      const row=resultRows.find(r=>r.uid===uid);
-      if(row){ row.ko=e.target.value; autoSaveDraft(); }
+      // KO input
+      if(isKO){
+        const koInp=document.createElement("input");
+        koInp.type="text";
+        koInp.inputMode="numeric";
+        koInp.pattern="[0-9]*";
+        koInp.autocomplete="off";
+        koInp.value=row.ko||"0";
+        koInp.placeholder="0";
+        koInp.style.cssText="background:var(--surface);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:12px 4px;text-align:center;font-size:16px;font-family:'Barlow Condensed',sans-serif;font-weight:700;width:100%;box-sizing:border-box;outline:none;";
+        koInp.addEventListener("focus",function(){ this.style.borderColor="var(--yellow)"; });
+        koInp.addEventListener("blur",function(){ this.style.borderColor="var(--border2)"; });
+        koInp.addEventListener("input",function(){
+          var val=this.value.replace(/[^0-9]/g,"");
+          this.value=val;
+          var r2=resultRows.find(function(x){return x.uid===row.uid;});
+          if(r2) r2.ko=val;
+          autoSaveDraft();
+        });
+        div.appendChild(koInp);
+      }
+
+      // Drag events
+      var dragSrc=null;
+      div.addEventListener("dragstart",function(e){ dragSrc=div; div.style.opacity="0.4"; e.dataTransfer.effectAllowed="move"; });
+      div.addEventListener("dragend",function(){
+        div.style.opacity="1";
+        list.querySelectorAll(".result-drag-row").forEach(function(r){ r.style.outline=""; });
+        var newOrder=Array.from(list.querySelectorAll(".result-drag-row")).map(function(el){return el.dataset.uid;});
+        resultRows.sort(function(a,b){return newOrder.indexOf(a.uid)-newOrder.indexOf(b.uid);});
+        autoSaveDraft();
+      });
+      div.addEventListener("dragover",function(e){
+        e.preventDefault();
+        if(dragSrc&&dragSrc!==div){
+          div.style.outline="2px solid var(--yellow)";
+          var rect=div.getBoundingClientRect();
+          if(e.clientY<rect.top+rect.height/2) list.insertBefore(dragSrc,div);
+          else list.insertBefore(dragSrc,div.nextSibling);
+        }
+      });
+      div.addEventListener("dragleave",function(){ div.style.outline=""; });
+
+      list.appendChild(div);
     });
-  });
+  }
+  buildRows();
 
   // Add player
-  document.querySelectorAll("[data-add-p]").forEach(btn=>{
-    btn.addEventListener("click",()=>{
-      const uid=btn.dataset.addP;
-      if(!resultRows.find(r=>r.uid===uid)){ resultRows.push({uid,pos:"",ko:"0"}); renderResultModal(); }
+  if(notIn.length){
+    const addWrap=document.createElement("div");
+    addWrap.style.cssText="margin-top:14px";
+    const addLbl=document.createElement("div");
+    addLbl.className="lbl"; addLbl.style.marginBottom="8px";
+    addLbl.textContent="Adicionar jogador";
+    addWrap.appendChild(addLbl);
+    const addBtns=document.createElement("div");
+    addBtns.style.cssText="display:flex;flex-wrap:wrap;gap:6px";
+    notIn.forEach(function(p){
+      const btn=document.createElement("button");
+      btn.className="btn bo sm";
+      btn.textContent="+ "+p.nickname;
+      btn.addEventListener("click",function(){
+        if(!resultRows.find(function(r){return r.uid===p.uid;})){
+          resultRows.push({uid:p.uid,pos:"",ko:"0"});
+          renderResultModal();
+        }
+      });
+      addBtns.appendChild(btn);
     });
-  });
+    addWrap.appendChild(addBtns);
+    modal.appendChild(addWrap);
+  }
 
-  // Publish
-  document.getElementById("publish-result").addEventListener("click",()=>{
-    const filled=resultRows.filter(r=>r.pos&&parseInt(r.pos)>0);
-    if(!filled.length){ alert("Preencha pelo menos uma posição antes de publicar."); return; }
-    const results=filled.sort((a,b)=>parseInt(a.pos)-parseInt(b.pos)).map(r=>({
-      playerId:r.uid,position:parseInt(r.pos),points:getPts(parseInt(r.pos)),knockouts:parseInt(r.ko)||0
-    }));
-    DB.stages=DB.stages.map(s=>s.id===resultStage.id?{...s,status:"finished",results,draft:null}:s);
+  // Hint
+  const hint=document.createElement("div");
+  hint.style.cssText="font-size:11px;color:var(--muted);margin-top:12px;margin-bottom:16px";
+  hint.textContent="Pontos calculados automaticamente. Arraste ⠿ para reordenar.";
+  modal.appendChild(hint);
+
+  // Action buttons
+  const btns=document.createElement("div");
+  btns.className="row g8";
+
+  const publishBtn=document.createElement("button");
+  publishBtn.className="btn fw";
+  publishBtn.style.cssText="background:var(--green);color:#000;font-size:15px";
+  publishBtn.textContent=hasPublished?"✓ Atualizar Publicação":"🏁 Publicar Resultado";
+  publishBtn.addEventListener("click",function(){
+    var filled=resultRows.filter(function(r){return r.pos&&parseInt(r.pos)>0;});
+    if(!filled.length){alert("Preencha pelo menos uma posição antes de publicar.");return;}
+    var results=filled.sort(function(a,b){return parseInt(a.pos)-parseInt(b.pos);}).map(function(r){
+      return {playerId:r.uid,position:parseInt(r.pos),points:getPts(parseInt(r.pos)),knockouts:parseInt(r.ko)||0};
+    });
+    DB.stages=DB.stages.map(function(st){return st.id===resultStage.id?Object.assign({},st,{status:"finished",results:results,draft:null}):st;});
     save(); closeResultModal(); render();
   });
+  btns.appendChild(publishBtn);
 
-  // Drag & Drop
-  initDragDrop();
-}
-
-function initDragDrop(){
-  const list=document.getElementById("result-rows-list"); if(!list)return;
-  let dragging=null, dragOverEl=null;
-
-  list.querySelectorAll(".result-drag-row").forEach(row=>{
-    row.addEventListener("dragstart",e=>{
-      dragging=row;
-      row.style.opacity="0.4";
-      e.dataTransfer.effectAllowed="move";
-    });
-    row.addEventListener("dragend",e=>{
-      row.style.opacity="1";
-      list.querySelectorAll(".result-drag-row").forEach(r=>r.style.borderColor="");
-      dragging=null;
-      // Reorder resultRows based on DOM order
-      const newOrder=Array.from(list.querySelectorAll(".result-drag-row")).map(el=>el.dataset.uid);
-      resultRows.sort((a,b)=>newOrder.indexOf(a.uid)-newOrder.indexOf(b.uid));
-      // Auto-assign positions based on new order (only for those without pos)
-      // Keep existing positions, just reorder display
-      autoSaveDraft();
-      renderResultModal();
-    });
-    row.addEventListener("dragover",e=>{
-      e.preventDefault();
-      if(row===dragging)return;
-      row.style.borderColor="var(--yellow)";
-      const rect=row.getBoundingClientRect();
-      const mid=rect.top+rect.height/2;
-      if(e.clientY<mid){ list.insertBefore(dragging,row); }
-      else { list.insertBefore(dragging,row.nextSibling); }
-    });
-    row.addEventListener("dragleave",e=>{ row.style.borderColor=""; });
-    // Touch drag support
-    row.addEventListener("touchstart",e=>{ dragging=row; row.style.opacity="0.5"; },{passive:true});
-    row.addEventListener("touchend",e=>{
-      row.style.opacity="1"; dragging=null;
-      const newOrder=Array.from(list.querySelectorAll(".result-drag-row")).map(el=>el.dataset.uid);
-      resultRows.sort((a,b)=>newOrder.indexOf(a.uid)-newOrder.indexOf(b.uid));
-      autoSaveDraft(); renderResultModal();
-    },{passive:true});
-  });
+  const closeBtn=document.createElement("button");
+  closeBtn.className="btn bo";
+  closeBtn.textContent="Fechar";
+  closeBtn.addEventListener("click",closeResultModal);
+  btns.appendChild(closeBtn);
+  modal.appendChild(btns);
 }
 
 function closeResultModal(){
   clearTimeout(autoSaveTimer);
-  const el=document.getElementById("result-modal"); if(el)el.innerHTML="";
+  var el=document.getElementById("result-modal"); if(el)el.innerHTML="";
 }
 
 // ── ADD PLAYER MODAL ──────────────────────────────────────────────────────────
