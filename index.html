@@ -1115,192 +1115,212 @@ function openResultModal(sid){
   var stage=DB.stages.find(function(s){return s.id===sid;});
   if(!stage)return;
   resultStage=stage;
+  // Load from draft first, fallback to published results
+  var draft=stage.draft||[];
+  var results=stage.results||[];
   var base=(stage.inscriptions||[]).map(function(uid){
-    var ex=(stage.results||[]).find(function(r){return r.playerId===uid;});
-    var dr=(stage.draft||[]).find(function(r){return r.uid===uid;});
-    var src=dr||ex;
-    return {uid:uid,pos:src?(src.pos||String(src.position||"")):"",ko:src?(src.ko||String(src.knockouts||0)):"0"};
+    var dr=draft.find(function(r){return r.uid===uid;});
+    var ex=results.find(function(r){return r.playerId===uid;});
+    if(dr) return {uid:uid, pos:dr.pos||"", ko:dr.ko||"0"};
+    if(ex) return {uid:uid, pos:String(ex.position), ko:String(ex.knockouts||0)};
+    return {uid:uid, pos:"", ko:"0"};
   });
-  (stage.results||[]).forEach(function(r){
+  // Add any extra players in results not in inscriptions
+  results.forEach(function(r){
     if(!base.find(function(x){return x.uid===r.playerId;}))
-      base.push({uid:r.playerId,pos:String(r.position||""),ko:String(r.knockouts||0)});
+      base.push({uid:r.playerId, pos:String(r.position), ko:String(r.knockouts||0)});
   });
   resultRows=base;
   drawResultModal();
+}
+
+function autoSaveDraft(){
+  if(!resultStage)return;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(function(){
+    // Save current resultRows as draft
+    DB.stages=DB.stages.map(function(s){
+      if(s.id!==resultStage.id)return s;
+      return Object.assign({},s,{draft:resultRows.map(function(r){return {uid:r.uid,pos:r.pos,ko:r.ko};})});
+    });
+    save();
+    var ind=document.getElementById("autosave-ind");
+    if(ind){ind.textContent="✓ Rascunho salvo";ind.style.color="var(--green)";}
+    setTimeout(function(){var ind=document.getElementById("autosave-ind");if(ind)ind.textContent="";},2500);
+  },800);
 }
 
 function drawResultModal(){
   var s=resultStage;
   var isKO=s.type==="knockout";
   var hasPublished=s.status==="finished";
-  var totalPlayers=resultRows.length;
-  var maxPos=Math.max(totalPlayers,2);
+  var maxPos=Math.max(resultRows.length,2);
 
-  // Positions already taken
-  function takenPositions(exceptUid){
-    return resultRows.filter(function(r){return r.uid!==exceptUid&&r.pos&&parseInt(r.pos)>0;})
+  function takenBy(exceptUid){
+    return resultRows
+      .filter(function(r){return r.uid!==exceptUid && r.pos && parseInt(r.pos)>0;})
       .map(function(r){return parseInt(r.pos);});
   }
 
-  // Sort: no pos on top, then ascending
-  function getSorted(){
+  function sortedRows(){
     return resultRows.slice().sort(function(a,b){
-      var pa=a.pos&&parseInt(a.pos)>0?parseInt(a.pos):999;
-      var pb=b.pos&&parseInt(b.pos)>0?parseInt(b.pos):999;
+      var pa=parseInt(a.pos)>0?parseInt(a.pos):9999;
+      var pb=parseInt(b.pos)>0?parseInt(b.pos):9999;
       return pa-pb;
     });
   }
 
-  var notIn=DB.players.filter(function(p){return !resultRows.find(function(r){return r.uid===p.uid;});});
+  var notIn=DB.players.filter(function(p){
+    return !resultRows.find(function(r){return r.uid===p.uid;});
+  });
+
+  // ── Build the whole modal from scratch ──────────────────────────────────────
   var wrap=document.getElementById("result-modal");
   wrap.innerHTML="";
 
-  // Overlay
   var ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;"
+    +"display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
   wrap.appendChild(ov);
 
-  // Modal box
   var box=document.createElement("div");
-  box.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;box-sizing:border-box;";
-  box.addEventListener("click",function(e){e.stopPropagation();});
-  box.addEventListener("mousedown",function(e){e.stopPropagation();});
-  box.addEventListener("touchstart",function(e){e.stopPropagation();},{passive:true});
+  box.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);"
+    +"border:1px solid var(--border);border-radius:4px;padding:20px;"
+    +"width:100%;max-width:520px;max-height:92vh;overflow-y:auto;box-sizing:border-box;";
+  ["click","mousedown","touchstart"].forEach(function(ev){
+    box.addEventListener(ev,function(e){e.stopPropagation();},{passive:true});
+  });
   ov.appendChild(box);
 
-  // Title + autosave indicator
-  var titleRow=document.createElement("div");
-  titleRow.style.cssText="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px";
-  titleRow.innerHTML="<span style=\"font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px\">Resultado \u2014 "+s.name+"</span>"
-    +"<span id=\"autosave-ind\" style=\"font-size:11px;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px\"></span>";
-  box.appendChild(titleRow);
+  // Title
+  var tRow=document.createElement("div");
+  tRow.style.cssText="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px";
+  tRow.innerHTML="<b style=\"font-family:'Barlow Condensed',sans-serif;font-size:20px;color:#fff;"
+    +"text-transform:uppercase;letter-spacing:1px\">Resultado \u2014 "+s.name+"</b>"
+    +"<span id='autosave-ind' style='font-size:11px;color:var(--muted)'></span>";
+  box.appendChild(tRow);
 
   // Banner
-  var banner=document.createElement("div");
-  banner.style.cssText="font-size:12px;padding:8px 12px;border-radius:3px;margin-bottom:14px;"
-    +(hasPublished?"background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.3);"
-    :"background:rgba(245,168,0,.08);color:var(--yellow);border:1px solid rgba(245,168,0,.2);");
-  banner.textContent=hasPublished?"\u2713 Resultado publicado":"\uD83D\uDD8A Rascunho \u2014 selecione as posi\u00e7\u00f5es e publique ao final";
-  box.appendChild(banner);
+  var bn=document.createElement("div");
+  bn.style.cssText="font-size:12px;padding:8px 12px;border-radius:3px;margin-bottom:12px;border:1px solid;"
+    +(hasPublished
+      ?"background:rgba(46,204,113,.1);color:var(--green);border-color:rgba(46,204,113,.3);"
+      :"background:rgba(245,168,0,.08);color:var(--yellow);border-color:rgba(245,168,0,.2);");
+  bn.textContent=hasPublished?"\u2713 Resultado publicado":"\uD83D\uDD8A Rascunho \u2014 preencha e publique ao final";
+  box.appendChild(bn);
 
-  // Row list container
-  var list=document.createElement("div");
-  list.id="result-rows-list";
-  box.appendChild(list);
+  // Headers
+  var hdr=document.createElement("div");
+  hdr.style.cssText="display:grid;grid-template-columns:1fr 110px"+(isKO?" 80px":"")+";gap:8px;"
+    +"padding:0 4px;margin-bottom:6px;";
+  hdr.innerHTML="<div class='lbl' style='margin:0'>Jogador</div>"
+    +"<div class='lbl' style='margin:0;text-align:center'>Posi\u00e7\u00e3o</div>"
+    +(isKO?"<div class='lbl' style='margin:0;text-align:center'>KOs</div>":"");
+  box.appendChild(hdr);
 
-  // Build all rows
-  function buildList(){
-    list.innerHTML="";
-    getSorted().forEach(function(row){
+  // List container — rebuilt on every position change
+  var listEl=document.createElement("div");
+  box.appendChild(listEl);
+
+  function rebuildList(){
+    listEl.innerHTML="";
+    sortedRows().forEach(function(row){
       var pl=getP(row.uid)||{name:"?",nickname:"?"};
-      var curPos=row.pos&&parseInt(row.pos)>0?parseInt(row.pos):0;
-      var taken=takenPositions(row.uid);
+      var curPos=parseInt(row.pos)>0?parseInt(row.pos):0;
+      var pts=curPos?getPts(curPos):0;
+      var taken=takenBy(row.uid);
 
-      var rowDiv=document.createElement("div");
-      rowDiv.dataset.uid=row.uid;
-      rowDiv.style.cssText="display:grid;grid-template-columns:1fr "+(isKO?"120px 90px":"120px")+";gap:8px;margin-bottom:8px;align-items:center;"
-        +"padding:10px 12px;border-radius:4px;border:2px solid "+(curPos?"var(--yellow)":"var(--border)")+";background:"+(curPos?"var(--surface2)":"var(--surface)")+";";
+      var rd=document.createElement("div");
+      rd.style.cssText="display:grid;grid-template-columns:1fr 110px"+(isKO?" 80px":"")+";gap:8px;"
+        +"margin-bottom:8px;align-items:center;padding:10px 10px;border-radius:4px;"
+        +"border:2px solid "+(curPos?"var(--yellow)":"var(--border)")+";background:"
+        +(curPos?"var(--surface2)":"var(--surface)")+";";
 
       // Player info
       var info=document.createElement("div");
       info.style.cssText="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden";
-      var avDiv=document.createElement("div");
-      avDiv.className="av";
-      avDiv.style.cssText="width:32px;height:32px;font-size:10px;flex-shrink:0";
-      avDiv.textContent=ini(pl.name);
-      var nameDiv=document.createElement("div");
-      nameDiv.style.cssText="min-width:0;overflow:hidden";
-      var nameEl=document.createElement("div");
-      nameEl.style.cssText="font-size:14px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
-      nameEl.textContent=pl.nickname;
-      var ptsEl=document.createElement("div");
-      ptsEl.style.cssText="font-size:11px;font-family:'Barlow Condensed',sans-serif;font-weight:700;color:"+(curPos?"var(--yellow)":"var(--muted)");
-      ptsEl.textContent=curPos?curPos+"\u00ba \u00b7 "+getPts(curPos)+" pts":"sem posi\u00e7\u00e3o";
-      nameDiv.appendChild(nameEl);
-      nameDiv.appendChild(ptsEl);
-      info.appendChild(avDiv);
-      info.appendChild(nameDiv);
-      rowDiv.appendChild(info);
+      info.innerHTML="<div class='av' style='width:32px;height:32px;font-size:10px;flex-shrink:0'>"
+        +ini(pl.name)+"</div>"
+        +"<div style='min-width:0'>"
+        +"<div style='font-size:14px;color:#fff;font-weight:600;white-space:nowrap;"
+        +"overflow:hidden;text-overflow:ellipsis'>"+pl.nickname+"</div>"
+        +"<div style='font-size:11px;font-weight:700;font-family:Barlow Condensed,sans-serif;"
+        +"color:"+(curPos?"var(--yellow)":"var(--muted)")+"'>"
+        +(curPos?curPos+"\u00ba \u00b7 "+pts+" pts":"sem posi\u00e7\u00e3o")+"</div>"
+        +"</div>";
+      rd.appendChild(info);
 
-      // Position select — only show available positions (not taken by others)
-      var posSel=document.createElement("select");
-      posSel.style.cssText="background:var(--surface2);border:2px solid "+(curPos?"var(--yellow)":"var(--border2)")+";border-radius:4px;color:#fff;padding:10px 4px;text-align:center;font-size:16px;font-family:'Barlow Condensed',sans-serif;font-weight:900;width:100%;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;text-align-last:center;";
-      var opts="<option value=\"\">—</option>";
+      // Position SELECT
+      var ps=document.createElement("select");
+      ps.style.cssText="background:var(--surface2);border:2px solid "
+        +(curPos?"var(--yellow)":"var(--border2)")+";border-radius:4px;color:#fff;"
+        +"padding:10px 2px;text-align:center;text-align-last:center;font-size:17px;"
+        +"font-family:Barlow Condensed,sans-serif;font-weight:900;width:100%;"
+        +"cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
+      var optsHtml="<option value=''>—</option>";
       for(var i=1;i<=maxPos;i++){
-        var isTaken=taken.indexOf(i)>=0;
-        opts+="<option value=\""+i+"\""+(curPos===i?" selected":"")+(isTaken?" disabled style='color:#555'":"")+">"+i+"\u00ba"+(isTaken?" \u2717":"")+"</option>";
+        var tk=taken.indexOf(i)>=0;
+        optsHtml+="<option value='"+i+"'"
+          +(curPos===i?" selected":"")
+          +(tk?" disabled":"")
+          +">"+i+"\u00ba"+(tk?" \u2713":"")+"</option>";
       }
-      posSel.innerHTML=opts;
+      ps.innerHTML=optsHtml;
 
-      (function(r, sel, rd, pe){
-        sel.addEventListener("change",function(){
-          r.pos=sel.value;
-          var pos=parseInt(sel.value);
-          if(pos>0){
-            pe.textContent=pos+"\u00ba \u00b7 "+getPts(pos)+" pts";
-            pe.style.color="var(--yellow)";
-            rd.style.borderColor="var(--yellow)";
-            rd.style.background="var(--surface2)";
-            sel.style.borderColor="var(--yellow)";
-          } else {
-            pe.textContent="sem posi\u00e7\u00e3o";
-            pe.style.color="var(--muted)";
-            rd.style.borderColor="var(--border)";
-            rd.style.background="var(--surface)";
-            sel.style.borderColor="var(--border2)";
-          }
+      // CLOSURE to capture row reference
+      (function(rowRef, psEl, rdEl){
+        psEl.addEventListener("change",function(){
+          rowRef.pos=psEl.value;
           autoSaveDraft();
-          // Rebuild entire list to re-sort and refresh taken positions in other selects
-          buildList();
+          rebuildList(); // re-sort and refresh all selects
         });
-      })(row, posSel, rowDiv, ptsEl);
+      })(row, ps, rd);
 
-      rowDiv.appendChild(posSel);
+      rd.appendChild(ps);
 
-      // KO select
+      // KO SELECT (only for knockout stages)
       if(isKO){
         var curKO=parseInt(row.ko)||0;
-        var koSel=document.createElement("select");
-        koSel.style.cssText="background:var(--surface2);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:10px 4px;text-align:center;font-size:15px;font-family:'Barlow Condensed',sans-serif;font-weight:700;width:100%;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;text-align-last:center;";
-        var koOpts="";
-        for(var k=0;k<=maxPos;k++) koOpts+="<option value=\""+k+"\""+(curKO===k?" selected":"")+">"+k+" \uD83E\uDD4A</option>";
-        koSel.innerHTML=koOpts;
-        (function(r,ks){
-          ks.addEventListener("change",function(){
-            r.ko=ks.value; autoSaveDraft();
+        var ks=document.createElement("select");
+        ks.style.cssText="background:var(--surface2);border:2px solid var(--border2);"
+          +"border-radius:4px;color:#fff;padding:10px 2px;text-align:center;"
+          +"text-align-last:center;font-size:15px;font-family:Barlow Condensed,sans-serif;"
+          +"font-weight:700;width:100%;cursor:pointer;outline:none;"
+          +"appearance:none;-webkit-appearance:none;";
+        var koH="";
+        for(var k=0;k<=maxPos;k++)
+          koH+="<option value='"+k+"'"+(curKO===k?" selected":"")+">"+k+" \uD83E\uDD4A</option>";
+        ks.innerHTML=koH;
+        (function(rowRef,ksEl){
+          ksEl.addEventListener("change",function(){
+            rowRef.ko=ksEl.value;
+            autoSaveDraft();
           });
-        })(row,koSel);
-        rowDiv.appendChild(koSel);
+        })(row,ks);
+        rd.appendChild(ks);
       }
 
-      list.appendChild(rowDiv);
+      listEl.appendChild(rd);
     });
   }
-  buildList();
 
-  // Column header (after list so it shows labels)
-  var hdr=document.createElement("div");
-  hdr.style.cssText="display:grid;grid-template-columns:1fr "+(isKO?"120px 90px":"120px")+";gap:8px;margin-bottom:6px;padding:0 12px";
-  hdr.innerHTML="<div class=\"lbl\" style=\"margin:0\">Jogador</div>"
-    +"<div class=\"lbl\" style=\"margin:0;text-align:center\">Posi\u00e7\u00e3o</div>"
-    +(isKO?"<div class=\"lbl\" style=\"margin:0;text-align:center\">KOs</div>":"");
-  box.insertBefore(hdr, list);
+  rebuildList();
 
-  // Add player section
+  // Add player
   if(notIn.length){
     var addSec=document.createElement("div");
     addSec.style.cssText="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)";
-    var addLbl=document.createElement("div");
-    addLbl.className="lbl"; addLbl.style.marginBottom="8px";
-    addLbl.textContent="Adicionar jogador \u00e0 etapa";
-    addSec.appendChild(addLbl);
+    addSec.innerHTML="<div class='lbl' style='margin-bottom:8px'>Adicionar jogador \u00e0 etapa</div>";
     var addRow=document.createElement("div");
     addRow.style.cssText="display:flex;gap:8px";
     var addSel=document.createElement("select");
-    addSel.style.cssText="flex:1;background:var(--surface2);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:10px 12px;font-size:14px;font-family:'Barlow',sans-serif;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
-    addSel.innerHTML="<option value=\"\">Selecionar jogador...</option>"
-      +notIn.map(function(p){return "<option value=\""+p.uid+"\">"+p.nickname+" \u2014 "+p.name+"</option>";}).join("");
-    addRow.appendChild(addSel);
+    addSel.style.cssText="flex:1;background:var(--surface2);border:2px solid var(--border2);"
+      +"border-radius:4px;color:#fff;padding:10px 12px;font-size:14px;cursor:pointer;"
+      +"outline:none;appearance:none;-webkit-appearance:none;";
+    addSel.innerHTML="<option value=''>Selecionar jogador...</option>"
+      +notIn.map(function(p){
+        return "<option value='"+p.uid+"'>"+p.nickname+" \u2014 "+p.name+"</option>";
+      }).join("");
     var addBtn=document.createElement("button");
     addBtn.className="btn by";
     addBtn.style.cssText="padding:10px 16px;white-space:nowrap;flex-shrink:0";
@@ -1312,18 +1332,18 @@ function drawResultModal(){
         drawResultModal();
       }
     });
+    addRow.appendChild(addSel);
     addRow.appendChild(addBtn);
     addSec.appendChild(addRow);
     box.appendChild(addSec);
   }
 
-  // Hint
   var hint=document.createElement("div");
   hint.style.cssText="font-size:11px;color:var(--muted);margin-top:12px;margin-bottom:16px";
-  hint.textContent="Posi\u00e7\u00f5es j\u00e1 escolhidas por outros jogadores ficam desativadas.";
+  hint.textContent="Posi\u00e7\u00f5es j\u00e1 usadas ficam desativadas. Rascunho salvo automaticamente.";
   box.appendChild(hint);
 
-  // Action buttons
+  // Buttons
   var btns=document.createElement("div");
   btns.className="row g8";
   var pubBtn=document.createElement("button");
@@ -1349,6 +1369,13 @@ function drawResultModal(){
   btns.appendChild(closeBtn);
   box.appendChild(btns);
 }
+
+function closeResultModal(){
+  clearTimeout(autoSaveTimer);
+  var el=document.getElementById("result-modal");
+  if(el)el.innerHTML="";
+}
+
 
 function closeResultModal(){
   clearTimeout(autoSaveTimer);
