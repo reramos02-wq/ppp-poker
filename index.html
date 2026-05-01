@@ -141,8 +141,8 @@ body{background:var(--bg-dark);color:var(--text);font-family:'Barlow',sans-serif
 
 /* MODAL */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:300;display:flex;align-items:flex-end;justify-content:center;}
-.modal{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);padding:22px;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;animation:su .2s ease;}
-@keyframes su{from{transform:translateY(100%)}to{transform:none}}
+.ov-center{align-items:center;}
+.modal{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);padding:22px;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;}
 .mtitle{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;}
 
 /* ADMIN */
@@ -828,7 +828,7 @@ function showProfile(uid){
       <div class="mt16"><button class="btn bo fw" id="close-profile">Fechar</button></div>
     </div>
   </div>`;
-  document.getElementById("pov").addEventListener("click",e=>{if(e.target.id==="pov")closeProfile();});
+  document.getElementById("pov").addEventListener("click",e=>{if(e.target===document.getElementById("pov"))closeProfile();});
   document.getElementById("close-profile").addEventListener("click",closeProfile);
 }
 function closeProfile(){ const el=document.getElementById("profile-slot"); if(el)el.innerHTML=""; }
@@ -992,7 +992,7 @@ function openStageModal(stage=null){
       </div>
     </div>
   </div>`;
-  document.getElementById("sm-ov").addEventListener("click",e=>{if(e.target.id==="sm-ov")closeAdminModal();});
+  document.getElementById("sm-ov").addEventListener("click",e=>{if(e.target===document.getElementById("sm-ov"))closeAdminModal();});
   document.getElementById("cancel-stage").addEventListener("click",closeAdminModal);
   document.getElementById("save-stage").addEventListener("click",()=>{
     const name=document.getElementById("sf-n").value.trim();
@@ -1054,8 +1054,8 @@ function renderResultModal(){
   const hasPublished=s.status==="finished";
 
   document.getElementById("result-modal").innerHTML=`
-  <div class="ov" id="rm-ov">
-    <div class="modal" style="padding-bottom:24px">
+  <div class="ov ov-center" id="rm-ov">
+    <div class="modal" style="padding-bottom:24px;max-height:90vh;" onclick="event.stopPropagation()">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div class="mtitle" style="margin-bottom:0">Resultado — ${s.name}</div>
         <span id="autosave-ind" style="font-size:11px;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px"></span>
@@ -1114,8 +1114,7 @@ function renderResultModal(){
   </div>`;
 
   // Close overlay
-  document.getElementById("rm-ov").addEventListener("mousedown",e=>{if(e.target.id==="rm-ov")closeResultModal();});
-  document.querySelector("#rm-ov .modal")?.addEventListener("click",e=>e.stopPropagation());
+  // Overlay click intentionally disabled on result modal to prevent accidental close while editing
   document.getElementById("cancel-result").addEventListener("click",closeResultModal);
 
   // Position inputs — update label inline, auto-save, NO re-render
@@ -1246,7 +1245,7 @@ function openPlayerModal(){
       </div>
     </div>
   </div>`;
-  document.getElementById("pm-ov").addEventListener("click",e=>{if(e.target.id==="pm-ov")closeAdminModal();});
+  document.getElementById("pm-ov").addEventListener("click",e=>{if(e.target===document.getElementById("pm-ov"))closeAdminModal();});
   document.getElementById("cancel-player").addEventListener("click",closeAdminModal);
   document.getElementById("save-player").addEventListener("click",()=>{
     const name=document.getElementById("pf-n").value.trim();
