@@ -583,7 +583,7 @@ function renderHomeDesktop(){
       <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:4px">📅 Próxima Etapa</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff">${next.name}</div>
       <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.location?" · "+next.location:""}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:3px">${next.type==="nlholdem"?"♠ NL Hold'em":"💀 Knockout"}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px">${next.type==="nlholdem"?"❤️ NL Hold'em":"🥊 Knockout"}</div>
       <div style="margin-top:12px">
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Inscritos (${(next.inscriptions||[]).length})</div>
         <div class="chips">${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:"?"};return `<div class="chip"><div class="av" style="width:20px;height:20px;font-size:8px">${ini(pl.name)}</div>${pl.nickname||uid}</div>`;}).join("")}${(next.inscriptions||[]).length===0?'<span style="color:var(--muted);font-size:13px">Nenhum inscrito.</span>':""}</div>
@@ -591,7 +591,7 @@ function renderHomeDesktop(){
       <div style="margin-top:8px;text-align:right;font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</div>
     </div>`:"<div class='empty'>Nenhuma etapa próxima.</div>"}
     ${nlTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">♠ Ranking NL Hold'em</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">❤️ Ranking NL Hold'em</div>
     <div class="rl">${nlTop.map((r,i)=>`<div class="rr">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
@@ -602,10 +602,10 @@ function renderHomeDesktop(){
   const col2 = `
   <div class="home-col">
     ${koTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">💀 Ranking Knockout</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🥊 Ranking Knockout</div>
     <div class="rl mb10">${koTop.map((r,i)=>`<div class="rr">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">💀 ${r.ko} KO</div></div>
+      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
       <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
     </div>`).join("")}</div>`:""}
     ${(()=>{
@@ -656,7 +656,7 @@ function renderHome(){
       </div>
     </div>`:""}
     ${nlTop.length?`<div class="mb10">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">♠ Líderes NL Hold'em</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">❤️ Líderes NL Hold'em</div>
       <div class="rl">${nlTop.map((r,i)=>`<div class="rr">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}</div></div>
@@ -664,10 +664,10 @@ function renderHome(){
       </div>`).join("")}</div>
     </div>`:""}
     ${koTop.length?`<div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">💀 Líderes Knockout</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🥊 Líderes Knockout</div>
       <div class="rl">${koTop.map((r,i)=>`<div class="rr">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-        <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">💀 ${r.ko} KO</div></div>
+        <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
       </div>`).join("")}</div>
     </div>`:""}
@@ -684,15 +684,15 @@ function renderRanking(){
   <div class="st">Rank<span class="ac">ing</span></div><div class="ss">Temporada 2026</div><div class="dv"></div>
   <div class="tabs">
     <button class="tb${RANK_TAB==="geral"?" on":""}" data-rtab="geral">🏅 Geral</button>
-    <button class="tb${RANK_TAB==="nlholdem"?" on":""}" data-rtab="nlholdem">♠ NL Hold'em</button>
-    <button class="tb${RANK_TAB==="knockout"?" on":""}" data-rtab="knockout">💀 Knockout</button>
+    <button class="tb${RANK_TAB==="nlholdem"?" on":""}" data-rtab="nlholdem">❤️ NL Hold'em</button>
+    <button class="tb${RANK_TAB==="knockout"?" on":""}" data-rtab="knockout">🥊 Knockout</button>
   </div>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
   <div class="rl">${list.map((r,i)=>`<div class="rr">
     <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
     <div class="ri">
       <div class="rn">${r.p.nickname}</div>
-      <div class="rm">${r.stages} etapa${r.stages!==1?"s":""}${isKO?` · 💀 ${r.ko}`:""}${isGeral&&r.ko>0?` · 💀 ${r.ko}`:""}${isGeral?` <span style="font-size:10px;color:var(--muted)">(♠${r.nlPts} + 💀${r.koPts})</span>`:""}</div>
+      <div class="rm">${r.stages} etapa${r.stages!==1?"s":""}${isKO?` · 🥊 ${r.ko}`:""}${isGeral&&r.ko>0?` · 🥊 ${r.ko}`:""}${isGeral?` <span style="font-size:10px;color:var(--muted)">(❤️${r.nlPts} + 🥊${r.koPts})</span>`:""}</div>
     </div>
     <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
   </div>`).join("")}</div>
@@ -719,7 +719,7 @@ function renderStages(){
         <div class="sgh" data-expand="${s.id}">
           <div style="flex:1">
             <div class="sgn">${s.name}${s.isFinal?" 🏆":""}</div>
-            <div class="sgm">${fmtD(s.date)}${s.location?" · "+s.location:""}<br/>${s.type==="nlholdem"?"♠ NL Hold'em":"💀 Knockout"}${s.isFinal?" · Mesa Final":""}</div>
+            <div class="sgm">${fmtD(s.date)}${s.location?" · "+s.location:""}<br/>${s.type==="nlholdem"?"❤️ NL Hold'em":"🥊 Knockout"}${s.isFinal?" · Mesa Final":""}</div>
           </div>
           <div class="sgr">
             <span class="badge ${badgeCls}">${badgeLbl}</span>
@@ -734,7 +734,7 @@ function renderStages(){
               <div class="av" style="width:26px;height:26px;font-size:9px">${ini(pl.name)}</div>
               <div style="flex:1">${pl.nickname}</div>
               <div style="color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700">${r.points} pts</div>
-              ${s.type==="knockout"?`<div style="color:var(--muted);font-size:12px;margin-left:6px">💀${r.knockouts||0}</div>`:""}
+              ${s.type==="knockout"?`<div style="color:var(--muted);font-size:12px;margin-left:6px">🥊${r.knockouts||0}</div>`:""}
             </div>`;}).join("")}`:""}
           ${s.status==="upcoming"?`
             <div class="lbl" style="margin-bottom:8px">Inscritos (${ins.length})</div>
@@ -864,8 +864,8 @@ function renderRules(){
   return `<div class="sec">
   <div class="st">Regr<span class="ac">as</span></div><div class="ss">Formatos e pontuação</div><div class="dv"></div>
   <div class="tabs">
-    <button class="tb${RULES_TAB==="nlholdem"?" on":""}" data-rtab2="nlholdem">♠ NL Ranking</button>
-    <button class="tb${RULES_TAB==="knockout"?" on":""}" data-rtab2="knockout">💀 PPP KO</button>
+    <button class="tb${RULES_TAB==="nlholdem"?" on":""}" data-rtab2="nlholdem">❤️ NL Ranking</button>
+    <button class="tb${RULES_TAB==="knockout"?" on":""}" data-rtab2="knockout">🥊 PPP KO</button>
   </div>
   <div class="tabs">
     <button class="tb${RULES_VIEW==="rules"?" on":""}" data-rview="rules">Regras</button>
@@ -976,8 +976,8 @@ function openStageModal(stage=null){
       <div class="fr"><label class="lbl">Local</label><input class="inp" id="sf-l" value="${f.location||""}" placeholder="Ex: Casa do João"/></div>
       <div class="fr"><label class="lbl">Formato</label>
         <select class="inp" id="sf-t">
-          <option value="nlholdem"${f.type==="nlholdem"?" selected":""}>♠ NL Hold'em</option>
-          <option value="knockout"${f.type==="knockout"?" selected":""}>💀 Knockout</option>
+          <option value="nlholdem"${f.type==="nlholdem"?" selected":""}>❤️ NL Hold'em</option>
+          <option value="knockout"${f.type==="knockout"?" selected":""}>🥊 Knockout</option>
         </select>
       </div>
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;margin-bottom:14px">
