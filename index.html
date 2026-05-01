@@ -1268,13 +1268,35 @@ function drawResultModal(){
       ps.innerHTML=optsHtml;
 
       // CLOSURE to capture row reference
-      (function(rowRef, psEl, rdEl){
+      (function(rowRef, psEl){
         psEl.addEventListener("change",function(){
+          var newPos=parseInt(psEl.value)||0;
+          var oldPos=parseInt(rowRef.pos)||0;
+          if(newPos>0 && newPos!==oldPos){
+            // Shift other players: if someone already has newPos, push them down
+            // and cascade until no conflict
+            var shifted=[];
+            function shiftDown(pos, skipUid){
+              var occupant=resultRows.find(function(r){
+                return r.uid!==skipUid && parseInt(r.pos)===pos;
+              });
+              if(occupant && shifted.indexOf(occupant.uid)<0){
+                shifted.push(occupant.uid);
+                shiftDown(pos+1, occupant.uid);
+                occupant.pos=String(pos+1);
+              }
+            }
+            shiftDown(newPos, rowRef.uid);
+          }
           rowRef.pos=psEl.value;
+          // Update maxPos in case we shifted beyond original count
+          maxPos=Math.max(maxPos, resultRows.reduce(function(m,r){
+            return Math.max(m,parseInt(r.pos)||0);
+          },0));
           autoSaveDraft();
-          rebuildList(); // re-sort and refresh all selects
+          rebuildList();
         });
-      })(row, ps, rd);
+      })(row, ps);
 
       rd.appendChild(ps);
 
