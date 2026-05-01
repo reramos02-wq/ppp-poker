@@ -164,6 +164,8 @@ body{background:var(--bg-dark);color:var(--text);font-family:'Barlow',sans-serif
 /* INPUTS */
 .inp{background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);padding:9px 12px;font-family:'Barlow',sans-serif;font-size:14px;width:100%;transition:border-color .15s;}
 .inp:focus{outline:none;border-color:var(--yellow);}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+input[type=number]{-moz-appearance:textfield;}
 select.inp{appearance:none;}
 .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px;display:block;font-family:'Barlow Condensed',sans-serif;font-weight:600;}
 .fr{margin-bottom:11px;}
@@ -1080,12 +1082,12 @@ function renderResultModal(){
               <div class="av" style="width:28px;height:28px;font-size:9px;flex-shrink:0">${ini(pl.name)}</div>
               <div>
                 <div style="font-size:13px;color:#fff;font-weight:600">${pl.nickname}</div>
-                ${hasPos?`<div style="font-size:10px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700">${row.pos}º lugar · ${getPts(parseInt(row.pos))} pts</div>`:'<div style="font-size:10px;color:var(--muted)">sem posição</div>'}
+                ${hasPos?`<div class="pos-label" style="font-size:10px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700">${row.pos}º lugar · ${getPts(parseInt(row.pos))} pts</div>`:'<div class="pos-label" style="font-size:10px;color:var(--muted)">sem posição</div>'}
               </div>
             </div>
-            <input class="inp res-pos-inp" type="number" min="1" max="99" placeholder="—"
+            <input class="inp res-pos-inp" type="number" min="1" max="99" placeholder=""
               value="${row.pos}" data-uid="${row.uid}"
-              style="padding:8px 6px;text-align:center;font-size:15px;font-family:'Barlow Condensed',sans-serif;font-weight:700"/>
+              style="padding:10px 6px;text-align:center;font-size:16px;font-family:'Barlow Condensed',sans-serif;font-weight:700;-moz-appearance:textfield;appearance:textfield;" onwheel="this.blur()"/>
             ${isKO?`<input class="inp res-ko-inp" type="number" min="0" placeholder="0" value="${row.ko}" data-uid="${row.uid}" style="padding:8px 4px;text-align:center;font-size:14px"/>`:""}
           </div>`;
         }).join("")}
@@ -1112,18 +1114,41 @@ function renderResultModal(){
   </div>`;
 
   // Close overlay
-  document.getElementById("rm-ov").addEventListener("click",e=>{if(e.target.id==="rm-ov")closeResultModal();});
+  document.getElementById("rm-ov").addEventListener("mousedown",e=>{if(e.target.id==="rm-ov")closeResultModal();});
+  document.querySelector("#rm-ov .modal")?.addEventListener("click",e=>e.stopPropagation());
   document.getElementById("cancel-result").addEventListener("click",closeResultModal);
 
-  // Position inputs — auto-sort + auto-save
+  // Position inputs — update label inline, auto-save, NO re-render
   document.querySelectorAll(".res-pos-inp").forEach(inp=>{
     inp.addEventListener("input",e=>{
       const uid=e.target.dataset.uid;
       const row=resultRows.find(r=>r.uid===uid);
-      if(row){ row.pos=e.target.value; autoSaveDraft(); }
-      // Re-render after short delay to auto-sort (keep focus friendly)
-      clearTimeout(inp._sortTimer);
-      inp._sortTimer=setTimeout(()=>{ renderResultModal(); },800);
+      if(!row)return;
+      row.pos=e.target.value;
+      // Update the points label inline without re-rendering
+      const dragRow=inp.closest(".result-drag-row");
+      if(dragRow){
+        const lbl=dragRow.querySelector(".pos-label");
+        const pos=parseInt(row.pos);
+        if(lbl){
+          if(pos>0){
+            lbl.textContent=pos+"º lugar · "+getPts(pos)+" pts";
+            lbl.style.color="var(--yellow)";
+            dragRow.style.background="var(--surface2)";
+            dragRow.style.borderColor="var(--border2)";
+          } else {
+            lbl.textContent="sem posição";
+            lbl.style.color="var(--muted)";
+            dragRow.style.background="var(--surface)";
+            dragRow.style.borderColor="var(--border)";
+          }
+        }
+      }
+      autoSaveDraft();
+    });
+    // On blur (leave field), re-sort the list
+    inp.addEventListener("blur",()=>{
+      renderResultModal();
     });
   });
 
