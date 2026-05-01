@@ -303,7 +303,7 @@ select.inp{appearance:none;}
 
 <script>
 // ── DATA ──────────────────────────────────────────────────────────────────────
-const SK = "ppp_demo_v1";
+const SK = "ppp_demo_v2";
 const POINTS_TABLE = [
   {pos:1,pts:25},{pos:2,pts:18},{pos:3,pts:15},{pos:4,pts:12},{pos:5,pts:10},
   {pos:6,pts:8},{pos:7,pts:6},{pos:8,pts:4},{pos:9,pts:3},
@@ -319,21 +319,78 @@ const ACTIVE_SEASON = "2026";
 const SEED = {
   players:[
     {uid:"u1",name:"Renan Ramos",nickname:"Renan"},
-    {uid:"u2",name:"Carlos Mendes",nickname:"Carlão"},
-    {uid:"u3",name:"Ana Paula",nickname:"AnaP"},
-    {uid:"u4",name:"Ricardo Lima",nickname:"Ricão"},
-    {uid:"u5",name:"Fernanda Costa",nickname:"Fê"},
-    {uid:"u6",name:"Bruno Alves",nickname:"Brunão"},
+    {uid:"u2",name:"Armani Silva",nickname:"Armani"},
+    {uid:"u3",name:"Hugo Santos",nickname:"Hugão"},
+    {uid:"u4",name:"Vinicius Costa",nickname:"Vini"},
+    {uid:"u5",name:"Gron Ferreira",nickname:"Gron"},
+    {uid:"u6",name:"VP Almeida",nickname:"VP"},
+    {uid:"u7",name:"Roberto Willians",nickname:"beto w"},
+    {uid:"u8",name:"Carol Mendes",nickname:"Carol"},
+    {uid:"u9",name:"Marina Lima",nickname:"Marina"},
+    {uid:"u10",name:"Segura Neto",nickname:"Segura"},
+    {uid:"u11",name:"Rogério Pinto",nickname:"Rogério"},
+    {uid:"u12",name:"David Carvalho",nickname:"David"},
+    {uid:"u13",name:"Balão Junior",nickname:"balão"},
+    {uid:"u14",name:"Roger Nascimento",nickname:"Roger"},
+    {uid:"u15",name:"Tuxo Ramos",nickname:"tuxo"},
+    {uid:"u16",name:"Bruno Henrique",nickname:"bruno h."},
+    {uid:"u17",name:"Enrico Souza",nickname:"Enrico"},
+    {uid:"u18",name:"Guga Martins",nickname:"guga"},
+    {uid:"u19",name:"Flavio Oliveira",nickname:"Flavio"},
+    {uid:"u20",name:"Novaes Silva",nickname:"Novaes"},
+    {uid:"u21",name:"Heraldo Costa",nickname:"Heraldo"},
+    {uid:"u22",name:"Sadi Pereira",nickname:"Sadi"},
+    {uid:"u23",name:"Antonio Melo",nickname:"Antonio"},
+    {uid:"u24",name:"Candido Freitas",nickname:"Candido"},
   ],
   stages:[
-    {id:"s1",name:"Etapa 1",date:"2025-03-15",season:"2026",location:"Casa do Carlos",status:"finished",type:"nlholdem",isFinal:false,
-     inscriptions:["u2","u3","u4","u5","u6"],
-     results:[{playerId:"u2",position:1,points:150},{playerId:"u4",position:2,points:120},{playerId:"u5",position:3,points:100},{playerId:"u3",position:4,points:85},{playerId:"u6",position:5,points:72}]},
-    {id:"s2",name:"Etapa 2",date:"2025-04-05",season:"2026",location:"Casa da Ana",status:"finished",type:"knockout",isFinal:false,
-     inscriptions:["u2","u3","u4","u5","u6"],
-     results:[{playerId:"u3",position:1,points:150,knockouts:3},{playerId:"u2",position:2,points:120,knockouts:2},{playerId:"u4",position:3,points:100,knockouts:1},{playerId:"u6",position:4,points:85,knockouts:1},{playerId:"u5",position:5,points:72,knockouts:0}]},
-    {id:"s3",name:"Etapa 3",date:"2025-05-10",season:"2026",location:"Casa do Bruno",status:"upcoming",type:"nlholdem",isFinal:false,
-     inscriptions:["u2","u3"],results:[]},
+    {id:"s1",time:"19:00",name:"Etapa 1",date:"2026-01-15",season:"2026",location:"Cristal Casamia",status:"finished",type:"nlholdem",isFinal:false,
+     inscriptions:["u2","u3","u4","u5","u6","u7","u8","u9","u10","u11","u12","u13","u14","u15","u16","u17","u18","u19","u20","u21","u22","u23","u24"],
+     results:[
+       {playerId:"u3",position:1,points:25},{playerId:"u2",position:2,points:18},{playerId:"u5",position:3,points:15},
+       {playerId:"u8",position:4,points:12},{playerId:"u11",position:5,points:10},{playerId:"u14",position:6,points:8},
+       {playerId:"u17",position:7,points:6},{playerId:"u20",position:8,points:4},{playerId:"u23",position:9,points:3},
+       {playerId:"u4",position:10,points:2},{playerId:"u6",position:11,points:2},{playerId:"u7",position:12,points:2},
+       {playerId:"u9",position:13,points:2},{playerId:"u10",position:14,points:2},{playerId:"u12",position:15,points:2},
+       {playerId:"u13",position:16,points:2},{playerId:"u15",position:17,points:2},{playerId:"u16",position:18,points:2},
+       {playerId:"u18",position:19,points:2},{playerId:"u19",position:20,points:2},{playerId:"u21",position:21,points:2},
+       {playerId:"u22",position:22,points:2},{playerId:"u24",position:23,points:2}]},
+    {id:"s2",time:"19:00",name:"Etapa 2",date:"2026-02-12",season:"2026",location:"Cristal Casamia",status:"finished",type:"nlholdem",isFinal:false,
+     inscriptions:["u2","u3","u4","u5","u6","u7","u8","u9","u10","u11","u12","u13","u14","u15","u16","u17","u18","u19","u20","u21","u22","u23","u24"],
+     results:[
+       {playerId:"u2",position:1,points:25},{playerId:"u5",position:2,points:18},{playerId:"u9",position:3,points:15},
+       {playerId:"u12",position:4,points:12},{playerId:"u16",position:5,points:10},{playerId:"u19",position:6,points:8},
+       {playerId:"u22",position:7,points:6},{playerId:"u3",position:8,points:4},{playerId:"u6",position:9,points:3},
+       {playerId:"u7",position:10,points:2},{playerId:"u8",position:11,points:2},{playerId:"u10",position:12,points:2},
+       {playerId:"u11",position:13,points:2},{playerId:"u13",position:14,points:2},{playerId:"u14",position:15,points:2},
+       {playerId:"u15",position:16,points:2},{playerId:"u17",position:17,points:2},{playerId:"u18",position:18,points:2},
+       {playerId:"u20",position:19,points:2},{playerId:"u21",position:20,points:2},{playerId:"u23",position:21,points:2},
+       {playerId:"u24",position:22,points:2},{playerId:"u4",position:23,points:2}]},
+    {id:"s3",time:"19:00",name:"Etapa 3",date:"2026-03-05",season:"2026",location:"Cristal Casamia",status:"finished",type:"nlholdem",isFinal:false,
+     inscriptions:["u2","u3","u4","u5","u6","u7","u8","u9","u10","u11","u12","u13","u14","u15","u16","u17","u18","u19","u20","u21","u22","u23","u24"],
+     results:[
+       {playerId:"u6",position:1,points:25},{playerId:"u10",position:2,points:18},{playerId:"u14",position:3,points:15},
+       {playerId:"u18",position:4,points:12},{playerId:"u22",position:5,points:10},{playerId:"u2",position:6,points:8},
+       {playerId:"u4",position:7,points:6},{playerId:"u8",position:8,points:4},{playerId:"u12",position:9,points:3},
+       {playerId:"u16",position:10,points:2},{playerId:"u20",position:11,points:2},{playerId:"u24",position:12,points:2},
+       {playerId:"u3",position:13,points:2},{playerId:"u5",position:14,points:2},{playerId:"u7",position:15,points:2},
+       {playerId:"u9",position:16,points:2},{playerId:"u11",position:17,points:2},{playerId:"u13",position:18,points:2},
+       {playerId:"u15",position:19,points:2},{playerId:"u17",position:20,points:2},{playerId:"u19",position:21,points:2},
+       {playerId:"u21",position:22,points:2},{playerId:"u23",position:23,points:2}]},
+    {id:"s4",time:"19:00",name:"Etapa 4",date:"2026-04-09",season:"2026",location:"Cristal Casamia",status:"finished",type:"nlholdem",isFinal:false,
+     inscriptions:["u2","u3","u4","u5","u6","u7","u8","u9","u10","u11","u12","u13","u14","u15","u16","u17","u18","u19","u20","u21","u22","u23","u24"],
+     results:[
+       {playerId:"u4",position:1,points:25},{playerId:"u8",position:2,points:18},{playerId:"u13",position:3,points:15},
+       {playerId:"u17",position:4,points:12},{playerId:"u21",position:5,points:10},{playerId:"u24",position:6,points:8},
+       {playerId:"u3",position:7,points:6},{playerId:"u7",position:8,points:4},{playerId:"u11",position:9,points:3},
+       {playerId:"u15",position:10,points:2},{playerId:"u19",position:11,points:2},{playerId:"u23",position:12,points:2},
+       {playerId:"u2",position:13,points:2},{playerId:"u5",position:14,points:2},{playerId:"u6",position:15,points:2},
+       {playerId:"u9",position:16,points:2},{playerId:"u10",position:17,points:2},{playerId:"u12",position:18,points:2},
+       {playerId:"u14",position:19,points:2},{playerId:"u16",position:20,points:2},{playerId:"u18",position:21,points:2},
+       {playerId:"u20",position:22,points:2},{playerId:"u22",position:23,points:2}]},
+    {id:"s5",name:"Etapa 5",date:"2026-05-05",season:"2026",location:"Cristal Casamia",address:"Rua Costa Carvalho, 234 - Pinheiros, São Paulo",time:"19:00",buyin:"R$ 150 (20k)",rebuy:"R$ 100 (20k) / R$ 180 (40k)",addon:"R$ 150 (40k)",timechip:"5k início 1° nível",status:"upcoming",type:"nlholdem",isFinal:false,
+     inscriptions:["u2","u3","u4","u5","u6","u7","u8","u9","u10","u11","u12","u13","u14","u15","u16","u17","u18","u19","u20","u21","u22","u23","u24"],
+     results:[],draft:[]},
   ]
 };
 
@@ -416,19 +473,27 @@ function openShareModal(stage){
   const local = stage.location?" · "+stage.location:"";
 
   // Text for WhatsApp
+  const timeStr = stage.time?stage.time+" · ":"";
   const lines = [
-    "🃏 *PPP POKER*",
+    "🃏 *PPP POKER — "+stage.name+(stage.isFinal?" 🏆":"")+"*",
     "━━━━━━━━━━━━━━━━",
-    "*"+stage.name+(stage.isFinal?" 🏆":"")+"*",
-    tipo,
-    "📅 "+dataFmt+local,
-    "━━━━━━━━━━━━━━━━",
-    "*Lista de Inscritos ("+ins.length+")*",
-    ""
+    "📅 "+dataFmt+(stage.time?" às "+stage.time:""),
+    "🏠 Local: "+(stage.location||"A confirmar"),
   ];
+  if(stage.address) lines.push("📍 "+stage.address);
+  lines.push("━━━━━━━━━━━━━━━━");
+  if(stage.buyin||stage.rebuy||stage.addon||stage.timechip){
+    if(stage.buyin)  lines.push("💵 Buyin: "+stage.buyin);
+    if(stage.rebuy)  lines.push("💸 Rebuy: "+stage.rebuy);
+    if(stage.addon)  lines.push("💰 Addon: "+stage.addon);
+    if(stage.timechip) lines.push("⏳ Time Chip: "+stage.timechip);
+    lines.push("━━━━━━━━━━━━━━━━");
+  }
+  lines.push("*Lista de Inscritos ("+ins.length+")*");
+  lines.push("");
   ins.forEach(function(uid,i){
     const pl=getP(uid)||{name:uid,nickname:uid};
-    lines.push((i+1)+". "+pl.name+(pl.nickname&&pl.nickname!==pl.name?" ("+pl.nickname+")":""));
+    lines.push((i+1)+". "+pl.nickname+(pl.name&&pl.name!==pl.nickname?" ("+pl.name+")":""));
   });
   lines.push("");
   lines.push("_Inscreva-se em ppp-poker.vercel.app_");
@@ -503,6 +568,40 @@ function openShareModal(stage){
   closeBtn.addEventListener("click",function(){ wrap.innerHTML=""; });
   modal.appendChild(btns);
   modal.appendChild(closeBtn);
+}
+
+// ── ROUTE MODAL ──────────────────────────────────────────────────────────────
+function openRouteModal(address){
+  const encoded = encodeURIComponent(address);
+  const wazeUrl = "https://waze.com/ul?q="+encoded+"&navigate=yes";
+  const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination="+encoded;
+
+  const wrap = document.getElementById("result-modal");
+  wrap.innerHTML="";
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:300;display:flex;align-items:flex-end;justify-content:center;padding:12px;box-sizing:border-box;";
+  wrap.appendChild(ov);
+  const box=document.createElement("div");
+  box.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px 4px 0 0;padding:20px;width:100%;max-width:480px;box-sizing:border-box;";
+  box.addEventListener("click",e=>e.stopPropagation());
+  ov.appendChild(box);
+
+  box.innerHTML=`
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">🗺️ Traçar Rota</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">📍 ${address}</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <a href="${wazeUrl}" target="_blank" rel="noopener"
+        style="display:flex;align-items:center;gap:12px;background:#08B2D7;color:#fff;padding:14px 16px;border-radius:4px;text-decoration:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:.5px">
+        <span style="font-size:24px">🚗</span> Abrir no Waze
+      </a>
+      <a href="${mapsUrl}" target="_blank" rel="noopener"
+        style="display:flex;align-items:center;gap:12px;background:#4285F4;color:#fff;padding:14px 16px;border-radius:4px;text-decoration:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:.5px">
+        <span style="font-size:24px">📍</span> Abrir no Google Maps
+      </a>
+    </div>
+    <button onclick="document.getElementById('result-modal').innerHTML=''" style="width:100%;margin-top:12px;background:none;border:1px solid var(--border2);color:var(--muted);padding:12px;border-radius:4px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1px">Fechar</button>`;
+
+  ov.addEventListener("click",function(e){ if(e.target===ov) wrap.innerHTML=""; });
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
@@ -685,7 +784,7 @@ function renderHomeDesktop(){
     ${next?`<div class="card cy mb10" style="cursor:pointer" data-goto-expand="${next.id}">
       <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:4px">📅 Próxima Etapa</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff">${next.name}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.location?" · "+next.location:""}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.time?" às "+next.time:""}${next.location?" · "+next.location:""}</div>
       <div style="font-size:13px;color:var(--muted);margin-top:3px">${next.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}</div>
       <div style="margin-top:12px">
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Inscritos (${(next.inscriptions||[]).length})</div>
@@ -694,14 +793,14 @@ function renderHomeDesktop(){
       <div style="margin-top:8px;text-align:right;font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</div>
     </div>`:"<div class='empty'>Nenhuma etapa próxima.</div>"}
     ${geralTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🏅 Ranking Geral</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
     <div class="rl mb10">${geralTop.map((r,i)=>`<div class="rr">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
       <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
     </div>`).join("")}</div>`:""}
     ${nlTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;margin-top:20px">🃏 Ranking NL Hold'em</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;margin-top:20px;display:flex;justify-content:space-between;align-items:center">🃏 Ranking NL Hold'em<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
     <div class="rl">${nlTop.map((r,i)=>`<div class="rr">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
@@ -712,7 +811,7 @@ function renderHomeDesktop(){
   const col2 = `
   <div class="home-col">
     ${koTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🥊 Ranking Knockout</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Ranking Knockout<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
     <div class="rl mb10">${koTop.map((r,i)=>`<div class="rr">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
@@ -760,14 +859,14 @@ function renderHome(){
     ${next?`<div class="card cy mb10" style="cursor:pointer" data-goto-expand="${next.id}">
       <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:4px">📅 Próxima Etapa</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff">${next.name}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.location?" · "+next.location:""}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.time?" às "+next.time:""}${next.location?" · "+next.location:""}</div>
       <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:13px">${(next.inscriptions||[]).length} inscrito${(next.inscriptions||[]).length!==1?"s":""}</span>
         <span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</span>
       </div>
     </div>`:""}
     ${geralTop.length?`<div class="mb10">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🏅 Líderes Ranking Geral</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Líderes Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${geralTop.map((r,i)=>`<div class="rr">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
@@ -775,7 +874,7 @@ function renderHome(){
       </div>`).join("")}</div>
     </div>`:""}
     ${nlTop.length?`<div class="mb10">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🃏 Líderes NL Hold'em</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🃏 Líderes NL Hold'em<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${nlTop.map((r,i)=>`<div class="rr">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}</div></div>
@@ -783,7 +882,7 @@ function renderHome(){
       </div>`).join("")}</div>
     </div>`:""}
     ${koTop.length?`<div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🥊 Líderes Knockout</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Líderes Knockout<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${koTop.map((r,i)=>`<div class="rr">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
@@ -838,7 +937,7 @@ function renderStages(){
         <div class="sgh" data-expand="${s.id}">
           <div style="flex:1">
             <div class="sgn">${s.name}${s.isFinal?" 🏆":""}</div>
-            <div class="sgm">${fmtD(s.date)}${s.location?" · "+s.location:""}<br/>${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}${s.isFinal?" · Mesa Final":""}</div>
+            <div class="sgm">${fmtD(s.date)}${s.time?" às "+s.time:""}${s.location?" · "+s.location:""}<br/>${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}${s.isFinal?" · Mesa Final":""}</div>
           </div>
           <div class="sgr">
             <span class="badge ${badgeCls}">${badgeLbl}</span>
@@ -862,9 +961,10 @@ function renderStages(){
               ${pl.nickname||uid}${uid===CURRENT_USER_UID?" ✓":""}
             </div>`;}).join("")}${ins.length===0?'<span style="color:var(--muted);font-size:13px">Nenhum inscrito.</span>':""}</div>
             <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
-              <button class="btn sm ${iAmIn?"bd":"by"}" data-inscribe="${s.id}">${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}</button>
+              <button class="btn sm ${iAmIn?'bd':'by'}" data-inscribe="${s.id}">${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}</button>
               ${ins.length>0?`<button class="btn bo sm" data-share-ins="${s.id}">📤 Compartilhar lista</button>`:""}
-            </div>`:""}
+              ${s.address?`<button class="btn bo sm" onclick="openRouteModal(\`${s.address}\`)">🗺️ Traçar Rota</button>`:""}
+            </div>`:""}  
         </div>`:""}
       </div>`;
     }).join("");
@@ -1086,20 +1186,32 @@ function renderAdminPlayers(){
 
 // ── STAGE MODAL ───────────────────────────────────────────────────────────────
 function openStageModal(stage=null){
-  const f = stage||{name:"",date:"",location:"",type:"nlholdem",isFinal:false};
+  const f = stage||{name:"",date:"",time:"",location:"",address:"",type:"nlholdem",isFinal:false,buyin:"",rebuy:"",addon:"",timechip:""};
   document.getElementById("admin-modal").innerHTML=`
   <div class="ov" id="sm-ov">
-    <div class="modal">
+    <div class="modal" style="max-height:90vh;overflow-y:auto">
       <div class="mtitle">${stage?"Editar Etapa":"Nova Etapa"}</div>
-      <div class="fr"><label class="lbl">Nome</label><input class="inp" id="sf-n" value="${f.name}" placeholder="Ex: Etapa 4"/></div>
-      <div class="fr"><label class="lbl">Data</label><input class="inp" id="sf-d" type="date" value="${f.date}"/></div>
-      <div class="fr"><label class="lbl">Local</label><input class="inp" id="sf-l" value="${f.location||""}" placeholder="Ex: Casa do João"/></div>
+      <div class="fr"><label class="lbl">Nome</label><input class="inp" id="sf-n" value="${f.name}" placeholder="Ex: Etapa 5"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:11px">
+        <div><label class="lbl">Data</label><input class="inp" id="sf-d" type="date" value="${f.date}"/></div>
+        <div><label class="lbl">Horário</label><input class="inp" id="sf-h" type="time" value="${f.time||""}"/></div>
+      </div>
+      <div class="fr"><label class="lbl">Local (nome)</label><input class="inp" id="sf-l" value="${f.location||""}" placeholder="Ex: Cristal Casamia"/></div>
+      <div class="fr"><label class="lbl">Endereço (para rota)</label><input class="inp" id="sf-a" value="${f.address||""}" placeholder="Ex: Rua Costa Carvalho, 234 - Pinheiros"/></div>
       <div class="fr"><label class="lbl">Formato</label>
         <select class="inp" id="sf-t">
           <option value="nlholdem"${f.type==="nlholdem"?" selected":""}>🃏 NL Hold'em</option>
           <option value="knockout"${f.type==="knockout"?" selected":""}>🥊 Knockout</option>
         </select>
       </div>
+      <div class="sep"></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Regras do Torneio</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label class="lbl">Buy-in</label><input class="inp" id="sf-bi" value="${f.buyin||""}" placeholder="Ex: R$ 150 (20k)"/></div>
+        <div><label class="lbl">Time Chip</label><input class="inp" id="sf-tc" value="${f.timechip||""}" placeholder="Ex: 5k início 1º nível"/></div>
+      </div>
+      <div class="fr"><label class="lbl">Rebuy</label><input class="inp" id="sf-rb" value="${f.rebuy||""}" placeholder="Ex: R$ 100 (20k) / R$ 180 (40k)"/></div>
+      <div class="fr"><label class="lbl">Add-on</label><input class="inp" id="sf-ao" value="${f.addon||""}" placeholder="Ex: R$ 150 (40k)"/></div>
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;margin-bottom:14px">
         <input type="checkbox" id="sf-f"${f.isFinal?" checked":""} style="width:16px;height:16px;accent-color:var(--yellow)"/>
         <label for="sf-f" style="color:var(--text);font-size:14px;cursor:pointer">🏆 É uma Mesa Final?</label>
@@ -1116,12 +1228,25 @@ function openStageModal(stage=null){
     const name=document.getElementById("sf-n").value.trim();
     const date=document.getElementById("sf-d").value;
     if(!name||!date)return;
-    const data={name,date,location:document.getElementById("sf-l").value.trim(),type:document.getElementById("sf-t").value,isFinal:document.getElementById("sf-f").checked,season:ACTIVE_SEASON};
+    const data={
+      name,date,
+      time:document.getElementById("sf-h").value,
+      location:document.getElementById("sf-l").value.trim(),
+      address:document.getElementById("sf-a").value.trim(),
+      type:document.getElementById("sf-t").value,
+      isFinal:document.getElementById("sf-f").checked,
+      buyin:document.getElementById("sf-bi").value.trim(),
+      rebuy:document.getElementById("sf-rb").value.trim(),
+      addon:document.getElementById("sf-ao").value.trim(),
+      timechip:document.getElementById("sf-tc").value.trim(),
+      season:ACTIVE_SEASON
+    };
     if(stage){ DB.stages=DB.stages.map(s=>s.id===stage.id?{...s,...data}:s); }
     else { DB.stages=[...DB.stages,{id:mkId(),...data,status:"upcoming",inscriptions:[],results:[]}].sort((a,b)=>a.date.localeCompare(b.date)); }
     save(); closeAdminModal(); render();
   });
 }
+
 function closeAdminModal(){ const el=document.getElementById("admin-modal"); if(el)el.innerHTML=""; }
 
 // ── RESULT MODAL ──────────────────────────────────────────────────────────────
@@ -1131,7 +1256,6 @@ function openResultModal(sid){
   var stage=DB.stages.find(function(s){return s.id===sid;});
   if(!stage)return;
   resultStage=stage;
-  // Load from draft first, fallback to published results
   var draft=stage.draft||[];
   var results=stage.results||[];
   var base=(stage.inscriptions||[]).map(function(uid){
@@ -1141,7 +1265,6 @@ function openResultModal(sid){
     if(ex) return {uid:uid, pos:String(ex.position), ko:String(ex.knockouts||0)};
     return {uid:uid, pos:"", ko:"0"};
   });
-  // Add any extra players in results not in inscriptions
   results.forEach(function(r){
     if(!base.find(function(x){return x.uid===r.playerId;}))
       base.push({uid:r.playerId, pos:String(r.position), ko:String(r.knockouts||0)});
@@ -1154,7 +1277,6 @@ function autoSaveDraft(){
   if(!resultStage)return;
   clearTimeout(autoSaveTimer);
   autoSaveTimer=setTimeout(function(){
-    // Save current resultRows as draft
     DB.stages=DB.stages.map(function(s){
       if(s.id!==resultStage.id)return s;
       return Object.assign({},s,{draft:resultRows.map(function(r){return {uid:r.uid,pos:r.pos,ko:r.ko};})});
@@ -1173,11 +1295,8 @@ function drawResultModal(){
   var maxPos=Math.max(resultRows.length,2);
 
   function takenBy(exceptUid){
-    return resultRows
-      .filter(function(r){return r.uid!==exceptUid && r.pos && parseInt(r.pos)>0;})
-      .map(function(r){return parseInt(r.pos);});
+    return resultRows.filter(function(r){return r.uid!==exceptUid&&r.pos&&parseInt(r.pos)>0;}).map(function(r){return parseInt(r.pos);});
   }
-
   function sortedRows(){
     return resultRows.slice().sort(function(a,b){
       var pa=parseInt(a.pos)>0?parseInt(a.pos):9999;
@@ -1185,56 +1304,28 @@ function drawResultModal(){
       return pa-pb;
     });
   }
-
-  var notIn=DB.players.filter(function(p){
-    return !resultRows.find(function(r){return r.uid===p.uid;});
-  });
-
-  // ── Build the whole modal from scratch ──────────────────────────────────────
+  var notIn=DB.players.filter(function(p){return !resultRows.find(function(r){return r.uid===p.uid;});});
   var wrap=document.getElementById("result-modal");
   wrap.innerHTML="";
-
   var ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;"
-    +"display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
   wrap.appendChild(ov);
-
   var box=document.createElement("div");
-  box.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);"
-    +"border:1px solid var(--border);border-radius:4px;padding:20px;"
-    +"width:100%;max-width:520px;max-height:92vh;overflow-y:auto;box-sizing:border-box;";
-  ["click","mousedown","touchstart"].forEach(function(ev){
-    box.addEventListener(ev,function(e){e.stopPropagation();},{passive:true});
-  });
+  box.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;box-sizing:border-box;";
+  ["click","mousedown","touchstart"].forEach(function(ev){box.addEventListener(ev,function(e){e.stopPropagation();},{passive:true});});
   ov.appendChild(box);
-
-  // Title
   var tRow=document.createElement("div");
   tRow.style.cssText="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px";
-  tRow.innerHTML="<b style=\"font-family:'Barlow Condensed',sans-serif;font-size:20px;color:#fff;"
-    +"text-transform:uppercase;letter-spacing:1px\">Resultado \u2014 "+s.name+"</b>"
-    +"<span id='autosave-ind' style='font-size:11px;color:var(--muted)'></span>";
+  tRow.innerHTML="<b style=\"font-family:'Barlow Condensed',sans-serif;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px\">Resultado \u2014 "+s.name+"</b><span id='autosave-ind' style='font-size:11px;color:var(--muted)'></span>";
   box.appendChild(tRow);
-
-  // Banner
   var bn=document.createElement("div");
-  bn.style.cssText="font-size:12px;padding:8px 12px;border-radius:3px;margin-bottom:12px;border:1px solid;"
-    +(hasPublished
-      ?"background:rgba(46,204,113,.1);color:var(--green);border-color:rgba(46,204,113,.3);"
-      :"background:rgba(245,168,0,.08);color:var(--yellow);border-color:rgba(245,168,0,.2);");
+  bn.style.cssText="font-size:12px;padding:8px 12px;border-radius:3px;margin-bottom:12px;border:1px solid;"+(hasPublished?"background:rgba(46,204,113,.1);color:var(--green);border-color:rgba(46,204,113,.3);":"background:rgba(245,168,0,.08);color:var(--yellow);border-color:rgba(245,168,0,.2);");
   bn.textContent=hasPublished?"\u2713 Resultado publicado":"\uD83D\uDD8A Rascunho \u2014 preencha e publique ao final";
   box.appendChild(bn);
-
-  // Headers
   var hdr=document.createElement("div");
-  hdr.style.cssText="display:grid;grid-template-columns:1fr 110px"+(isKO?" 80px":"")+";gap:8px;"
-    +"padding:0 4px;margin-bottom:6px;";
-  hdr.innerHTML="<div class='lbl' style='margin:0'>Jogador</div>"
-    +"<div class='lbl' style='margin:0;text-align:center'>Posi\u00e7\u00e3o</div>"
-    +(isKO?"<div class='lbl' style='margin:0;text-align:center'>KOs</div>":"");
+  hdr.style.cssText="display:grid;grid-template-columns:1fr 110px"+(isKO?" 80px":"")+";gap:8px;padding:0 4px;margin-bottom:6px;";
+  hdr.innerHTML="<div class='lbl' style='margin:0'>Jogador</div><div class='lbl' style='margin:0;text-align:center'>Posi\u00e7\u00e3o</div>"+(isKO?"<div class='lbl' style='margin:0;text-align:center'>KOs</div>":"");
   box.appendChild(hdr);
-
-  // List container — rebuilt on every position change
   var listEl=document.createElement("div");
   box.appendChild(listEl);
 
@@ -1244,103 +1335,51 @@ function drawResultModal(){
       var pl=getP(row.uid)||{name:"?",nickname:"?"};
       var curPos=parseInt(row.pos)>0?parseInt(row.pos):0;
       var pts=curPos?getPts(curPos):0;
-      var taken=takenBy(row.uid);
-
       var rd=document.createElement("div");
-      rd.style.cssText="display:grid;grid-template-columns:1fr 110px"+(isKO?" 80px":"")+";gap:8px;"
-        +"margin-bottom:8px;align-items:center;padding:10px 10px;border-radius:4px;"
-        +"border:2px solid "+(curPos?"var(--yellow)":"var(--border)")+";background:"
-        +(curPos?"var(--surface2)":"var(--surface)")+";";
-
-      // Player info
+      rd.style.cssText="display:grid;grid-template-columns:1fr 110px"+(isKO?" 80px":"")+";gap:8px;margin-bottom:8px;align-items:center;padding:10px 10px;border-radius:4px;border:2px solid "+(curPos?"var(--yellow)":"var(--border)")+";background:"+(curPos?"var(--surface2)":"var(--surface)")+";";
       var info=document.createElement("div");
       info.style.cssText="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden";
-      info.innerHTML="<div class='av' style='width:32px;height:32px;font-size:10px;flex-shrink:0'>"
-        +ini(pl.name)+"</div>"
-        +"<div style='min-width:0'>"
-        +"<div style='font-size:14px;color:#fff;font-weight:600;white-space:nowrap;"
-        +"overflow:hidden;text-overflow:ellipsis'>"+pl.nickname+"</div>"
-        +"<div style='font-size:11px;font-weight:700;font-family:Barlow Condensed,sans-serif;"
-        +"color:"+(curPos?"var(--yellow)":"var(--muted)")+"'>"
-        +(curPos?curPos+"\u00ba \u00b7 "+pts+" pts":"sem posi\u00e7\u00e3o")+"</div>"
-        +"</div>";
+      info.innerHTML="<div class='av' style='width:32px;height:32px;font-size:10px;flex-shrink:0'>"+ini(pl.name)+"</div><div style='min-width:0'><div style='font-size:14px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+pl.nickname+"</div><div style='font-size:11px;font-weight:700;font-family:Barlow Condensed,sans-serif;color:"+(curPos?"var(--yellow)":"var(--muted)")+"'>"+(curPos?curPos+"\u00ba \u00b7 "+pts+" pts":"sem posi\u00e7\u00e3o")+"</div></div>";
       rd.appendChild(info);
-
-      // Position SELECT
       var ps=document.createElement("select");
-      ps.style.cssText="background:var(--surface2);border:2px solid "
-        +(curPos?"var(--yellow)":"var(--border2)")+";border-radius:4px;color:#fff;"
-        +"padding:10px 2px;text-align:center;text-align-last:center;font-size:17px;"
-        +"font-family:Barlow Condensed,sans-serif;font-weight:900;width:100%;"
-        +"cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
+      ps.style.cssText="background:var(--surface2);border:2px solid "+(curPos?"var(--yellow)":"var(--border2)")+";border-radius:4px;color:#fff;padding:10px 2px;text-align:center;text-align-last:center;font-size:17px;font-family:Barlow Condensed,sans-serif;font-weight:900;width:100%;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
       var optsHtml="<option value=''>—</option>";
-      for(var i=1;i<=maxPos;i++){
-        optsHtml+="<option value='"+i+"'"+(curPos===i?" selected":"")+">"+i+"º</option>";
-      }
+      for(var i=1;i<=maxPos;i++) optsHtml+="<option value='"+i+"'"+(curPos===i?" selected":"")+">"+i+"\u00ba</option>";
       ps.innerHTML=optsHtml;
-
-      // CLOSURE to capture row reference
-      (function(rowRef, psEl){
+      (function(rowRef,psEl,rdEl){
         psEl.addEventListener("change",function(){
           var newPos=parseInt(psEl.value)||0;
           var oldPos=parseInt(rowRef.pos)||0;
-          if(newPos>0 && newPos!==oldPos){
-            // Shift other players: if someone already has newPos, push them down
-            // and cascade until no conflict
+          if(newPos>0&&newPos!==oldPos){
             var shifted=[];
-            function shiftDown(pos, skipUid){
-              var occupant=resultRows.find(function(r){
-                return r.uid!==skipUid && parseInt(r.pos)===pos;
-              });
-              if(occupant && shifted.indexOf(occupant.uid)<0){
-                shifted.push(occupant.uid);
-                shiftDown(pos+1, occupant.uid);
-                occupant.pos=String(pos+1);
-              }
+            function shiftDown(pos,skipUid){
+              var occupant=resultRows.find(function(r){return r.uid!==skipUid&&parseInt(r.pos)===pos;});
+              if(occupant&&shifted.indexOf(occupant.uid)<0){shifted.push(occupant.uid);shiftDown(pos+1,occupant.uid);occupant.pos=String(pos+1);}
             }
-            shiftDown(newPos, rowRef.uid);
+            shiftDown(newPos,rowRef.uid);
           }
           rowRef.pos=psEl.value;
-          // Update maxPos in case we shifted beyond original count
-          maxPos=Math.max(maxPos, resultRows.reduce(function(m,r){
-            return Math.max(m,parseInt(r.pos)||0);
-          },0));
+          maxPos=Math.max(maxPos,resultRows.reduce(function(m,r){return Math.max(m,parseInt(r.pos)||0);},0));
           autoSaveDraft();
           rebuildList();
         });
-      })(row, ps);
-
+      })(row,ps,rd);
       rd.appendChild(ps);
-
-      // KO SELECT (only for knockout stages)
       if(isKO){
         var curKO=parseInt(row.ko)||0;
         var ks=document.createElement("select");
-        ks.style.cssText="background:var(--surface2);border:2px solid var(--border2);"
-          +"border-radius:4px;color:#fff;padding:10px 2px;text-align:center;"
-          +"text-align-last:center;font-size:15px;font-family:Barlow Condensed,sans-serif;"
-          +"font-weight:700;width:100%;cursor:pointer;outline:none;"
-          +"appearance:none;-webkit-appearance:none;";
+        ks.style.cssText="background:var(--surface2);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:10px 2px;text-align:center;text-align-last:center;font-size:15px;font-family:Barlow Condensed,sans-serif;font-weight:700;width:100%;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
         var koH="";
-        for(var k=0;k<=maxPos;k++)
-          koH+="<option value='"+k+"'"+(curKO===k?" selected":"")+">"+k+" \uD83E\uDD4A</option>";
+        for(var k=0;k<=maxPos;k++) koH+="<option value='"+k+"'"+(curKO===k?" selected":"")+">"+k+" \uD83E\uDD4A</option>";
         ks.innerHTML=koH;
-        (function(rowRef,ksEl){
-          ksEl.addEventListener("change",function(){
-            rowRef.ko=ksEl.value;
-            autoSaveDraft();
-          });
-        })(row,ks);
+        (function(rowRef,ksEl){ksEl.addEventListener("change",function(){rowRef.ko=ksEl.value;autoSaveDraft();});})(row,ks);
         rd.appendChild(ks);
       }
-
       listEl.appendChild(rd);
     });
   }
-
   rebuildList();
 
-  // Add player
   if(notIn.length){
     var addSec=document.createElement("div");
     addSec.style.cssText="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)";
@@ -1348,75 +1387,38 @@ function drawResultModal(){
     var addRow=document.createElement("div");
     addRow.style.cssText="display:flex;gap:8px";
     var addSel=document.createElement("select");
-    addSel.style.cssText="flex:1;background:var(--surface2);border:2px solid var(--border2);"
-      +"border-radius:4px;color:#fff;padding:10px 12px;font-size:14px;cursor:pointer;"
-      +"outline:none;appearance:none;-webkit-appearance:none;";
-    addSel.innerHTML="<option value=''>Selecionar jogador...</option>"
-      +notIn.map(function(p){
-        return "<option value='"+p.uid+"'>"+p.nickname+" \u2014 "+p.name+"</option>";
-      }).join("");
+    addSel.style.cssText="flex:1;background:var(--surface2);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:10px 12px;font-size:14px;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
+    addSel.innerHTML="<option value=''>Selecionar jogador...</option>"+notIn.map(function(p){return "<option value='"+p.uid+"'>"+p.nickname+" \u2014 "+p.name+"</option>";}).join("");
     var addBtn=document.createElement("button");
-    addBtn.className="btn by";
-    addBtn.style.cssText="padding:10px 16px;white-space:nowrap;flex-shrink:0";
-    addBtn.textContent="+ Adicionar";
-    addBtn.addEventListener("click",function(){
-      var uid=addSel.value; if(!uid)return;
-      if(!resultRows.find(function(r){return r.uid===uid;})){
-        resultRows.push({uid:uid,pos:"",ko:"0"});
-        drawResultModal();
-      }
-    });
-    addRow.appendChild(addSel);
-    addRow.appendChild(addBtn);
-    addSec.appendChild(addRow);
-    box.appendChild(addSec);
+    addBtn.className="btn by";addBtn.style.cssText="padding:10px 16px;white-space:nowrap;flex-shrink:0";addBtn.textContent="+ Adicionar";
+    addBtn.addEventListener("click",function(){var uid=addSel.value;if(!uid)return;if(!resultRows.find(function(r){return r.uid===uid;})){resultRows.push({uid:uid,pos:"",ko:"0"});drawResultModal();}});
+    addRow.appendChild(addSel);addRow.appendChild(addBtn);addSec.appendChild(addRow);box.appendChild(addSec);
   }
-
   var hint=document.createElement("div");
   hint.style.cssText="font-size:11px;color:var(--muted);margin-top:12px;margin-bottom:16px";
   hint.textContent="Posi\u00e7\u00f5es j\u00e1 usadas ficam desativadas. Rascunho salvo automaticamente.";
   box.appendChild(hint);
-
-  // Buttons
-  var btns=document.createElement("div");
-  btns.className="row g8";
-  var pubBtn=document.createElement("button");
-  pubBtn.className="btn fw";
-  pubBtn.style.cssText="background:var(--green);color:#000;font-size:15px;font-weight:900";
+  var btns=document.createElement("div");btns.className="row g8";
+  var pubBtn=document.createElement("button");pubBtn.className="btn fw";pubBtn.style.cssText="background:var(--green);color:#000;font-size:15px;font-weight:900";
   pubBtn.textContent=hasPublished?"\u2713 Atualizar Publica\u00e7\u00e3o":"\uD83C\uDFC1 Publicar Resultado";
   pubBtn.addEventListener("click",function(){
     var filled=resultRows.filter(function(r){return r.pos&&parseInt(r.pos)>0;});
     if(!filled.length){alert("Selecione pelo menos uma posi\u00e7\u00e3o antes de publicar.");return;}
-    var results=filled.sort(function(a,b){return parseInt(a.pos)-parseInt(b.pos);}).map(function(r){
-      return {playerId:r.uid,position:parseInt(r.pos),points:getPts(parseInt(r.pos)),knockouts:parseInt(r.ko)||0};
-    });
-    DB.stages=DB.stages.map(function(st){
-      return st.id===resultStage.id?Object.assign({},st,{status:"finished",results:results,draft:null}):st;
-    });
-    save(); closeResultModal(); render();
+    var results=filled.sort(function(a,b){return parseInt(a.pos)-parseInt(b.pos);}).map(function(r){return {playerId:r.uid,position:parseInt(r.pos),points:getPts(parseInt(r.pos)),knockouts:parseInt(r.ko)||0};});
+    DB.stages=DB.stages.map(function(st){return st.id===resultStage.id?Object.assign({},st,{status:"finished",results:results,draft:null}):st;});
+    save();closeResultModal();render();
   });
   btns.appendChild(pubBtn);
-  var closeBtn=document.createElement("button");
-  closeBtn.className="btn bo";
-  closeBtn.textContent="Fechar";
-  closeBtn.addEventListener("click",closeResultModal);
-  btns.appendChild(closeBtn);
-  box.appendChild(btns);
+  var closeBtn=document.createElement("button");closeBtn.className="btn bo";closeBtn.textContent="Fechar";closeBtn.addEventListener("click",closeResultModal);
+  btns.appendChild(closeBtn);box.appendChild(btns);
 }
 
 function closeResultModal(){
   clearTimeout(autoSaveTimer);
-  var el=document.getElementById("result-modal");
-  if(el)el.innerHTML="";
+  var el=document.getElementById("result-modal");if(el)el.innerHTML="";
 }
 
-
-function closeResultModal(){
-  clearTimeout(autoSaveTimer);
-  var el=document.getElementById("result-modal"); if(el)el.innerHTML="";
-}
-
-
+// ── ADD PLAYER MODAL ──────────────────────────────────────────────────────────
 function openPlayerModal(){
   document.getElementById("admin-modal").innerHTML=`
   <div class="ov" id="pm-ov">
@@ -1437,152 +1439,57 @@ function openPlayerModal(){
     const nick=document.getElementById("pf-k").value.trim();
     if(!name)return;
     DB.players=[...DB.players,{uid:mkId(),name,nickname:nick||name.split(" ")[0]}];
-    save(); closeAdminModal(); render();
+    save();closeAdminModal();render();
   });
 }
 
 // ── BIND EVENTS ───────────────────────────────────────────────────────────────
 function bindEvents(){
-  // Main nav tabs
-  document.querySelectorAll("[data-tab]").forEach(btn=>{
-    btn.addEventListener("click",()=>{ TAB=btn.dataset.tab; EXPANDED=null; MENU_OPEN=false; render(); });
-  });
-  // More button toggle
+  document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;MENU_OPEN=false;render();});});
   document.getElementById("btn-more")?.addEventListener("click",e=>{
-    e.stopPropagation(); MENU_OPEN=!MENU_OPEN;
-    const menu=document.getElementById("more-menu");
-    const backdrop=document.getElementById("menu-backdrop");
-    const btn=document.getElementById("btn-more");
-    if(menu){ menu.classList.toggle("open",MENU_OPEN); }
-    if(backdrop){ backdrop.classList.toggle("open",MENU_OPEN); }
-    if(btn){ btn.classList.toggle("menu-open",MENU_OPEN); }
+    e.stopPropagation();MENU_OPEN=!MENU_OPEN;
+    document.getElementById("more-menu")?.classList.toggle("open",MENU_OPEN);
+    document.getElementById("menu-backdrop")?.classList.toggle("open",MENU_OPEN);
+    document.getElementById("btn-more")?.classList.toggle("menu-open",MENU_OPEN);
   });
-  // More menu items
-  document.querySelectorAll("[data-more-tab]").forEach(el=>{
-    el.addEventListener("click",()=>{ TAB=el.dataset.moreTab; EXPANDED=null; MENU_OPEN=false; render(); });
-  });
-  // Backdrop close
+  document.querySelectorAll("[data-more-tab]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.moreTab;EXPANDED=null;MENU_OPEN=false;render();});});
   document.getElementById("menu-backdrop")?.addEventListener("click",()=>{
     MENU_OPEN=false;
     document.getElementById("more-menu")?.classList.remove("open");
     document.getElementById("menu-backdrop")?.classList.remove("open");
     document.getElementById("btn-more")?.classList.remove("menu-open");
   });
-  // Hero stat cards + any data-goto
-  document.querySelectorAll("[data-goto]").forEach(el=>{
-    el.addEventListener("click",()=>{ TAB=el.dataset.goto; EXPANDED=null; MENU_OPEN=false; render(); });
-  });
-  // Next stage card → go to stages with that stage expanded
-  document.querySelectorAll("[data-goto-expand]").forEach(el=>{
-    el.addEventListener("click",()=>{ TAB="stages"; EXPANDED=el.dataset.gotoExpand; MENU_OPEN=false; render(); });
-  });
-  // Expand stage
-  document.querySelectorAll("[data-expand]").forEach(el=>{
-    el.addEventListener("click",()=>{ EXPANDED=EXPANDED===el.dataset.expand?null:el.dataset.expand; render(); });
-  });
-  // Share inscriptions list
-  document.querySelectorAll("[data-share-ins]").forEach(btn=>{
-    btn.addEventListener("click",e=>{
-      e.stopPropagation();
-      const sid=btn.dataset.shareIns;
-      const stage=DB.stages.find(s=>s.id===sid); if(!stage)return;
-      openShareModal(stage);
-    });
-  });
-  // Inscribe button in stage detail
-  document.querySelectorAll("[data-inscribe]").forEach(btn=>{
-    btn.addEventListener("click",e=>{
-      e.stopPropagation();
-      const sid=btn.dataset.inscribe;
-      const stage=DB.stages.find(s=>s.id===sid); if(!stage)return;
-      const ins=stage.inscriptions||[];
-      const alreadyIn=ins.includes(CURRENT_USER_UID);
-      stage.inscriptions=alreadyIn?ins.filter(i=>i!==CURRENT_USER_UID):[...ins,CURRENT_USER_UID];
-      save(); render();
-    });
-  });
-  // Ranking tabs
-  document.querySelectorAll("[data-rtab]").forEach(btn=>{
-    btn.addEventListener("click",()=>{ RANK_TAB=btn.dataset.rtab; render(); });
-  });
-  // Rules tabs
-  document.querySelectorAll("[data-rtab2]").forEach(btn=>{
-    btn.addEventListener("click",()=>{ RULES_TAB=btn.dataset.rtab2; render(); });
-  });
-  document.querySelectorAll("[data-rview]").forEach(btn=>{
-    btn.addEventListener("click",()=>{ RULES_VIEW=btn.dataset.rview; render(); });
-  });
-  // Admin tabs
-  document.querySelectorAll("[data-atab]").forEach(btn=>{
-    btn.addEventListener("click",()=>{ ADMIN_TAB=btn.dataset.atab; render(); });
-  });
-  // Player profile
-  document.querySelectorAll("[data-profile]").forEach(el=>{
-    el.addEventListener("click",()=>showProfile(el.dataset.profile));
-  });
-  // New stage
+  document.querySelectorAll("[data-goto]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.goto;EXPANDED=null;MENU_OPEN=false;render();});});
+  document.querySelectorAll("[data-goto-expand]").forEach(el=>{el.addEventListener("click",()=>{TAB="stages";EXPANDED=el.dataset.gotoExpand;MENU_OPEN=false;render();});});
+  document.querySelectorAll("[data-expand]").forEach(el=>{el.addEventListener("click",()=>{EXPANDED=EXPANDED===el.dataset.expand?null:el.dataset.expand;render();});});
+  document.querySelectorAll("[data-rtab]").forEach(btn=>{btn.addEventListener("click",()=>{RANK_TAB=btn.dataset.rtab;render();});});
+  document.querySelectorAll("[data-rtab2]").forEach(btn=>{btn.addEventListener("click",()=>{RULES_TAB=btn.dataset.rtab2;render();});});
+  document.querySelectorAll("[data-rview]").forEach(btn=>{btn.addEventListener("click",()=>{RULES_VIEW=btn.dataset.rview;render();});});
+  document.querySelectorAll("[data-atab]").forEach(btn=>{btn.addEventListener("click",()=>{ADMIN_TAB=btn.dataset.atab;render();});});
+  document.querySelectorAll("[data-profile]").forEach(el=>{el.addEventListener("click",()=>showProfile(el.dataset.profile));});
   document.getElementById("btn-new-stage")?.addEventListener("click",()=>openStageModal());
-  // Edit stage
-  document.querySelectorAll("[data-edit-stage]").forEach(btn=>{
-    btn.addEventListener("click",()=>openStageModal(DB.stages.find(s=>s.id===btn.dataset.editStage)));
-  });
-  // Delete stage
-  document.querySelectorAll("[data-del-stage]").forEach(btn=>{
-    btn.addEventListener("click",()=>{
-      if(confirm("Excluir esta etapa? Não pode ser desfeito.")){
-        DB.stages=DB.stages.filter(s=>s.id!==btn.dataset.delStage);
-        save(); render();
-      }
-    });
-  });
-  // Launch result
-  document.querySelectorAll("[data-launch]").forEach(btn=>{
-    btn.addEventListener("click",()=>openResultModal(btn.dataset.launch));
-  });
-  // Remove inscription
-  document.querySelectorAll("[data-rm-ins]").forEach(btn=>{
-    btn.addEventListener("click",e=>{
-      e.stopPropagation();
-      const [sid,uid]=btn.dataset.rmIns.split("|");
-      DB.stages=DB.stages.map(s=>s.id===sid?{...s,inscriptions:(s.inscriptions||[]).filter(i=>i!==uid)}:s);
-      save(); render();
-    });
-  });
-  // Toggle add-player dropdown
+  document.querySelectorAll("[data-edit-stage]").forEach(btn=>{btn.addEventListener("click",()=>openStageModal(DB.stages.find(s=>s.id===btn.dataset.editStage)));});
+  document.querySelectorAll("[data-del-stage]").forEach(btn=>{btn.addEventListener("click",()=>{if(confirm("Excluir esta etapa?")){DB.stages=DB.stages.filter(s=>s.id!==btn.dataset.delStage);save();render();}});});
+  document.querySelectorAll("[data-launch]").forEach(btn=>{btn.addEventListener("click",()=>openResultModal(btn.dataset.launch));});
+  document.querySelectorAll("[data-rm-ins]").forEach(btn=>{btn.addEventListener("click",e=>{e.stopPropagation();const[sid,uid]=btn.dataset.rmIns.split("|");DB.stages=DB.stages.map(s=>s.id===sid?{...s,inscriptions:(s.inscriptions||[]).filter(i=>i!==uid)}:s);save();render();});});
   document.querySelectorAll("[data-add-ins-toggle]").forEach(btn=>{
-    btn.addEventListener("click",e=>{
-      e.stopPropagation();
-      const sid=btn.dataset.addInsToggle;
-      const dd=document.getElementById("add-ins-dropdown-"+sid);
-      if(!dd)return;
-      const isOpen=dd.style.display!=="none";
-      // close all dropdowns first
-      document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");
-      dd.style.display=isOpen?"none":"block";
-    });
+    btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.addInsToggle;const dd=document.getElementById("add-ins-dropdown-"+sid);if(!dd)return;const isOpen=dd.style.display!=="none";document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");dd.style.display=isOpen?"none":"block";});
   });
-  // Add player to inscription from dropdown
   document.querySelectorAll("[data-add-ins]").forEach(btn=>{
-    btn.addEventListener("click",e=>{
-      e.stopPropagation();
-      const [sid,uid]=btn.dataset.addIns.split("|");
-      const stage=DB.stages.find(s=>s.id===sid); if(!stage)return;
-      const ins=stage.inscriptions||[];
-      if(!ins.includes(uid)){
-        DB.stages=DB.stages.map(s=>s.id===sid?{...s,inscriptions:[...ins,uid]}:s);
-        save(); render();
-      }
-    });
+    btn.addEventListener("click",e=>{e.stopPropagation();const[sid,uid]=btn.dataset.addIns.split("|");const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;const ins=stage.inscriptions||[];if(!ins.includes(uid)){DB.stages=DB.stages.map(s=>s.id===sid?{...s,inscriptions:[...ins,uid]}:s);save();render();}});
   });
-  // Close dropdowns when clicking outside
-  document.addEventListener("click",()=>{
-    document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");
-  },{once:false});
+  document.addEventListener("click",()=>{document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");});
+  document.querySelectorAll("[data-inscribe]").forEach(btn=>{
+    btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.inscribe;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;const ins=stage.inscriptions||[];const alreadyIn=ins.includes(CURRENT_USER_UID);stage.inscriptions=alreadyIn?ins.filter(i=>i!==CURRENT_USER_UID):[...ins,CURRENT_USER_UID];save();render();});
+  });
+  document.querySelectorAll("[data-share-ins]").forEach(btn=>{
+    btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.shareIns;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;openShareModal(stage);});
+  });
   // New player (removed from UI)
 }
 
 // ── START ─────────────────────────────────────────────────────────────────────
-window.addEventListener("resize", ()=>{ render(); });
+window.addEventListener("resize",()=>{render();});
 render();
 </script>
 </body>
