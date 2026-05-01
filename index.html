@@ -665,6 +665,7 @@ function renderPage(){
 function renderHomeDesktop(){
   const next  = DB.stages.find(s=>s.status==="upcoming");
   const done  = DB.stages.filter(s=>s.status==="finished");
+  const geralTop = calcRankGeral().slice(0,5);
   const nlTop = calcRank("nlholdem").slice(0,5);
   const koTop = calcRank("knockout").slice(0,5);
 
@@ -692,8 +693,15 @@ function renderHomeDesktop(){
       </div>
       <div style="margin-top:8px;text-align:right;font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</div>
     </div>`:"<div class='empty'>Nenhuma etapa próxima.</div>"}
+    ${geralTop.length?`
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🏅 Ranking Geral</div>
+    <div class="rl mb10">${geralTop.map((r,i)=>`<div class="rr">
+      <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
+      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
+      <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
+    </div>`).join("")}</div>`:""}
     ${nlTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🃏 Ranking NL Hold'em</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;margin-top:20px">🃏 Ranking NL Hold'em</div>
     <div class="rl">${nlTop.map((r,i)=>`<div class="rr">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
@@ -735,6 +743,7 @@ function renderHomeDesktop(){
 function renderHome(){
   const next = DB.stages.find(s=>s.status==="upcoming");
   const done = DB.stages.filter(s=>s.status==="finished");
+  const geralTop = calcRankGeral().slice(0,3);
   const nlTop = calcRank("nlholdem").slice(0,3);
   const koTop = calcRank("knockout").slice(0,3);
   return `<div style="">
@@ -756,6 +765,14 @@ function renderHome(){
         <span style="font-size:13px">${(next.inscriptions||[]).length} inscrito${(next.inscriptions||[]).length!==1?"s":""}</span>
         <span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</span>
       </div>
+    </div>`:""}
+    ${geralTop.length?`<div class="mb10">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🏅 Líderes Ranking Geral</div>
+      <div class="rl">${geralTop.map((r,i)=>`<div class="rr">
+        <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
+        <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
+        <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
+      </div>`).join("")}</div>
     </div>`:""}
     ${nlTop.length?`<div class="mb10">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">🃏 Líderes NL Hold'em</div>
@@ -1060,8 +1077,7 @@ function renderAdminResults(){
 }
 
 function renderAdminPlayers(){
-  return `<button class="btn by fw mb10" id="btn-new-player">+ Novo Jogador</button>
-  <div class="rl">${DB.players.map(p=>`<div class="urow">
+  return `<div class="rl">${DB.players.map(p=>`<div class="urow">
     ${AV(p.uid)}
     <div style="flex:1"><div style="font-weight:600;color:#fff;font-size:14px">${p.name}</div><div style="font-size:11px;color:var(--muted)">"${p.nickname}"</div></div>
     <span style="font-size:12px;color:var(--muted)">${calcStats(p.uid).p} etapas</span>
@@ -1259,11 +1275,7 @@ function drawResultModal(){
         +"cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
       var optsHtml="<option value=''>—</option>";
       for(var i=1;i<=maxPos;i++){
-        var tk=taken.indexOf(i)>=0;
-        optsHtml+="<option value='"+i+"'"
-          +(curPos===i?" selected":"")
-          +(tk?" disabled":"")
-          +">"+i+"\u00ba"+(tk?" \u2713":"")+"</option>";
+        optsHtml+="<option value='"+i+"'"+(curPos===i?" selected":"")+">"+i+"º</option>";
       }
       ps.innerHTML=optsHtml;
 
@@ -1566,8 +1578,7 @@ function bindEvents(){
   document.addEventListener("click",()=>{
     document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");
   },{once:false});
-  // New player
-  document.getElementById("btn-new-player")?.addEventListener("click",()=>openPlayerModal());
+  // New player (removed from UI)
 }
 
 // ── START ─────────────────────────────────────────────────────────────────────
