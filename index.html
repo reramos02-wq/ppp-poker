@@ -915,6 +915,21 @@ function renderAdminStages(){
         ${pl.nickname}
         <button data-rm-ins="${s.id}|${uid}" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;margin-left:2px;padding:0">✕</button>
       </div>`;}).join("")}${(s.inscriptions||[]).length===0?'<span style="color:var(--muted);font-size:12px">Nenhum inscrito.</span>':""}</div>
+      ${(()=>{
+        const notIn = DB.players.filter(p=>!(s.inscriptions||[]).includes(p.uid));
+        if(!notIn.length) return "";
+        return `<div style="position:relative;display:inline-block">
+          <button class="btn bo sm" data-add-ins-toggle="${s.id}" style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:14px">＋</span> Adicionar Jogador
+          </button>
+          <div id="add-ins-dropdown-${s.id}" style="display:none;position:absolute;top:100%;left:0;z-index:50;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;min-width:180px;margin-top:4px;box-shadow:0 4px 16px rgba(0,0,0,.5)">
+            ${notIn.map(p=>`<button data-add-ins="${s.id}|${p.uid}" style="display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--text);font-family:'Barlow',sans-serif;font-size:13px;text-align:left" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='none'">
+              <div class="av" style="width:24px;height:24px;font-size:9px;flex-shrink:0">${ini(p.name)}</div>
+              <div><div style="font-weight:600;color:#fff">${p.nickname}</div><div style="font-size:11px;color:var(--muted)">${p.name}</div></div>
+            </button>`).join("")}
+          </div>
+        </div>`;
+      })()}
     </div>`:""}
     <div class="row g8 mt8">
       <button class="btn bo sm" data-edit-stage="${s.id}">✏ Editar</button>
@@ -1182,6 +1197,36 @@ function bindEvents(){
       save(); render();
     });
   });
+  // Toggle add-player dropdown
+  document.querySelectorAll("[data-add-ins-toggle]").forEach(btn=>{
+    btn.addEventListener("click",e=>{
+      e.stopPropagation();
+      const sid=btn.dataset.addInsToggle;
+      const dd=document.getElementById("add-ins-dropdown-"+sid);
+      if(!dd)return;
+      const isOpen=dd.style.display!=="none";
+      // close all dropdowns first
+      document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");
+      dd.style.display=isOpen?"none":"block";
+    });
+  });
+  // Add player to inscription from dropdown
+  document.querySelectorAll("[data-add-ins]").forEach(btn=>{
+    btn.addEventListener("click",e=>{
+      e.stopPropagation();
+      const [sid,uid]=btn.dataset.addIns.split("|");
+      const stage=DB.stages.find(s=>s.id===sid); if(!stage)return;
+      const ins=stage.inscriptions||[];
+      if(!ins.includes(uid)){
+        DB.stages=DB.stages.map(s=>s.id===sid?{...s,inscriptions:[...ins,uid]}:s);
+        save(); render();
+      }
+    });
+  });
+  // Close dropdowns when clicking outside
+  document.addEventListener("click",()=>{
+    document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");
+  },{once:false});
   // New player
   document.getElementById("btn-new-player")?.addEventListener("click",()=>openPlayerModal());
 }
