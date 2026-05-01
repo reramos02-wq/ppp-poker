@@ -1138,6 +1138,16 @@ function renderResultModal(){
         sel.style.borderColor="var(--border2)";
       }
       autoSaveDraft();
+      // Auto-reorder DOM rows by selected position
+      var allRows=Array.from(list.querySelectorAll(".result-drag-row"));
+      allRows.sort(function(a,b){
+        var selA=a.querySelector("select");
+        var selB=b.querySelector("select");
+        var pa=selA?parseInt(selA.value)||999:999;
+        var pb=selB?parseInt(selB.value)||999:999;
+        return pa-pb;
+      });
+      allRows.forEach(function(r){ list.appendChild(r); });
     });
     div.appendChild(sel);
 
