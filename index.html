@@ -304,6 +304,13 @@ select.inp{appearance:none;}
 <script>
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const SK = "ppp_demo_v2";
+const RK = "ppp_rules_v1";
+const DEFAULT_RULES_SEED = {
+  nlholdem:{buyin:"R$ 150 (20k fichas)",rebuy:"R$ 100 (20k) / R$ 180 (40k)",addon:"R$ 150 (40k fichas)",timechip:"5k início 1º nível"},
+  knockout:{buyin:"R$ 200 (20k fichas + 1 KO)",rebuy:"R$ 200 (20k+1KO) / R$ 300 (40k+1KO)",addon:"R$ 200 (40k fichas)",timechip:"—"}
+};
+let DEFAULT_RULES = JSON.parse(localStorage.getItem(RK)||"null") || JSON.parse(JSON.stringify(DEFAULT_RULES_SEED));
+function saveRules(){ localStorage.setItem(RK, JSON.stringify(DEFAULT_RULES)); }
 const POINTS_TABLE = [
   {pos:1,pts:25},{pos:2,pts:18},{pos:3,pts:15},{pos:4,pts:12},{pos:5,pts:10},
   {pos:6,pts:8},{pos:7,pts:6},{pos:8,pts:4},{pos:9,pts:3},
@@ -398,6 +405,7 @@ const SEED = {
 let DB = JSON.parse(localStorage.getItem(SK)||"null") || SEED;
 let TAB = "home";
 let EXPANDED = null;
+let STAGE_DETAIL = null; // stage id for detail page
 let ADMIN_TAB = "stages";
 let RULES_TAB = "nlholdem";
 let RULES_VIEW = "rules";
@@ -438,20 +446,29 @@ function calcRankGeral(){
 }
 
 function calcStats(uid){
-  let p=0,w=0,ft=0,ko=0;
+  let p=0,w=0,wNL=0,wKO=0,wFT=0,ft=0,ko=0;
   DB.stages.filter(s=>s.status==="finished"&&(s.season===ACTIVE_SEASON||!s.season)).forEach(s=>{
     const r=(s.results||[]).find(r=>r.playerId===uid);
-    if(!r)return; p++; if(r.position<=9)ft++; if(r.position===1)w++; ko+=r.knockouts||0;
+    if(!r)return;
+    if(!s.isFinal) p++;
+    if(r.position<=9) ft++;
+    if(r.position===1){
+      if(s.isFinal)        wFT++;
+      else if(s.type==="nlholdem") wNL++;
+      else if(s.type==="knockout") wKO++;
+      w++;
+    }
+    ko+=r.knockouts||0;
   });
-  return {p,w,ft,ko};
+  return {p,w,wNL,wKO,wFT,ft,ko};
 }
 
 function calcHOF(){
   return DB.players.map(pl=>{
-    const wins = DB.stages.filter(s=>s.status==="finished"&&!s.isFinal&&(s.season===ACTIVE_SEASON||!s.season)&&(s.results||[]).find(r=>r.playerId===pl.uid&&r.position===1)).length;
     const st = calcStats(pl.uid);
-    return {pl,wins,...st};
-  }).filter(h=>h.p>0).sort((a,b)=>b.wins-a.wins||b.p-a.p);
+    const hofScore = st.wNL*1 + st.wKO*1 + st.wFT*12;
+    return {pl,...st,hofScore};
+  }).filter(h=>h.p>0||h.wFT>0).sort((a,b)=>b.hofScore-a.hofScore||b.p-a.p);
 }
 
 // ── LOGO SVG ──────────────────────────────────────────────────────────────────
@@ -919,77 +936,180 @@ function renderRanking(){
 
 // ── STAGES ────────────────────────────────────────────────────────────────────
 function renderStages(){
+  if(STAGE_DETAIL) return renderStageDetail(STAGE_DETAIL);
+  const upcoming = DB.stages.filter(s=>s.status==="upcoming");
+  const nextId = upcoming.length>0?upcoming[0].id:null;
   return `<div class="sec">
   <div class="st">Eta<span class="ac">pas</span></div><div class="ss">Calendário da temporada</div><div class="dv"></div>
   ${DB.stages.length===0?'<div class="empty">Nenhuma etapa cadastrada.</div>':''}
-  ${(()=>{
-    const upcoming = DB.stages.filter(s=>s.status==="upcoming");
-    const nextId = upcoming.length>0?upcoming[0].id:null;
-    return DB.stages.map(s=>{
-      const open = EXPANDED===s.id;
-      const ins  = s.inscriptions||[];
-      const isNext = s.id===nextId && s.status==="upcoming";
-      const isFuture = s.status==="upcoming" && !isNext;
-      const iAmIn = ins.includes(CURRENT_USER_UID||"");
-      const badgeCls = s.isFinal?"bfin":s.status==="finished"?"bdone":isNext?"bnext":"bfuture";
-      const badgeLbl = s.isFinal?"🏆 Final":s.status==="finished"?"Encerrada":isNext?"Próxima":"Futura";
-      return `<div class="sgc">
-        <div class="sgh" data-expand="${s.id}">
-          <div style="flex:1">
-            <div class="sgn">${s.name}${s.isFinal?" 🏆":""}</div>
-            <div class="sgm">${fmtD(s.date)}${s.time?" às "+s.time:""}${s.location?" · "+s.location:""}<br/>${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}${s.isFinal?" · Mesa Final":""}</div>
-          </div>
-          <div class="sgr">
-            <span class="badge ${badgeCls}">${badgeLbl}</span>
-            <span style="color:var(--muted);font-size:11px">${open?"▲":"▼"}</span>
-          </div>
+  ${DB.stages.map(s=>{
+    const ins  = s.inscriptions||[];
+    const isNext = s.id===nextId && s.status==="upcoming";
+    const badgeCls = s.isFinal?"bfin":s.status==="finished"?"bdone":isNext?"bnext":"bfuture";
+    const badgeLbl = s.isFinal?"🏆 Final":s.status==="finished"?"Encerrada":isNext?"Próxima":"Futura";
+    return `<div class="sgc" data-detail="${s.id}" style="cursor:pointer">
+      <div class="sgh" style="pointer-events:none">
+        <div style="flex:1">
+          <div class="sgn">${s.name}${s.isFinal?" 🏆":""}</div>
+          <div class="sgm">${fmtD(s.date)}${s.time?" às "+s.time:""}${s.location?" · "+s.location:""}<br/>${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}${s.isFinal?" · Mesa Final":""}</div>
         </div>
-        ${open?`<div class="sgb">
-          ${s.status==="finished"&&(s.results||[]).length?`
-            <div class="lbl" style="margin-bottom:8px">Resultado final</div>
-            ${(s.results||[]).map(r=>{const pl=getP(r.playerId)||{nickname:"?",name:"?"};return `<div class="resrow">
-              <div class="respos">${r.position}º</div>
-              <div class="av" style="width:26px;height:26px;font-size:9px">${ini(pl.name)}</div>
-              <div style="flex:1">${pl.nickname}</div>
-              <div style="color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700">${r.points} pts</div>
-              ${s.type==="knockout"?`<div style="color:var(--muted);font-size:12px;margin-left:6px">🥊${r.knockouts||0}</div>`:""}
-            </div>`;}).join("")}`:""}
-          ${s.status==="upcoming"?`
-            <div class="lbl" style="margin-bottom:8px">Inscritos (${ins.length})</div>
-            <div class="chips">${ins.map(uid=>{const pl=getP(uid)||{name:"?"};return `<div class="chip${uid===CURRENT_USER_UID?" mine":""}">
-              <div class="av" style="width:20px;height:20px;font-size:8px">${ini(pl.name)}</div>
-              ${pl.nickname||uid}${uid===CURRENT_USER_UID?" ✓":""}
-            </div>`;}).join("")}${ins.length===0?'<span style="color:var(--muted);font-size:13px">Nenhum inscrito.</span>':""}</div>
-            <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
-              <button class="btn sm ${iAmIn?'bd':'by'}" data-inscribe="${s.id}">${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}</button>
-              ${ins.length>0?`<button class="btn bo sm" data-share-ins="${s.id}">📤 Compartilhar lista</button>`:""}
-              ${s.address?`<button class="btn bo sm" onclick="openRouteModal(\`${s.address}\`)">🗺️ Traçar Rota</button>`:""}
-            </div>`:""}  
+        <div class="sgr">
+          <span class="badge ${badgeCls}">${badgeLbl}</span>
+          <span style="color:var(--muted);font-size:18px">›</span>
+        </div>
+      </div>
+    </div>`;
+  }).join("")}
+  </div>`;
+}
+
+function renderStageDetail(sid){
+  const s = DB.stages.find(x=>x.id===sid); if(!s) return renderStages();
+  const ins = s.inscriptions||[];
+  const iAmIn = ins.includes(CURRENT_USER_UID||"");
+  const upcoming = DB.stages.filter(x=>x.status==="upcoming");
+  const isNext = upcoming.length>0 && upcoming[0].id===s.id;
+  const badgeCls = s.isFinal?"bfin":s.status==="finished"?"bdone":isNext?"bnext":"bfuture";
+  const badgeLbl = s.isFinal?"🏆 Final":s.status==="finished"?"Encerrada":isNext?"Próxima":"Futura";
+  const tipo = s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout";
+
+  return `<div class="sec">
+    <!-- Back button -->
+    <button data-back-stages style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--muted);cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:0;margin-bottom:14px">
+      ‹ Todas as etapas
+    </button>
+
+    <!-- Hero card -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:4px;padding:18px;margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:#fff;line-height:1">${s.name}${s.isFinal?" 🏆":""}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px">${tipo}</div>
+        </div>
+        <span class="badge ${badgeCls}" style="flex-shrink:0;margin-top:2px">${badgeLbl}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:14px">
+        <div style="display:flex;align-items:center;gap:8px;color:var(--text)">
+          <span style="font-size:16px">📅</span>
+          <span>${fmtD(s.date)}${s.time?" às <b style='color:#fff'>"+s.time+"</b>":""}</span>
+        </div>
+        ${s.location?`<div style="display:flex;align-items:center;gap:8px;color:var(--text)">
+          <span style="font-size:16px">🏠</span><span>${s.location}</span>
         </div>`:""}
-      </div>`;
-    }).join("");
-  })()}
+        ${s.address?`<div style="display:flex;align-items:center;gap:8px;color:var(--muted)">
+          <span style="font-size:16px">📍</span><span style="font-size:13px">${s.address}</span>
+        </div>`:""}
+      </div>
+    </div>
+
+    <!-- Rules card (only if any rule exists) -->
+    ${s.buyin||s.rebuy||s.addon||s.timechip?`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:16px;margin-bottom:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:var(--yellow);text-transform:uppercase;margin-bottom:12px">Estrutura do Torneio</div>
+      ${s.buyin?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1c1c1c">
+        <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">💵 Buy-in</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.buyin}</span>
+      </div>`:""}
+      ${s.rebuy?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1c1c1c">
+        <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">💸 Rebuy</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.rebuy}</span>
+      </div>`:""}
+      ${s.addon?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1c1c1c">
+        <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">💰 Add-on</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.addon}</span>
+      </div>`:""}
+      ${s.timechip?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
+        <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">⏳ Time Chip</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.timechip}</span>
+      </div>`:""}
+    </div>`:""}
+
+    <!-- Action buttons -->
+    ${s.status==="upcoming"?`
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+      <button class="btn fw ${iAmIn?"bd":"by"}" style="padding:14px;font-size:16px" data-inscribe="${s.id}">
+        ${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}
+      </button>
+      <div style="display:flex;gap:8px">
+        ${ins.length>0?`<button class="btn bo fw" style="padding:12px" data-share-ins="${s.id}">📤 Compartilhar Lista</button>`:""}
+        ${s.address?`<button class="btn bo fw" style="padding:12px" onclick="openRouteModal(\`${s.address}\`)">🗺️ Traçar Rota</button>`:""}
+      </div>
+    </div>`:""}
+
+    <!-- Inscriptions or Results -->
+    ${s.status==="upcoming"?`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Inscritos</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--yellow)">${ins.length}</div>
+      </div>
+      ${ins.length===0?'<div class="empty">Nenhum inscrito ainda.</div>':
+        ins.map((uid,i)=>{const pl=getP(uid)||{name:"?",nickname:"?"};return `
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid #1a1a1a${uid===CURRENT_USER_UID?";background:rgba(245,168,0,.04);border-left:3px solid var(--yellow)":""};box-sizing:border-box">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--muted);width:24px;text-align:center">${i+1}</div>
+          ${AV(uid)}
+          <div style="flex:1">
+            <div style="font-size:14px;color:#fff;font-weight:600">${pl.name}</div>
+            <div style="font-size:12px;color:var(--muted)">"${pl.nickname}"</div>
+          </div>
+          ${uid===CURRENT_USER_UID?`<span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px">INSCRITO ✓</span>`:""}
+        </div>`;}).join("")}
+    </div>`:""}
+
+    ${s.status==="finished"&&(s.results||[]).length?`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Resultado Final</div>
+      </div>
+      ${(s.results||[]).map(r=>{const pl=getP(r.playerId)||{nickname:"?",name:"?"};return `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #1a1a1a">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:${r.position<=3?"var(--yellow)":"var(--muted)"};width:32px;text-align:center">${r.position}º</div>
+        ${AV(r.playerId)}
+        <div style="flex:1"><div style="font-size:14px;color:#fff;font-weight:600">${pl.nickname}</div></div>
+        <div style="text-align:right">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow)">${r.points}<span style="font-size:10px;margin-left:2px">pts</span></div>
+          ${s.type==="knockout"?`<div style="font-size:11px;color:var(--muted)">🥊 ${r.knockouts||0} KO</div>`:""}
+        </div>
+      </div>`;}).join("")}
+    </div>`:""}
   </div>`;
 }
 
 // ── HOF ───────────────────────────────────────────────────────────────────────
 function renderHOF(){
   const hof = calcHOF();
-  const maxW = Math.max(...hof.map(h=>h.wins),0);
   return `<div class="sec">
-  <div class="st">Hall of <span class="ac">Fame</span></div><div class="ss">Vitórias em etapas · Temporada 2026</div><div class="dv"></div>
+  <div class="st">Hall of <span class="ac">Fame</span></div>
+  <div class="ss">Pontuação: 🃏 NLH=1pt · 🥊 KO=1pt · 🏆 Mesa Final=12pts</div><div class="dv"></div>
   ${hof.length===0?'<div class="empty">Nenhuma etapa encerrada ainda.</div>':''}
-  ${hof.map((h,i)=>`<div class="hfc" ${h.wins===maxW&&maxW>0?'style="border-color:rgba(255,215,0,.3);border-top:2px solid #FFD700"':''}>
-    <div class="hfr ${pcls(i)}">${i+1}</div>
-    ${AV(h.pl.uid,"lg")}
-    <div style="flex:1">
-      <div class="hfn">${h.pl.name} <span style="color:var(--muted);font-size:13px;font-weight:400">"${h.pl.nickname}"</span></div>
-      <div class="hfb">
-        ${h.wins>0?`<span class="hfbdg hby">🏆 ${h.wins} vitória${h.wins!==1?"s":""}</span>`:""}
-        ${h.p>0?`<span class="hfbdg hbg">▶ ${h.p} etapa${h.p!==1?"s":""}</span>`:""}
+  ${hof.map((h,i)=>{
+    const maxScore = hof.length>0?hof[0].hofScore:0;
+    const isTop = h.hofScore===maxScore && maxScore>0;
+    return `<div class="hfc" style="cursor:pointer${isTop?';border-color:rgba(255,215,0,.3);border-top:2px solid #FFD700':''}" data-profile="${h.pl.uid}">
+      <div class="hfr ${pcls(i)}">${i+1}</div>
+      ${AV(h.pl.uid,"lg")}
+      <div style="flex:1;min-width:0">
+        <div class="hfn">${h.pl.name} <span style="color:var(--muted);font-size:13px;font-weight:400">"${h.pl.nickname}"</span></div>
+        <div class="hfb">
+          ${h.wNL>0?`<span class="hfbdg hby">🃏 ${h.wNL}</span>`:''}
+          ${h.wKO>0?`<span class="hfbdg hby">🥊 ${h.wKO}</span>`:''}
+          ${h.wFT>0?`<span class="hfbdg" style="background:rgba(52,152,219,.15);color:var(--blue);border:1px solid rgba(52,152,219,.3)">🏆 FT ${h.wFT}</span>`:''}
+          ${h.p>0?`<span class="hfbdg hbg">▶ ${h.p} etapa${h.p!==1?'s':''}</span>`:''}
+        </div>
       </div>
-    </div>
-  </div>`).join("")}
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow)">${h.hofScore}</div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">pts HOF</div>
+      </div>
+    </div>`;
+  }).join("")}
+  <div style="margin-top:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:3px;font-size:12px;color:var(--muted);line-height:1.8">
+    <b style="color:var(--text)">Como funciona a pontuação HOF:</b><br/>
+    🃏 Vitória em NL Hold'em = <b style="color:var(--yellow)">1 ponto</b><br/>
+    🥊 Vitória em Knockout = <b style="color:var(--yellow)">1 ponto</b><br/>
+    🏆 Vitória em Mesa Final = <b style="color:var(--yellow)">12 pontos</b>
+  </div>
+  <div id="profile-slot"></div>
   </div>`;
 }
 
@@ -1031,10 +1151,11 @@ function showProfile(uid){
       </div>
       <div class="psg">
         <div class="ps"><div class="psv">${s.p}</div><div class="psl">Participações</div></div>
-        <div class="ps"><div class="psv">${s.ft}</div><div class="psl">Mesas Finais</div></div>
-        <div class="ps"><div class="psv">${s.w}</div><div class="psl">Vitórias</div></div>
-        <div class="ps"><div class="psv">${s.ko}</div><div class="psl">KOs</div></div>
-        <div class="ps"><div class="psv">${s.p>0?((s.ft/s.p)*100).toFixed(0):0}%</div><div class="psl">% FT</div></div>
+        <div class="ps"><div class="psv">${s.ft}</div><div class="psl">Final Tables</div></div>
+        <div class="ps"><div class="psv">${s.wNL}</div><div class="psl">🃏 NLH</div></div>
+        <div class="ps"><div class="psv">${s.wKO}</div><div class="psl">🥊 KO</div></div>
+        <div class="ps"><div class="psv">${s.wFT}</div><div class="psl">🏆 FT</div></div>
+        <div class="ps"><div class="psv">${s.ko}</div><div class="psl">Knockouts</div></div>
       </div>
       ${hist.length?`<div class="sep"></div><div class="lbl" style="margin-bottom:10px">Histórico</div>
       ${hist.map(st=>{const r=(st.results||[]).find(r=>r.playerId===uid);return `
@@ -1054,22 +1175,63 @@ function showProfile(uid){
 function closeProfile(){ const el=document.getElementById("profile-slot"); if(el)el.innerHTML=""; }
 
 // ── RULES ─────────────────────────────────────────────────────────────────────
+function openEditRulesModal(){
+  const wrap=document.getElementById("result-modal");
+  wrap.innerHTML="";
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  wrap.appendChild(ov);
+  const box=document.createElement("div");
+  box.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;box-sizing:border-box;";
+  box.addEventListener("click",e=>e.stopPropagation());
+  ov.addEventListener("click",e=>{if(e.target===ov) wrap.innerHTML="";});
+  ov.appendChild(box);
+  function field(id,lbl,val,ph){return `<div class="fr"><label class="lbl">${lbl}</label><input class="inp" id="${id}" value="${val||""}" placeholder="${ph}"/></div>`;}
+  box.innerHTML=`
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">✏️ Editar Regras Padrão</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Valores usados como padrão ao criar novas etapas.</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">🃏 NL Hold'em</div>
+    ${field("er-nl-bi","Buy-in",DEFAULT_RULES.nlholdem.buyin,"Ex: R$ 150 (20k)")}
+    ${field("er-nl-rb","Rebuy",DEFAULT_RULES.nlholdem.rebuy,"Ex: R$ 100 (20k) / R$ 180 (40k)")}
+    ${field("er-nl-ao","Add-on",DEFAULT_RULES.nlholdem.addon,"Ex: R$ 150 (40k)")}
+    ${field("er-nl-tc","Time Chip",DEFAULT_RULES.nlholdem.timechip,"Ex: 5k início 1º nível")}
+    <div style="height:1px;background:var(--border);margin:10px 0 14px"></div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">🥊 Knockout</div>
+    ${field("er-ko-bi","Buy-in",DEFAULT_RULES.knockout.buyin,"Ex: R$ 200 (20k + 1 KO)")}
+    ${field("er-ko-rb","Rebuy",DEFAULT_RULES.knockout.rebuy,"Ex: R$ 200 (20k+1KO) / R$ 300 (40k+1KO)")}
+    ${field("er-ko-ao","Add-on",DEFAULT_RULES.knockout.addon,"Ex: R$ 200 (40k)")}
+    ${field("er-ko-tc","Time Chip",DEFAULT_RULES.knockout.timechip,"Ex: —")}
+    <div class="row g8" style="margin-top:14px">
+      <button class="btn by fw" id="er-save">✓ Salvar</button>
+      <button class="btn bo" id="er-cancel">Cancelar</button>
+    </div>`;
+  box.querySelector("#er-cancel").addEventListener("click",()=>{ wrap.innerHTML=""; });
+  box.querySelector("#er-save").addEventListener("click",()=>{
+    DEFAULT_RULES.nlholdem={buyin:document.getElementById("er-nl-bi").value.trim(),rebuy:document.getElementById("er-nl-rb").value.trim(),addon:document.getElementById("er-nl-ao").value.trim(),timechip:document.getElementById("er-nl-tc").value.trim()};
+    DEFAULT_RULES.knockout={buyin:document.getElementById("er-ko-bi").value.trim(),rebuy:document.getElementById("er-ko-rb").value.trim(),addon:document.getElementById("er-ko-ao").value.trim(),timechip:document.getElementById("er-ko-tc").value.trim()};
+    saveRules();
+    wrap.innerHTML="";
+    render();
+  });
+}
+
 function renderRules(){
+  const nl=DEFAULT_RULES.nlholdem; const ko=DEFAULT_RULES.knockout;
   const nlR=`<div class="card cy">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:var(--yellow);margin-bottom:10px">PPP RANKING — NL Hold'em</div>
-    ${[["Etapas","12 etapas na temporada"],["Buy-in","R$ 150 (25k fichas)"],["Time Chip","5k fichas"],["Rebuy Simples","R$ 80 (20k fichas)"],["Rebuy Duplo","R$ 150 (40k fichas)"],["Add-on","R$ 100 (40k fichas)"]].map(([k,v])=>`
+    ${[["Etapas","12 etapas na temporada"],["Buy-in",nl.buyin||"—"],["Rebuy",nl.rebuy||"—"],["Add-on",nl.addon||"—"],["Time Chip",nl.timechip||"—"]].map(([k,v])=>`
     <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e1e1e;font-size:14px;gap:10px">
-      <span style="color:var(--muted)">${k}</span><span style="color:#fff;font-weight:600">${v}</span>
+      <span style="color:var(--muted);flex-shrink:0">${k}</span><span style="color:#fff;font-weight:600;text-align:right">${v}</span>
     </div>`).join("")}
     <div style="margin-top:12px;font-size:13px;color:var(--muted);line-height:1.7">O ranking final é a soma das melhores etapas. A pior performance é descartada quando o jogador tiver mais de 4 participações.</div>
   </div>`;
   const koR=`<div class="card cy">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:var(--yellow);margin-bottom:10px">PPP KO — Knockout</div>
-    ${[["Etapas","12 etapas na temporada"],["Buy-in","R$ 200,00 (20k fichas + 1 ficha KO)"],["Rebuy Simples","R$ 200,00 (20k fichas + 1 ficha KO)"],["Rebuy Duplo","R$ 300,00 (40k fichas + 1 ficha KO)"],["Add-on","R$ 200,00 (40k fichas)"],["KO Bounty","R$ 100,00 por eliminação"]].map(([k,v])=>`
+    ${[["Etapas","12 etapas na temporada"],["Buy-in",ko.buyin||"—"],["Rebuy",ko.rebuy||"—"],["Add-on",ko.addon||"—"],["Time Chip",ko.timechip||"—"]].map(([k,v])=>`
     <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e1e1e;font-size:14px;gap:10px">
       <span style="color:var(--muted);flex-shrink:0">${k}</span><span style="color:#fff;font-weight:600;text-align:right">${v}</span>
     </div>`).join("")}
-    <div style="margin-top:12px;font-size:13px;color:var(--muted);line-height:1.7">Pontuação base por posição + 10pts por eliminação. O bounty de R$100 é pago na hora pelo eliminado ao eliminador.</div>
+    <div style="margin-top:12px;font-size:13px;color:var(--muted);line-height:1.7">Pontuação base por posição + 10pts por eliminação. O bounty é pago na hora pelo eliminado ao eliminador.</div>
   </div>`;
   const ptR=`<div class="card cy" style="padding:0;overflow:hidden">
     <table class="ptable">
@@ -1084,7 +1246,10 @@ function renderRules(){
     </table>
   </div>`;
   return `<div class="sec">
-  <div class="st">Regr<span class="ac">as</span></div><div class="ss">Formatos e pontuação</div><div class="dv"></div>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2px">
+    <div><div class="st">Regr<span class="ac">as</span></div><div class="ss">Formatos e pontuação</div></div>
+    <button onclick="openEditRulesModal()" class="btn bo sm" style="flex-shrink:0;margin-top:6px">✏️ Editar Padrão</button>
+  </div><div class="dv"></div>
   <div class="tabs">
     <button class="tb${RULES_TAB==="nlholdem"?" on":""}" data-rtab2="nlholdem">🃏 NL Ranking</button>
     <button class="tb${RULES_TAB==="knockout"?" on":""}" data-rtab2="knockout">🥊 PPP KO</button>
@@ -1096,6 +1261,7 @@ function renderRules(){
   ${RULES_VIEW==="rules"?(RULES_TAB==="nlholdem"?nlR:koR):ptR}
   </div>`;
 }
+
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
 let resultStage=null, resultRows=[];
@@ -1186,7 +1352,8 @@ function renderAdminPlayers(){
 
 // ── STAGE MODAL ───────────────────────────────────────────────────────────────
 function openStageModal(stage=null){
-  const f = stage||{name:"",date:"",time:"",location:"",address:"",type:"nlholdem",isFinal:false,buyin:"",rebuy:"",addon:"",timechip:""};
+  const defR=DEFAULT_RULES["nlholdem"]||{};
+  const f = stage||{name:"",date:"",time:"",location:"",address:"",type:"nlholdem",isFinal:false,buyin:defR.buyin||"",rebuy:defR.rebuy||"",addon:defR.addon||"",timechip:defR.timechip||""};
   document.getElementById("admin-modal").innerHTML=`
   <div class="ov" id="sm-ov">
     <div class="modal" style="max-height:90vh;overflow-y:auto">
@@ -1222,6 +1389,18 @@ function openStageModal(stage=null){
       </div>
     </div>
   </div>`;
+  // Auto-fill rules when format changes
+  document.getElementById("sf-t").addEventListener("change",function(){
+    const t=this.value, r=DEFAULT_RULES[t]||{};
+    const map={bi:"buyin",rb:"rebuy",ao:"addon",tc:"timechip"};
+    Object.entries(map).forEach(([k,field])=>{
+      const el=document.getElementById("sf-"+k);
+      const cur=(el.value||"").trim();
+      const prevNL=(DEFAULT_RULES.nlholdem[field]||"");
+      const prevKO=(DEFAULT_RULES.knockout[field]||"");
+      if(!cur||cur===prevNL||cur===prevKO) el.value=r[field]||"";
+    });
+  });
   document.getElementById("sm-ov").addEventListener("click",e=>{if(e.target===document.getElementById("sm-ov"))closeAdminModal();});
   document.getElementById("cancel-stage").addEventListener("click",closeAdminModal);
   document.getElementById("save-stage").addEventListener("click",()=>{
@@ -1445,14 +1624,14 @@ function openPlayerModal(){
 
 // ── BIND EVENTS ───────────────────────────────────────────────────────────────
 function bindEvents(){
-  document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;MENU_OPEN=false;render();});});
+  document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();});});
   document.getElementById("btn-more")?.addEventListener("click",e=>{
     e.stopPropagation();MENU_OPEN=!MENU_OPEN;
     document.getElementById("more-menu")?.classList.toggle("open",MENU_OPEN);
     document.getElementById("menu-backdrop")?.classList.toggle("open",MENU_OPEN);
     document.getElementById("btn-more")?.classList.toggle("menu-open",MENU_OPEN);
   });
-  document.querySelectorAll("[data-more-tab]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.moreTab;EXPANDED=null;MENU_OPEN=false;render();});});
+  document.querySelectorAll("[data-more-tab]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.moreTab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();});});
   document.getElementById("menu-backdrop")?.addEventListener("click",()=>{
     MENU_OPEN=false;
     document.getElementById("more-menu")?.classList.remove("open");
@@ -1460,7 +1639,14 @@ function bindEvents(){
     document.getElementById("btn-more")?.classList.remove("menu-open");
   });
   document.querySelectorAll("[data-goto]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.goto;EXPANDED=null;MENU_OPEN=false;render();});});
-  document.querySelectorAll("[data-goto-expand]").forEach(el=>{el.addEventListener("click",()=>{TAB="stages";EXPANDED=el.dataset.gotoExpand;MENU_OPEN=false;render();});});
+  document.querySelectorAll("[data-goto-expand]").forEach(el=>{el.addEventListener("click",()=>{TAB="stages";STAGE_DETAIL=el.dataset.gotoExpand;MENU_OPEN=false;render();});});
+  // Stage detail page
+  document.querySelectorAll("[data-detail]").forEach(el=>{
+    el.addEventListener("click",()=>{STAGE_DETAIL=el.dataset.detail;render();});
+  });
+  document.querySelectorAll("[data-back-stages]").forEach(el=>{
+    el.addEventListener("click",()=>{STAGE_DETAIL=null;render();});
+  });
   document.querySelectorAll("[data-expand]").forEach(el=>{el.addEventListener("click",()=>{EXPANDED=EXPANDED===el.dataset.expand?null:el.dataset.expand;render();});});
   document.querySelectorAll("[data-rtab]").forEach(btn=>{btn.addEventListener("click",()=>{RANK_TAB=btn.dataset.rtab;render();});});
   document.querySelectorAll("[data-rtab2]").forEach(btn=>{btn.addEventListener("click",()=>{RULES_TAB=btn.dataset.rtab2;render();});});
