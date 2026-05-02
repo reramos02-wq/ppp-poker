@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#0e0e0e"/>
+<meta name="description" content="PPP Poker — Gestão de torneios de poker"/>
 <title>PPP Poker</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
@@ -412,6 +415,20 @@ let RULES_VIEW = "rules";
 const CURRENT_USER_UID = "u1"; // admin demo user
 
 function save(){ localStorage.setItem(SK, JSON.stringify(DB)); }
+
+function showToast(msg, color){
+  var t=document.getElementById('ppp-toast');
+  if(!t){ t=document.createElement('div'); t.id='ppp-toast';
+    t.style.cssText='position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:9999;font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:14px;letter-spacing:.5px;padding:10px 20px;border-radius:4px;opacity:0;transition:opacity .3s;pointer-events:none;max-width:300px;text-align:center;';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg;
+  t.style.background=color==='red'?'var(--red)':color==='green'?'var(--green)':'var(--yellow)';
+  t.style.color=color==='yellow'?'#000':'#fff';
+  t.style.opacity='1';
+  clearTimeout(t._timer);
+  t._timer=setTimeout(function(){t.style.opacity='0';},2500);
+}
 function getP(uid){ return DB.players.find(p=>p.uid===uid); }
 
 // ── CALCULATIONS ──────────────────────────────────────────────────────────────
@@ -1462,8 +1479,8 @@ function autoSaveDraft(){
     });
     save();
     var ind=document.getElementById("autosave-ind");
-    if(ind){ind.textContent="✓ Rascunho salvo";ind.style.color="var(--green)";}
-    setTimeout(function(){var ind=document.getElementById("autosave-ind");if(ind)ind.textContent="";},2500);
+    if(ind){ind.textContent="✓ Salvo";ind.style.color="var(--green)";}
+    setTimeout(function(){var ind=document.getElementById("autosave-ind");if(ind)ind.textContent="";},2000);
   },800);
 }
 
@@ -1582,7 +1599,7 @@ function drawResultModal(){
   pubBtn.textContent=hasPublished?"\u2713 Atualizar Publica\u00e7\u00e3o":"\uD83C\uDFC1 Publicar Resultado";
   pubBtn.addEventListener("click",function(){
     var filled=resultRows.filter(function(r){return r.pos&&parseInt(r.pos)>0;});
-    if(!filled.length){alert("Selecione pelo menos uma posi\u00e7\u00e3o antes de publicar.");return;}
+    if(!filled.length){showToast("Selecione pelo menos uma posição antes de publicar.","red");return;}
     var results=filled.sort(function(a,b){return parseInt(a.pos)-parseInt(b.pos);}).map(function(r){return {playerId:r.uid,position:parseInt(r.pos),points:getPts(parseInt(r.pos)),knockouts:parseInt(r.ko)||0};});
     DB.stages=DB.stages.map(function(st){return st.id===resultStage.id?Object.assign({},st,{status:"finished",results:results,draft:null}):st;});
     save();closeResultModal();render();
@@ -1624,14 +1641,14 @@ function openPlayerModal(){
 
 // ── BIND EVENTS ───────────────────────────────────────────────────────────────
 function bindEvents(){
-  document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();});});
+  document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();window.scrollTo(0,0);});});
   document.getElementById("btn-more")?.addEventListener("click",e=>{
     e.stopPropagation();MENU_OPEN=!MENU_OPEN;
     document.getElementById("more-menu")?.classList.toggle("open",MENU_OPEN);
     document.getElementById("menu-backdrop")?.classList.toggle("open",MENU_OPEN);
     document.getElementById("btn-more")?.classList.toggle("menu-open",MENU_OPEN);
   });
-  document.querySelectorAll("[data-more-tab]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.moreTab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();});});
+  document.querySelectorAll("[data-more-tab]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.moreTab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();window.scrollTo(0,0);});});
   document.getElementById("menu-backdrop")?.addEventListener("click",()=>{
     MENU_OPEN=false;
     document.getElementById("more-menu")?.classList.remove("open");
@@ -1642,10 +1659,10 @@ function bindEvents(){
   document.querySelectorAll("[data-goto-expand]").forEach(el=>{el.addEventListener("click",()=>{TAB="stages";STAGE_DETAIL=el.dataset.gotoExpand;MENU_OPEN=false;render();});});
   // Stage detail page
   document.querySelectorAll("[data-detail]").forEach(el=>{
-    el.addEventListener("click",()=>{STAGE_DETAIL=el.dataset.detail;render();});
+    el.addEventListener("click",()=>{STAGE_DETAIL=el.dataset.detail;render();window.scrollTo(0,0);});
   });
   document.querySelectorAll("[data-back-stages]").forEach(el=>{
-    el.addEventListener("click",()=>{STAGE_DETAIL=null;render();});
+    el.addEventListener("click",()=>{STAGE_DETAIL=null;render();window.scrollTo(0,0);});
   });
   document.querySelectorAll("[data-expand]").forEach(el=>{el.addEventListener("click",()=>{EXPANDED=EXPANDED===el.dataset.expand?null:el.dataset.expand;render();});});
   document.querySelectorAll("[data-rtab]").forEach(btn=>{btn.addEventListener("click",()=>{RANK_TAB=btn.dataset.rtab;render();});});
