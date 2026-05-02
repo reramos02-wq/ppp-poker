@@ -320,9 +320,10 @@ select.inp{appearance:none;}
 </head>
 <body>
 <div id="app">
-  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0e0e0e;gap:16px">
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0e0e0e;gap:16px;padding:24px">
     <div style="width:48px;height:48px;border:3px solid #333;border-top-color:#F5A800;border-radius:50%;animation:spin .8s linear infinite"></div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;color:#666;letter-spacing:2px;text-transform:uppercase">Carregando...</div>
+    <div id="debug-log" style="font-family:monospace;font-size:11px;color:#444;text-align:center;max-width:320px;line-height:1.8"></div>
   </div>
 </div>
 <div id="result-modal"></div>
@@ -343,10 +344,27 @@ const firebaseConfig = {
   appId: "1:768897236923:web:7dfa0b74354b47ca468e9e"
 };
 
-const fbApp = initializeApp(firebaseConfig);
-const auth  = getAuth(fbApp);
-const db    = getFirestore(fbApp);
-const googleProvider = new GoogleAuthProvider();
+function dbg(msg){
+  const el=document.getElementById("debug-log");
+  if(el) el.innerHTML += msg + "<br/>";
+  console.log(msg);
+}
+let fbApp, auth, db, googleProvider;
+try {
+  dbg("1. Iniciando Firebase...");
+  fbApp = initializeApp(firebaseConfig);
+  dbg("2. Firebase OK");
+  auth = getAuth(fbApp);
+  dbg("3. Auth OK");
+  db = getFirestore(fbApp);
+  dbg("4. Firestore OK");
+  googleProvider = new GoogleAuthProvider();
+  dbg("5. GoogleProvider OK");
+} catch(e) {
+  document.getElementById("app").innerHTML = 
+    '<div style="padding:40px;text-align:center;color:#e74c3c;font-family:monospace;font-size:13px">' +
+    '<b>ERRO Firebase Init:</b><br/>' + e.message + '</div>';
+}
 // ── FIREBASE SDK (ESM) ───────────────────────────────────────────────────────
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
@@ -1878,7 +1896,9 @@ window.addEventListener('unhandledrejection', function(e){
   }
 });
 
+dbg("6. Aguardando auth...");
 onAuthStateChanged(auth, async (user) => {
+  dbg("7. Auth state: " + (user ? "logado " + user.email : "deslogado"));
   if(user){
     CURRENT_USER     = user;
     CURRENT_USER_UID = user.uid;
