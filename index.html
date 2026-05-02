@@ -1952,14 +1952,25 @@ function startListeners(){
         DB.players = data.players || [];
         DB.stages  = data.stages  || [];
         dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
+        // If document exists but is empty, seed it
+        if(DB.players.length === 0 && DB.stages.length === 0){
+          dbg("17. Documento vazio! Subindo SEED...");
+          setDoc(doc(db,"seasons",ACTIVE_SEASON), {
+            players: SEED.players,
+            stages:  SEED.stages,
+            updatedAt: serverTimestamp()
+          }).then(()=>{ dbg("SEED enviado com sucesso!"); })
+            .catch(e=>{ dbg("ERRO seed: " + e.message); });
+          DB.players = SEED.players;
+          DB.stages  = SEED.stages;
+        }
       } else {
         dbg("16. Documento 2026 NAO existe! Criando...");
-        // Create the document with SEED data
         setDoc(doc(db,"seasons",ACTIVE_SEASON), {
           players: SEED.players,
           stages:  SEED.stages,
           updatedAt: serverTimestamp()
-        }).then(()=>{ dbg("17. SEED criado no Firestore!"); })
+        }).then(()=>{ dbg("17. SEED criado!"); })
           .catch(e=>{ dbg("ERRO ao criar seed: " + e.message); });
         DB.players = SEED.players;
         DB.stages  = SEED.stages;
