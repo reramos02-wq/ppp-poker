@@ -709,22 +709,32 @@ function renderTopbar(){
 }
 
 function render(){
-  if(IS_DESKTOP()){
-    document.getElementById("app").innerHTML = `
-      ${renderSidebar()}
-      <div class="main-wrap">
-        ${renderTopbar()}
-        <div id="page">${TAB==="home"?renderHomeDesktop():renderPage()}</div>
-      </div>`;
-  } else {
-    document.getElementById("app").innerHTML = `
-      <div id="wrap">
-        ${renderHeader()}
-        <div id="page">${renderPage()}</div>
-        ${renderNav()}
-      </div>`;
+  try {
+    dbg("render() TAB="+TAB+" desktop="+IS_DESKTOP());
+    let html = "";
+    if(IS_DESKTOP()){
+      html = renderSidebar() +
+        '<div class="main-wrap">' +
+        renderTopbar() +
+        '<div id="page">' + (TAB==="home"?renderHomeDesktop():renderPage()) + '</div>' +
+        '</div>';
+    } else {
+      html = '<div id="wrap">' +
+        renderHeader() +
+        '<div id="page">' + renderPage() + '</div>' +
+        renderNav() +
+        '</div>';
+    }
+    document.getElementById("app").innerHTML = html;
+    dbg("render() OK");
+    bindEvents();
+  } catch(e) {
+    dbg("ERRO render(): " + e.message + " | " + e.stack?.split("\n")[0]);
+    document.getElementById("app").innerHTML =
+      '<div style="padding:24px;color:#e74c3c;font-family:monospace;font-size:12px;background:#0e0e0e;min-height:100vh">' +
+      '<b>Erro no render():</b><br/>' + e.message + '<br/><br/>' +
+      (e.stack||"").replace(/\n/g,"<br/>") + '</div>';
   }
-  bindEvents();
 }
 
 
