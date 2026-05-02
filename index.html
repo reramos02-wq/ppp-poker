@@ -16,6 +16,8 @@
 body{background:var(--bg-dark);color:var(--text);font-family:'Barlow',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;overscroll-behavior:none;}
 #result-modal{position:fixed;inset:0;z-index:999;pointer-events:none;}
 #result-modal:not(:empty){pointer-events:all;}
+#admin-modal{position:fixed;inset:0;z-index:998;pointer-events:none;}
+#admin-modal:not(:empty){pointer-events:all;}
 #app{max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:76px;}
 
 /* HEADER */
@@ -303,6 +305,7 @@ select.inp{appearance:none;}
 <body>
 <div id="app"></div>
 <div id="result-modal"></div>
+<div id="admin-modal"></div>
 
 <script>
 // ── DATA ──────────────────────────────────────────────────────────────────────
@@ -319,7 +322,10 @@ const POINTS_TABLE = [
   {pos:6,pts:8},{pos:7,pts:6},{pos:8,pts:4},{pos:9,pts:3},
 ];
 const getPts = pos => POINTS_TABLE.find(r=>r.pos===pos)?.pts ?? 2;
-const mkId   = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
+const mkId = () => {
+  // TODO Firebase: let Firestore auto-generate IDs with doc(collection(db,'stages')).id
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+};
 const ini    = name => (name||"").trim().split(" ").filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase()||"?";
 const fmtD   = d => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"});}catch{return d;} };
 const pcls   = i => i===0?"rp1":i===1?"rp2":i===2?"rp3":"rpx";
@@ -412,9 +418,29 @@ let STAGE_DETAIL = null; // stage id for detail page
 let ADMIN_TAB = "stages";
 let RULES_TAB = "nlholdem";
 let RULES_VIEW = "rules";
-const CURRENT_USER_UID = "u1"; // admin demo user
+// CURRENT_USER_UID defined via AUTH.uid above
 
-function save(){ localStorage.setItem(SK, JSON.stringify(DB)); }
+// ── DATA LAYER — replace these functions with Firebase calls when ready ─────
+// To migrate: implement saveDB(), loadDB(), listenDB() with Firestore
+// All app logic already uses these functions exclusively
+
+function save(){
+  // TODO Firebase: await setDoc(doc(db,'seasons',ACTIVE_SEASON), DB)
+  localStorage.setItem(SK, JSON.stringify(DB));
+}
+
+function getPlayer(uid){
+  // TODO Firebase: return await getDoc(doc(db,'players',uid))
+  return DB.players.find(p=>p.uid===uid);
+}
+
+// Auth layer — replace with Firebase Auth
+const AUTH = {
+  uid: "u1",      // TODO: firebase.auth().currentUser.uid
+  isAdmin: true,  // TODO: check custom claim or adminEmails list
+  adminEmails: ["reramos02@gmail.com"]
+};
+const CURRENT_USER_UID = AUTH.uid;
 
 function showToast(msg, color){
   var t=document.getElementById('ppp-toast');
@@ -438,7 +464,8 @@ function calcRank(type){
   DB.players.forEach(p=>{ sc[p.uid]={p,total:0,stages:0,ko:0}; });
   fin.forEach(s=>(s.results||[]).forEach(r=>{
     if(!sc[r.playerId])return;
-    sc[r.playerId].total += r.points + (type==="knockout"?(r.knockouts||0)*10:0);
+    const pts = getPts(r.position); // recalculate from table, not stored value
+    sc[r.playerId].total += pts + (type==="knockout"?(r.knockouts||0)*10:0);
     sc[r.playerId].stages++;
     sc[r.playerId].ko += r.knockouts||0;
   }));
@@ -451,7 +478,7 @@ function calcRankGeral(){
   DB.stages.filter(s=>s.status==="finished"&&!s.isFinal&&(s.season===ACTIVE_SEASON||!s.season)).forEach(s=>{
     (s.results||[]).forEach(r=>{
       if(!sc[r.playerId])return;
-      const pts = r.points + (s.type==="knockout"?(r.knockouts||0)*10:0);
+      const pts = getPts(r.position) + (s.type==="knockout"?(r.knockouts||0)*10:0);
       sc[r.playerId].total += pts;
       sc[r.playerId].stages++;
       sc[r.playerId].ko += r.knockouts||0;
@@ -1297,7 +1324,6 @@ function renderAdmin(){
   ${ADMIN_TAB==="stages"?renderAdminStages():""}
   ${ADMIN_TAB==="results"?renderAdminResults():""}
   ${ADMIN_TAB==="players"?renderAdminPlayers():""}
-  <div id="admin-modal"></div>
   </div>`;
 }
 
