@@ -399,6 +399,17 @@ const getPts = pos => POINTS_TABLE.find(r=>r.pos===pos)?.pts ?? 2;
 // ── APP STATE ─────────────────────────────────────────────────────────────────
 let DB = { players:[], stages:[] };
 
+// Navigation state
+let TAB           = "home";
+let EXPANDED      = null;
+let STAGE_DETAIL  = null;
+let MENU_OPEN     = false;
+let ADMIN_TAB     = "stages";
+let RULES_TAB     = "nlholdem";
+let RULES_VIEW    = "rules";
+let RANK_TAB      = "geral";
+let LOGIN_TAB     = "login";
+
 const ACTIVE_SEASON = "2026";
 
 const SEED = {
@@ -739,8 +750,6 @@ function render(){
 
 
 // ── LOGIN / AUTH SCREENS ──────────────────────────────────────────────────────
-let LOGIN_TAB = "login";
-
 function renderLoginScreen(){
   const logo80Src = LOGO_80;
   document.getElementById("app").innerHTML = `
@@ -933,7 +942,7 @@ const MORE_TABS_BASE = [
 ];
 const MORE_TABS = () => IS_ADMIN ? MORE_TABS_BASE : MORE_TABS_BASE.filter(t=>t.id!=="admin");
 const MORE_IDS = () => MORE_TABS_BASE.map(t=>t.id);
-let MENU_OPEN = false;
+// MENU_OPEN declared in global state above
 
 function renderNav(){
   const mainTabs=[
@@ -1124,7 +1133,6 @@ function renderHome(){
 }
 
 // ── RANKING ───────────────────────────────────────────────────────────────────
-let RANK_TAB = "geral";
 function renderRanking(){
   const list = RANK_TAB==="geral"?calcRankGeral():calcRank(RANK_TAB);
   const isKO = RANK_TAB==="knockout";
