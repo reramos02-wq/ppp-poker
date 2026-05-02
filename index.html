@@ -1899,14 +1899,26 @@ window.addEventListener('unhandledrejection', function(e){
 dbg("6. Aguardando auth...");
 onAuthStateChanged(auth, async (user) => {
   dbg("7. Auth state: " + (user ? "logado " + user.email : "deslogado"));
+  dbg("8. Iniciando fluxo...");
   if(user){
     CURRENT_USER     = user;
     CURRENT_USER_UID = user.uid;
     IS_ADMIN         = ADMIN_EMAILS.includes(user.email);
-    // Load or create player profile
-    await ensurePlayerProfile(user);
-    // Start real-time listeners
-    startListeners();
+    dbg("9. Admin: " + IS_ADMIN);
+    try {
+      dbg("10. Carregando perfil...");
+      await ensurePlayerProfile(user);
+      dbg("11. Perfil OK");
+    } catch(e) {
+      dbg("ERRO ensurePlayerProfile: " + e.message);
+    }
+    try {
+      dbg("12. Iniciando listeners...");
+      startListeners();
+      dbg("13. Listeners OK");
+    } catch(e) {
+      dbg("ERRO startListeners: " + e.message);
+    }
   } else {
     CURRENT_USER     = null;
     CURRENT_USER_UID = null;
@@ -1918,29 +1930,8 @@ onAuthStateChanged(auth, async (user) => {
 
 // ── ENSURE PLAYER PROFILE ─────────────────────────────────────────────────────
 async function ensurePlayerProfile(user){
-  // Check if a player entry already linked to this uid
-  let player = DB.players.find(p=>p.uid===user.uid);
-  if(!player){
-    // Check if admin pre-created by email match
-    const snap = await getDocs(query(collection(db,"seasons",ACTIVE_SEASON,"players"),where("email","==",user.email)));
-    if(!snap.empty){
-      // Link existing player to this uid
-      const existing = snap.docs[0];
-      await updateDoc(existing.ref, {uid: user.uid, linked: true});
-    } else {
-      // New user — create player profile automatically
-      const nick = user.displayName?.split(" ")[0] || user.email.split("@")[0];
-      const newPlayer = {
-        uid:      user.uid,
-        name:     user.displayName || nick,
-        nickname: nick,
-        email:    user.email,
-        season:   ACTIVE_SEASON,
-        createdAt: serverTimestamp()
-      };
-      await setDoc(doc(db,"seasons",ACTIVE_SEASON,"players",user.uid), newPlayer);
-    }
-  }
+  // Just set current player from DB (Firestore listener will populate DB)
+  // Player matching happens after startListeners loads data
   CURRENT_PLAYER = DB.players.find(p=>p.uid===user.uid) || null;
 }
 
@@ -1950,26 +1941,50 @@ function stopListeners(){ _unsubListeners.forEach(fn=>fn()); _unsubListeners=[];
 
 function startListeners(){
   stopListeners();
-  // Listen to season document (players + stages)
-  const unsub = onSnapshot(doc(db,"seasons",ACTIVE_SEASON), (snap)=>{
-    if(snap.exists()){
-      const data = snap.data();
-      DB.players = data.players || [];
-      DB.stages  = data.stages  || [];
+  dbg("14. Conectando ao Firestore...");
+  // Listen to season document
+  const unsub = onSnapshot(
+    doc(db,"seasons",ACTIVE_SEASON),
+    (snap)=>{
+      dbg("15. Firestore snapshot recebido, exists=" + snap.exists());
+      if(snap.exists()){
+        const data = snap.data();
+        DB.players = data.players || [];
+        DB.stages  = data.stages  || [];
+        dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
+      } else {
+        dbg("16. Documento 2026 NAO existe! Criando...");
+        // Create the document with SEED data
+        setDoc(doc(db,"seasons",ACTIVE_SEASON), {
+          players: SEED.players,
+          stages:  SEED.stages,
+          updatedAt: serverTimestamp()
+        }).then(()=>{ dbg("17. SEED criado no Firestore!"); })
+          .catch(e=>{ dbg("ERRO ao criar seed: " + e.message); });
+        DB.players = SEED.players;
+        DB.stages  = SEED.stages;
+      }
+      CURRENT_PLAYER = DB.players.find(p=>p.uid===CURRENT_USER_UID) || null;
+      dbg("18. Renderizando app...");
+      render();
+    },
+    (err)=>{
+      dbg("ERRO Firestore: " + err.code + " - " + err.message);
+      // Fallback: render with SEED data
+      DB.players = SEED.players;
+      DB.stages  = SEED.stages;
+      render();
     }
-    CURRENT_PLAYER = DB.players.find(p=>p.uid===CURRENT_USER_UID) || null;
-    // Listen to rules
-    render();
-  }, (err)=>{ console.error("Listener error:", err); });
+  );
   _unsubListeners.push(unsub);
 
-  // Listen to rules config
-  const unsubRules = onSnapshot(doc(db,"config","rules"), (snap)=>{
-    if(snap.exists()){
-      DEFAULT_RULES = snap.data();
-    }
-  });
-  _unsubListeners.push(unsubRules);
+  // Listen to rules config (non-blocking)
+  try {
+    const unsubRules = onSnapshot(doc(db,"config","rules"), (snap)=>{
+      if(snap.exists()) DEFAULT_RULES = snap.data();
+    }, (e)=>{ console.warn("Rules listener:", e.message); });
+    _unsubListeners.push(unsubRules);
+  } catch(e) { console.warn("Rules setup:", e.message); }
 }
 
 </script>
