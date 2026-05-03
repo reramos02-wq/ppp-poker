@@ -1470,7 +1470,14 @@ function showProfile(uid, filter){
     </div>
   </div>`;
 
-  // bindings handled above
+  // Bind close button and overlay click
+  const _closeBtn = document.getElementById("close-profile");
+  if(_closeBtn) _closeBtn.addEventListener("click", closeProfile);
+  _profileOv.addEventListener("click", function(e){ if(e.target===_profileOv) closeProfile(); });
+  // Bind filter tabs
+  document.querySelectorAll("[data-pfilter]").forEach(function(btn){
+    btn.addEventListener("click", function(){ showProfile(btn.dataset.uid, btn.dataset.pfilter); });
+  });
 }
 function closeProfile(){ PROFILE_FILTER="geral"; const el=document.getElementById("result-modal"); if(el)el.innerHTML=""; }
 
