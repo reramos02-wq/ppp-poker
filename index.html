@@ -422,6 +422,7 @@ async function save(){
     await setDoc(doc(db,"seasons",ACTIVE_SEASON), {
       players: DB.players,
       stages:  DB.stages,
+      admins:  DB.admins || [],
       updatedAt: serverTimestamp()
     });
   } catch(e){
@@ -927,7 +928,12 @@ function renderHeader(){
         <div class="hsb">${IS_ADMIN?"Admin · "+(CURRENT_PLAYER?.nickname||""):"Olá, "+(CURRENT_PLAYER?.nickname||"")}</div>
       </div>
     </div>
-    <span class="hbdg">⚙ ADMIN</span>
+    <button id="btn-profile" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 0">
+      ${IS_ADMIN?'<span class="hbdg" style="font-size:10px">⚙</span>':""}
+      <div style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:2px solid var(--yellow);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:var(--yellow);flex-shrink:0;line-height:1">
+        ${ini(CURRENT_PLAYER?.name||CURRENT_USER?.displayName||"?")}
+      </div>
+    </button>
   </div>`;
 }
 
@@ -1353,46 +1359,94 @@ function renderPlayers(){
   </div>`;
 }
 
-function showProfile(uid){
+let PROFILE_FILTER = "geral"; // nlholdem | knockout | geral
+
+function showProfile(uid, filter){
   const p = getP(uid); if(!p)return;
   const s = calcStats(uid);
-  const hist = DB.stages.filter(st=>st.status==="finished"&&(st.results||[]).find(r=>r.playerId===uid));
+  PROFILE_FILTER = filter || PROFILE_FILTER || "geral";
+
+  // Filter history
+  const allHist = DB.stages
+    .filter(st=>st.status==="finished" && (st.results||[]).find(r=>r.playerId===uid))
+    .sort((a,b)=>b.date.localeCompare(a.date)); // most recent first
+
+  const hist = PROFILE_FILTER==="geral" ? allHist
+    : allHist.filter(st=>st.type===PROFILE_FILTER);
+
+  // HOF score check
+  const hofScore = s.wNL + s.wKO + s.wFT*12;
+  const disputedFT = DB.stages.some(st=>st.isFinal&&(st.results||[]).find(r=>r.playerId===uid));
+  const wonFT = s.wFT > 0;
+
   document.getElementById("profile-slot").innerHTML = `
   <div class="ov" id="pov">
-    <div class="modal">
+    <div class="modal" style="padding-bottom:24px">
       <div class="mtitle">Perfil</div>
+
+      <!-- Avatar + nome -->
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:3px">
         ${AV(uid,"xl")}
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff">${p.name}</div>
           <div style="color:var(--muted);font-size:14px">"${p.nickname}"</div>
-          ${s.w>0?`<div style="margin-top:6px">${"🏆".repeat(s.w)}</div>`:""}
         </div>
       </div>
-      <div class="psg">
+
+      <!-- Stats grid 2 colunas -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
         <div class="ps"><div class="psv">${s.p}</div><div class="psl">Participações</div></div>
-        <div class="ps"><div class="psv">${s.ft}</div><div class="psl">Final Tables</div></div>
-        <div class="ps"><div class="psv">${s.wNL}</div><div class="psl">🃏 NLH</div></div>
-        <div class="ps"><div class="psv">${s.wKO}</div><div class="psl">🥊 KO</div></div>
-        <div class="ps"><div class="psv">${s.wFT}</div><div class="psl">🏆 FT</div></div>
+        <div class="ps"><div class="psv">${s.ft}</div><div class="psl">FT Etapa</div></div>
+        <div class="ps"><div class="psv">${s.wNL+s.wKO}</div><div class="psl">Campeão Etapa</div></div>
+        ${disputedFT
+          ?`<div class="ps"><div class="psv">${allHist.filter(st=>st.isFinal).length}</div><div class="psl">FT Ranking</div></div>`
+          :`<div class="ps" style="opacity:.35"><div class="psv">—</div><div class="psl">FT Ranking</div></div>`}
+        ${wonFT
+          ?`<div class="ps" style="border-color:var(--yellow)"><div class="psv">🏆 ${s.wFT}</div><div class="psl">Campeão Ranking</div></div>`
+          :`<div class="ps" style="opacity:.35"><div class="psv">—</div><div class="psl">Campeão Ranking</div></div>`}
         <div class="ps"><div class="psv">${s.ko}</div><div class="psl">Knockouts</div></div>
       </div>
-      ${hist.length?`<div class="sep"></div><div class="lbl" style="margin-bottom:10px">Histórico</div>
-      ${hist.map(st=>{const r=(st.results||[]).find(r=>r.playerId===uid);return `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1c1c1c;font-size:13px">
-          <div><div style="color:#fff;font-weight:600">${st.name}</div><div style="color:var(--muted);font-size:11px">${fmtD(st.date)}</div></div>
+
+      <!-- Filter tabs -->
+      <div class="tabs" style="margin-bottom:12px">
+        <button class="tb${PROFILE_FILTER==="geral"?" on":""}" data-pfilter="geral" data-uid="${uid}">Geral</button>
+        <button class="tb${PROFILE_FILTER==="nlholdem"?" on":""}" data-pfilter="nlholdem" data-uid="${uid}">🃏 NLH</button>
+        <button class="tb${PROFILE_FILTER==="knockout"?" on":""}" data-pfilter="knockout" data-uid="${uid}">🥊 KO</button>
+      </div>
+
+      <!-- History list -->
+      ${hist.length?`
+      <div class="lbl" style="margin-bottom:8px">Histórico ${PROFILE_FILTER==="geral"?"":PROFILE_FILTER==="nlholdem"?"NL Hold'em":"Knockout"} (${hist.length})</div>
+      ${hist.map(st=>{
+        const r=(st.results||[]).find(r=>r.playerId===uid);
+        const badge = st.isFinal?"🏆":st.type==="nlholdem"?"🃏":"🥊";
+        const posColor = r.position===1?"#FFD700":r.position<=3?"var(--yellow)":"var(--text)";
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1c1c1c">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:16px">${badge}</span>
+            <div>
+              <div style="color:#fff;font-weight:600;font-size:14px">${st.name}</div>
+              <div style="color:var(--muted);font-size:11px">${fmtD(st.date)}</div>
+            </div>
+          </div>
           <div style="text-align:right">
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:${r.position<=3?"#FFD700":"var(--yellow)"}">${r.position}º</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:${posColor}">${r.position}º</div>
             <div style="font-size:11px;color:var(--muted)">${r.points} pts</div>
           </div>
-        </div>`;}).join("")}`:""}
+        </div>`;}).join("")}
+      `:`<div style="color:var(--muted);font-size:13px;padding:12px 0">Nenhuma etapa ${PROFILE_FILTER==="geral"?"":PROFILE_FILTER==="nlholdem"?"NL Hold'em":"Knockout"} encontrada.</div>`}
+
       <div class="mt16"><button class="btn bo fw" id="close-profile">Fechar</button></div>
     </div>
   </div>`;
+
   document.getElementById("pov").addEventListener("click",e=>{if(e.target===document.getElementById("pov"))closeProfile();});
   document.getElementById("close-profile").addEventListener("click",closeProfile);
+  document.querySelectorAll("[data-pfilter]").forEach(btn=>{
+    btn.addEventListener("click",()=>showProfile(btn.dataset.uid, btn.dataset.pfilter));
+  });
 }
-function closeProfile(){ const el=document.getElementById("profile-slot"); if(el)el.innerHTML=""; }
+function closeProfile(){ PROFILE_FILTER="geral"; const el=document.getElementById("profile-slot"); if(el)el.innerHTML=""; }
 
 // ── RULES ─────────────────────────────────────────────────────────────────────
 function openEditRulesModal(){
@@ -1562,11 +1616,32 @@ function renderAdminResults(){
 }
 
 function renderAdminPlayers(){
-  return `<div class="rl">${DB.players.map(p=>`<div class="urow">
-    ${AV(p.uid)}
-    <div style="flex:1"><div style="font-weight:600;color:#fff;font-size:14px">${p.name}</div><div style="font-size:11px;color:var(--muted)">"${p.nickname}"</div></div>
-    <span style="font-size:12px;color:var(--muted)">${calcStats(p.uid).p} etapas</span>
-  </div>`).join("")}</div>`;
+  const admins = DB.admins || [ADMIN_EMAILS[0]];
+  return `
+  <button class="btn by fw mb10" id="btn-add-player">+ Adicionar Jogador</button>
+  <div class="rl">${DB.players.map(p=>{
+    const st = calcStats(p.uid);
+    const isAdm = admins.includes(p.email) || ADMIN_EMAILS.includes(p.email);
+    const isSelf = p.uid === CURRENT_USER_UID;
+    return `<div class="urow" style="flex-wrap:wrap;gap:6px;padding:12px 13px">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+        ${AV(p.uid)}
+        <div style="min-width:0">
+          <div style="font-weight:600;color:#fff;font-size:14px;display:flex;align-items:center;gap:6px">
+            ${p.name}
+            ${isAdm?`<span style="background:var(--red);color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;padding:1px 6px;letter-spacing:1px">ADMIN</span>`:""} 
+          </div>
+          <div style="font-size:11px;color:var(--muted)">"${p.nickname}" · ${st.p} etapas</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${!isSelf?`<button class="btn sm ${isAdm?"bd":"bo"}" data-toggle-admin="${p.uid}" title="${isAdm?"Remover admin":"Tornar admin"}">
+          ${isAdm?"👑 Remover Admin":"👑 Tornar Admin"}
+        </button>`:""}
+        ${!isSelf?`<button class="btn bd sm" data-del-player="${p.uid}" title="Excluir jogador">🗑</button>`:""}
+      </div>
+    </div>`;
+  }).join("")}</div>`;
 }
 
 // ── STAGE MODAL ───────────────────────────────────────────────────────────────
@@ -1892,7 +1967,44 @@ function bindEvents(){
   document.querySelectorAll("[data-share-ins]").forEach(btn=>{
     btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.shareIns;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;openShareModal(stage);});
   });
-  // New player (removed from UI)
+  // Add player button (admin players tab)
+  document.getElementById("btn-add-player")?.addEventListener("click", ()=>openPlayerModal());
+
+  // Toggle admin
+  document.querySelectorAll("[data-toggle-admin]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const uid = btn.dataset.toggleAdmin;
+      const player = DB.players.find(p=>p.uid===uid);
+      if(!player) return;
+      const email = player.email||"";
+      if(!email){ showToast("Jogador sem email cadastrado — peça para ele fazer login primeiro.","red"); return; }
+      DB.admins = DB.admins || [...ADMIN_EMAILS];
+      const isAdm = DB.admins.includes(email);
+      if(isAdm){
+        DB.admins = DB.admins.filter(e=>e!==email);
+        showToast(player.nickname+" removido como admin.","green");
+      } else {
+        DB.admins.push(email);
+        showToast(player.nickname+" agora é admin!","green");
+      }
+      await save();
+      render();
+    });
+  });
+
+  // Delete player
+  document.querySelectorAll("[data-del-player]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const uid = btn.dataset.delPlayer;
+      const player = DB.players.find(p=>p.uid===uid);
+      if(!player) return;
+      if(!confirm("Excluir "+player.name+"? Os resultados dele nas etapas serão mantidos.")) return;
+      DB.players = DB.players.filter(p=>p.uid!==uid);
+      await save();
+      showToast(player.name+" removido.","green");
+      render();
+    });
+  });
 }
 
 // ── START ─────────────────────────────────────────────────────────────────────
@@ -1919,7 +2031,7 @@ onAuthStateChanged(auth, async (user) => {
   if(user){
     CURRENT_USER     = user;
     CURRENT_USER_UID = user.uid;
-    IS_ADMIN         = ADMIN_EMAILS.includes(user.email);
+    IS_ADMIN         = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email);
     dbg("9. Admin: " + IS_ADMIN);
     try {
       dbg("12. Iniciando listeners...");
@@ -1985,6 +2097,7 @@ function startListeners(user){
         const data = snap.data();
         DB.players = data.players || [];
         DB.stages  = data.stages  || [];
+        DB.admins  = data.admins  || [];
         dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
         // If document exists but is empty, seed it
         // Re-seed if UIDs don't match (first run after UID update)
@@ -2014,6 +2127,8 @@ function startListeners(user){
       // Link user to player after data is loaded
       if(user && DB.players.length > 0){
         ensurePlayerProfile(user).then(()=>{
+          // Re-check admin status with loaded DB.admins
+          IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email);
           dbg("18. Renderizando app...");
           render();
         });
