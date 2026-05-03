@@ -1617,26 +1617,49 @@ function renderAdminResults(){
 
 function renderAdminPlayers(){
   const admins = DB.admins || [ADMIN_EMAILS[0]];
+  const linked   = DB.players.filter(p=>p.email&&p.email.trim()!=="").length;
+  const unlinked = DB.players.filter(p=>!p.email||p.email.trim()==="").length;
+
   return `
-  <button class="btn by fw mb10" id="btn-add-player">+ Adicionar Jogador</button>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+    <button class="btn by" id="btn-add-player" style="flex:1">+ Adicionar Jogador</button>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <span style="background:rgba(46,204,113,.15);border:1px solid rgba(46,204,113,.3);color:var(--green);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px;letter-spacing:1px">
+        ✓ ${linked} vinculados
+      </span>
+      <span style="background:rgba(245,168,0,.1);border:1px solid rgba(245,168,0,.25);color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px;letter-spacing:1px">
+        ⚠ ${unlinked} sem login
+      </span>
+    </div>
+  </div>
   <div class="rl">${DB.players.map(p=>{
     const st = calcStats(p.uid);
-    const isAdm = ADMIN_EMAILS.includes(p.email) || admins.includes(p.email) || admins.includes(p.uid);
-    const isSelf = p.uid === CURRENT_USER_UID;
-    return `<div class="urow" style="flex-wrap:wrap;gap:6px;padding:12px 13px">
+    const isAdm    = ADMIN_EMAILS.includes(p.email) || admins.includes(p.email) || admins.includes(p.uid);
+    const isSelf   = p.uid === CURRENT_USER_UID;
+    const hasEmail = p.email && p.email.trim() !== "";
+    const isRealUid = p.uid && !p.uid.startsWith("p_"); // Firebase UIDs don't start with p_
+    const isLinked = hasEmail || isRealUid;
+
+    return `<div class="urow" style="flex-wrap:wrap;gap:6px;padding:12px 13px;${!isLinked?"border-left:3px solid rgba(245,168,0,.4)":""}">
       <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
         ${AV(p.uid)}
         <div style="min-width:0">
-          <div style="font-weight:600;color:#fff;font-size:14px;display:flex;align-items:center;gap:6px">
+          <div style="font-weight:600;color:#fff;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             ${p.name}
-            ${isAdm?`<span style="background:var(--red);color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;padding:1px 6px;letter-spacing:1px">ADMIN</span>`:""} 
+            ${isAdm?`<span style="background:var(--red);color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;padding:1px 6px;letter-spacing:1px">ADMIN</span>`:""}
+            ${isLinked
+              ?`<span style="color:var(--green);font-size:10px" title="${p.email||"UID vinculado"}">✓</span>`
+              :`<span style="color:var(--yellow);font-size:10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.5px" title="Sem login">⚠ sem login</span>`}
           </div>
-          <div style="font-size:11px;color:var(--muted)">"${p.nickname}" · ${st.p} etapas</div>
+          <div style="font-size:11px;color:var(--muted)">
+            "${p.nickname}" · ${st.p} etapa${st.p!==1?"s":""}
+            ${hasEmail?`<span style="color:var(--muted);margin-left:4px">· ${p.email}</span>`:""}
+          </div>
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         ${!isSelf?`<button class="btn sm ${isAdm?"bd":"bo"}" data-toggle-admin="${p.uid}" title="${isAdm?"Remover admin":"Tornar admin"}">
-          ${isAdm?"👑 Remover Admin":"👑 Tornar Admin"}
+          ${isAdm?"👑 Remover":"👑 Admin"}
         </button>`:""}
         ${!isSelf?`<button class="btn bd sm" data-del-player="${p.uid}" title="Excluir jogador">🗑</button>`:""}
       </div>
