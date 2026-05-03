@@ -431,6 +431,31 @@ async function save(){
   }
 }
 
+// Non-admin save — only updates stages array (inscriptions)
+async function saveStages(){
+  try {
+    await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
+      stages: DB.stages,
+      updatedAt: serverTimestamp()
+    });
+  } catch(e){
+    console.error("saveStages error:", e);
+    showToast("Erro ao salvar inscrição.","red");
+  }
+}
+
+// Non-admin save — only updates players array (new user profile)
+async function savePlayers(){
+  try {
+    await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
+      players: DB.players,
+      updatedAt: serverTimestamp()
+    });
+  } catch(e){
+    console.error("savePlayers error:", e);
+  }
+}
+
 function getPlayer(uid){
   return DB.players.find(p=>p.uid===uid);
 }
@@ -1985,7 +2010,17 @@ function bindEvents(){
   });
   document.addEventListener("click",()=>{document.querySelectorAll("[id^='add-ins-dropdown-']").forEach(el=>el.style.display="none");});
   document.querySelectorAll("[data-inscribe]").forEach(btn=>{
-    btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.inscribe;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;const ins=stage.inscriptions||[];const alreadyIn=ins.includes(CURRENT_USER_UID);stage.inscriptions=alreadyIn?ins.filter(i=>i!==CURRENT_USER_UID):[...ins,CURRENT_USER_UID];save();render();});
+    btn.addEventListener("click",async e=>{
+      e.stopPropagation();
+      const sid=btn.dataset.inscribe;
+      const stage=DB.stages.find(s=>s.id===sid);
+      if(!stage)return;
+      const ins=stage.inscriptions||[];
+      const alreadyIn=ins.includes(CURRENT_USER_UID);
+      stage.inscriptions=alreadyIn?ins.filter(i=>i!==CURRENT_USER_UID):[...ins,CURRENT_USER_UID];
+      await saveStages(); // non-admin friendly
+      render();
+    });
   });
   document.querySelectorAll("[data-share-ins]").forEach(btn=>{
     btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.shareIns;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;openShareModal(stage);});
@@ -2119,7 +2154,11 @@ async function ensurePlayerProfile(user){
     needsSave = true;
   }
 
-  if(needsSave && IS_ADMIN) await save(); // only admin can write
+  if(needsSave){
+    try {
+      await savePlayers(); // updateDoc — works for all authenticated users
+    } catch(e){ console.warn("Profile save:", e.message); }
+  }
   CURRENT_PLAYER = player;
 }
 
