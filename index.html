@@ -2278,6 +2278,12 @@ function startListeners(user){
   } catch(e) { console.warn("Rules setup:", e.message); }
 }
 
+// ── EXPOSE FUNCTIONS TO GLOBAL SCOPE (required for inline onclick with type=module) ──
+window.openRouteModal    = openRouteModal;
+window.openEditRulesModal = openEditRulesModal;
+window.showProfile       = showProfile;
+window.closeProfile      = closeProfile;
+
 </script>
 </body>
 </html>
