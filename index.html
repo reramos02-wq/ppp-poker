@@ -303,7 +303,13 @@ select.inp{appearance:none;}
 
 /* LOGIN SCREEN */
 .login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:var(--bg-dark);}
-.login-box{width:100%;max-width:400px;}
+.login-box{width:100%;max-width:420px;}
+@media(min-width:768px){
+  .login-wrap{background:var(--bg-dark);background-image:radial-gradient(ellipse at 50% 40%, rgba(245,168,0,.06) 0%, transparent 70%);}
+  .login-box{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:40px;max-width:440px;box-shadow:0 24px 60px rgba(0,0,0,.5);}
+  .login-box .login-logo{margin-bottom:28px;}
+  .login-box .login-title{font-size:32px;}
+}
 .login-logo{text-align:center;margin-bottom:32px;}
 .login-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;color:#fff;letter-spacing:1px;margin-bottom:4px;text-transform:uppercase;}
 .login-sub{font-size:13px;color:var(--muted);margin-bottom:24px;text-align:center;}
@@ -1048,62 +1054,82 @@ function renderHomeDesktop(){
     </div>
   </div>`;
 
-  const col1 = `
-  <div class="home-col">
-    ${next?`<div class="card cy mb10" style="cursor:pointer" data-goto-expand="${next.id}">
-      <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:4px">📅 Próxima Etapa</div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff">${next.name}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.time?" às "+next.time:""}${next.location?" · "+next.location:""}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:3px">${next.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}</div>
-      <div style="margin-top:12px">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Inscritos (${(next.inscriptions||[]).length})</div>
-        <div class="chips">${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:"?"};return `<div class="chip"><div class="av" style="width:20px;height:20px;font-size:8px">${ini(pl.name)}</div>${pl.nickname||uid}</div>`;}).join("")}${(next.inscriptions||[]).length===0?'<span style="color:var(--muted);font-size:13px">Nenhum inscrito.</span>':""}</div>
+  // Helper for section header
+  const secHdr = (icon, title, tab) =>
+    `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      ${icon} ${title}<span data-goto="${tab}" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span>
+    </div>`;
+
+  const rrRow = (r,i,sub) =>
+    `<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
+      <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
+      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${sub}</div></div>
+      <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
+    </div>`;
+
+  // Next stage — full width card
+  const heroCard = next ? `
+  <div class="card cy mb16" style="cursor:pointer;border-left:4px solid var(--yellow)" data-goto-expand="${next.id}">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px">
+      <div style="flex:1">
+        <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:6px">📅 Próxima Etapa</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:#fff;line-height:1">${next.name}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px">${fmtD(next.date)}${next.time?" às <b style='color:#fff'>"+next.time+"</b>":""} · ${next.location||"A confirmar"}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px">${next.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}</div>
       </div>
-      <div style="margin-top:8px;text-align:right;font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</div>
-    </div>`:"<div class='empty'>Nenhuma etapa próxima.</div>"}
-    ${geralTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
-    <div class="rl mb10">${geralTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
-      <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
-      <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
-    </div>`).join("")}</div>`:""}
-    ${nlTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;margin-top:20px;display:flex;justify-content:space-between;align-items:center">🃏 Ranking NL Hold'em<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
-    <div class="rl">${nlTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
-      <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
-      <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
-    </div>`).join("")}</div>`:""}
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:36px;color:var(--yellow);line-height:1">${(next.inscriptions||[]).length}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">inscritos</div>
+        <div style="margin-top:10px;font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px">Ver etapa →</div>
+      </div>
+    </div>
+    <div class="chips" style="margin-top:12px">
+      ${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:"?"};return `<div class="chip"><div class="av" style="width:20px;height:20px;font-size:8px">${ini(pl.name)}</div>${pl.nickname||uid}</div>`;}).join("")}
+      ${(next.inscriptions||[]).length===0?'<span style="color:var(--muted);font-size:13px">Nenhum inscrito ainda.</span>':""}
+    </div>
+  </div>` : "";
+
+  // Row 1: NLH + KO
+  const colNL = `<div class="home-col">
+    ${nlTop.length ? secHdr("🃏","Ranking NL Hold'em","ranking")+"<div class='rl'>"+nlTop.map((r,i)=>rrRow(r,i,r.stages+" etapa"+(r.stages!==1?"s":""))).join("")+"</div>" : ""}
   </div>`;
 
-  const col2 = `
-  <div class="home-col">
-    ${koTop.length?`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Ranking Knockout<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
-    <div class="rl mb10">${koTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
-      <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
-      <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
-    </div>`).join("")}</div>`:""}
-    ${(()=>{
-      const hof = calcHOF().slice(0,4);
-      if(!hof.length) return "";
-      const maxW = Math.max(...hof.map(h=>h.wins),0);
-      return `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;margin-top:20px">🌟 Hall of Fame</div>
-      ${hof.map((h,i)=>`<div class="hfc" ${h.wins===maxW&&maxW>0?'style="border-color:rgba(255,215,0,.3);border-top:2px solid #FFD700"':''}>
+  const colKO = `<div class="home-col">
+    ${koTop.length ? secHdr("🥊","Ranking Knockout","ranking")+"<div class='rl'>"+koTop.map((r,i)=>rrRow(r,i,"🥊 "+r.ko+" KO")).join("")+"</div>" : ""}
+  </div>`;
+
+  // Row 2: Geral + HOF
+  const colGeral = `<div class="home-col">
+    ${geralTop.length ? secHdr("🏅","Ranking Geral","ranking")+"<div class='rl'>"+geralTop.map((r,i)=>rrRow(r,i,r.stages+" etapa"+(r.stages!==1?"s":""))).join("")+"</div>" : ""}
+  </div>`;
+
+  const colHOF = (()=>{
+    const hof = calcHOF().slice(0,5);
+    if(!hof.length) return "<div class='home-col'></div>";
+    const maxScore = hof.length>0?hof[0].hofScore:0;
+    return `<div class="home-col">
+      ${secHdr("🌟","Hall of Fame","hof")}
+      ${hof.map((h,i)=>`<div class="hfc" data-profile="${h.pl.uid}" style="cursor:pointer${h.hofScore===maxScore&&maxScore>0?";border-color:rgba(255,215,0,.3);border-top:2px solid #FFD700":""}">
         <div class="hfr ${pcls(i)}">${i+1}</div>${AV(h.pl.uid,"lg")}
         <div style="flex:1">
           <div class="hfn">${h.pl.nickname}</div>
-          <div class="hfb">${h.wins>0?`<span class="hfbdg hby">🏆 ${h.wins}</span>`:""}<span class="hfbdg hbg">▶ ${h.p}</span></div>
+          <div class="hfb">
+            ${h.wNL>0?`<span class="hfbdg hby">🃏 ${h.wNL}</span>`:""}
+            ${h.wKO>0?`<span class="hfbdg hby">🥊 ${h.wKO}</span>`:""}
+            ${h.wFT>0?`<span class="hfbdg" style="background:rgba(52,152,219,.15);color:var(--blue)">🏆 FT</span>`:""}
+            <span class="hfbdg hbg">▶ ${h.p}</span>
+          </div>
         </div>
-      </div>`).join("")}`;
-    })()}
-  </div>`;
+        <div style="text-align:right"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow)">${h.hofScore}</div><div style="font-size:9px;color:var(--muted)">pts HOF</div></div>
+      </div>`).join("")}
+    </div>`;
+  })();
 
-  return `<div style="">
+  return `<div>
+    ${heroCard}
     ${heroHtml}
-    <div class="home-grid">${col1}${col2}</div>
+    <div class="home-grid" style="margin-bottom:16px">${colNL}${colKO}</div>
+    <div class="home-grid">${colGeral}${colHOF}</div>
   </div>`;
 }
 
