@@ -349,7 +349,7 @@ const firebaseConfig = {
   appId: "1:768897236923:web:7dfa0b74354b47ca468e9e"
 };
 
-function dbg(msg){ console.log("[PPP]", msg); }
+function dbg(msg){ /* debug disabled */ }
 let fbApp, auth, db, googleProvider;
 try {
   dbg("1. Iniciando Firebase...");
@@ -1542,7 +1542,7 @@ function openEditRulesModal(){
   box.querySelector("#er-save").addEventListener("click",()=>{
     DEFAULT_RULES.nlholdem={buyin:document.getElementById("er-nl-bi").value.trim(),rebuy:document.getElementById("er-nl-rb").value.trim(),addon:document.getElementById("er-nl-ao").value.trim(),timechip:document.getElementById("er-nl-tc").value.trim()};
     DEFAULT_RULES.knockout={buyin:document.getElementById("er-ko-bi").value.trim(),rebuy:document.getElementById("er-ko-rb").value.trim(),addon:document.getElementById("er-ko-ao").value.trim(),timechip:document.getElementById("er-ko-tc").value.trim()};
-    saveRules();
+    saveRules(); // fire and forget - rules are non-critical
     wrap.innerHTML="";
     render();
   });
@@ -1957,6 +1957,7 @@ function drawResultModal(){
   var pubBtn=document.createElement("button");pubBtn.className="btn fw";pubBtn.style.cssText="background:var(--green);color:#000;font-size:15px;font-weight:900";
   pubBtn.textContent=hasPublished?"\u2713 Atualizar Publica\u00e7\u00e3o":"\uD83C\uDFC1 Publicar Resultado";
   pubBtn.addEventListener("click",function(){
+    clearTimeout(autoSaveTimer); // cancel pending draft save before publishing
     var filled=resultRows.filter(function(r){return r.pos&&parseInt(r.pos)>0;});
     if(!filled.length){showToast("Selecione pelo menos uma posição antes de publicar.","red");return;}
     var results=filled.sort(function(a,b){return parseInt(a.pos)-parseInt(b.pos);}).map(function(r){return {playerId:r.uid,position:parseInt(r.pos),points:getPts(parseInt(r.pos)),knockouts:parseInt(r.ko)||0};});
@@ -2051,9 +2052,23 @@ function bindEvents(){
       if(!stage)return;
       const ins=stage.inscriptions||[];
       const alreadyIn=ins.includes(CURRENT_USER_UID);
-      stage.inscriptions=alreadyIn?ins.filter(i=>i!==CURRENT_USER_UID):[...ins,CURRENT_USER_UID];
-      await saveStages(); // non-admin friendly
-      render();
+      try {
+        // Use arrayUnion/arrayRemove for atomic inscription (no race condition)
+        await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
+          stages: DB.stages.map(s=>{
+            if(s.id!==sid) return s;
+            return {...s, inscriptions: alreadyIn
+              ? ins.filter(i=>i!==CURRENT_USER_UID)
+              : [...ins, CURRENT_USER_UID]
+            };
+          }),
+          updatedAt: serverTimestamp()
+        });
+        // Local update will come from onSnapshot listener automatically
+      } catch(err) {
+        console.error("Inscription error:", err);
+        showToast("Erro ao salvar inscrição. Tente novamente.","red");
+      }
     });
   });
   document.querySelectorAll("[data-share-ins]").forEach(btn=>{
@@ -2184,8 +2199,13 @@ async function ensurePlayerProfile(user){
       email: user.email||"",
       season: ACTIVE_SEASON
     };
-    DB.players.push(player);
-    needsSave = true;
+    // Double-check before push to avoid duplicates from concurrent calls
+    if(!DB.players.find(p=>p.uid===user.uid)){
+      DB.players.push(player);
+      needsSave = true;
+    } else {
+      player = DB.players.find(p=>p.uid===user.uid);
+    }
   }
 
   if(needsSave){
@@ -2211,8 +2231,21 @@ function startListeners(user){
       if(snap.exists()){
         const data = snap.data();
         DB.players = data.players || [];
-        DB.stages  = data.stages  || [];
         DB.admins  = data.admins  || [];
+        // If admin is editing a result, preserve local draft to avoid overwrite
+        const editingStageId = resultStage ? resultStage.id : null;
+        if(editingStageId){
+          DB.stages = (data.stages||[]).map(s=>{
+            if(s.id===editingStageId){
+              // Keep local draft data, update rest from server
+              const local = DB.stages.find(x=>x.id===editingStageId);
+              return local ? {...s, draft: local.draft} : s;
+            }
+            return s;
+          });
+        } else {
+          DB.stages = data.stages || [];
+        }
         dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
         // If document exists but is empty, seed it
         // Re-seed if UIDs don't match (first run after UID update)
