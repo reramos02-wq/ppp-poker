@@ -1360,7 +1360,6 @@ function renderHOF(){
     🥊 Vitória em Knockout = <b style="color:var(--yellow)">1 ponto</b><br/>
     🏆 Vitória em Mesa Final = <b style="color:var(--yellow)">12 pontos</b>
   </div>
-  <div id="profile-slot"></div>
   </div>`;
 }
 
@@ -1404,9 +1403,15 @@ function showProfile(uid, filter){
   const disputedFT = DB.stages.some(st=>st.isFinal&&(st.results||[]).find(r=>r.playerId===uid));
   const wonFT = s.wFT > 0;
 
-  document.getElementById("profile-slot").innerHTML = `
-  <div class="ov" id="pov">
-    <div class="modal" style="padding-bottom:24px">
+  // Use result-modal (always present in body) instead of profile-slot
+  const _profileWrap = document.getElementById("result-modal");
+  _profileWrap.innerHTML = "";
+  const _profileOv = document.createElement("div");
+  _profileOv.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  _profileWrap.appendChild(_profileOv);
+  _profileOv.innerHTML = `
+  <div id="pov" style="width:100%;max-width:480px;max-height:92vh;overflow-y:auto;box-sizing:border-box;">
+  <div class="modal" style="padding-bottom:24px;width:100%;box-sizing:border-box;">
       <div class="mtitle">Perfil</div>
 
       <!-- Avatar + nome -->
