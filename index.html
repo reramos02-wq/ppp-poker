@@ -1470,13 +1470,9 @@ function showProfile(uid, filter){
     </div>
   </div>`;
 
-  document.getElementById("pov").addEventListener("click",e=>{if(e.target===document.getElementById("pov"))closeProfile();});
-  document.getElementById("close-profile").addEventListener("click",closeProfile);
-  document.querySelectorAll("[data-pfilter]").forEach(btn=>{
-    btn.addEventListener("click",()=>showProfile(btn.dataset.uid, btn.dataset.pfilter));
-  });
+  // bindings handled above
 }
-function closeProfile(){ PROFILE_FILTER="geral"; const el=document.getElementById("profile-slot"); if(el)el.innerHTML=""; }
+function closeProfile(){ PROFILE_FILTER="geral"; const el=document.getElementById("result-modal"); if(el)el.innerHTML=""; }
 
 // ── RULES ─────────────────────────────────────────────────────────────────────
 function openEditRulesModal(){
