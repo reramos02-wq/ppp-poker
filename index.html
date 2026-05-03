@@ -1038,14 +1038,14 @@ function renderHomeDesktop(){
     </div>`:"<div class='empty'>Nenhuma etapa próxima.</div>"}
     ${geralTop.length?`
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
-    <div class="rl mb10">${geralTop.map((r,i)=>`<div class="rr">
+    <div class="rl mb10">${geralTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
       <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
     </div>`).join("")}</div>`:""}
     ${nlTop.length?`
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;margin-top:20px;display:flex;justify-content:space-between;align-items:center">🃏 Ranking NL Hold'em<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
-    <div class="rl">${nlTop.map((r,i)=>`<div class="rr">
+    <div class="rl">${nlTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
       <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
@@ -1056,7 +1056,7 @@ function renderHomeDesktop(){
   <div class="home-col">
     ${koTop.length?`
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Ranking Knockout<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer">Ver tudo →</span></div>
-    <div class="rl mb10">${koTop.map((r,i)=>`<div class="rr">
+    <div class="rl mb10">${koTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
       <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
@@ -1111,7 +1111,7 @@ function renderHome(){
     </div>`:""}
     ${geralTop.length?`<div class="mb10">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Líderes Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
-      <div class="rl">${geralTop.map((r,i)=>`<div class="rr">
+      <div class="rl">${geralTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
@@ -1119,7 +1119,7 @@ function renderHome(){
     </div>`:""}
     ${nlTop.length?`<div class="mb10">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🃏 Líderes NL Hold'em<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
-      <div class="rl">${nlTop.map((r,i)=>`<div class="rr">
+      <div class="rl">${nlTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}</div></div>
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
@@ -1127,7 +1127,7 @@ function renderHome(){
     </div>`:""}
     ${koTop.length?`<div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Líderes Knockout<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
-      <div class="rl">${koTop.map((r,i)=>`<div class="rr">
+      <div class="rl">${koTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
@@ -1149,7 +1149,7 @@ function renderRanking(){
     <button class="tb${RANK_TAB==="knockout"?" on":""}" data-rtab="knockout">🥊 Knockout</button>
   </div>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
-  <div class="rl">${list.map((r,i)=>`<div class="rr">
+  <div class="rl">${list.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
     <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
     <div class="ri">
       <div class="rn">${r.p.nickname}</div>
@@ -1621,7 +1621,7 @@ function renderAdminPlayers(){
   <button class="btn by fw mb10" id="btn-add-player">+ Adicionar Jogador</button>
   <div class="rl">${DB.players.map(p=>{
     const st = calcStats(p.uid);
-    const isAdm = admins.includes(p.email) || ADMIN_EMAILS.includes(p.email);
+    const isAdm = ADMIN_EMAILS.includes(p.email) || admins.includes(p.email) || admins.includes(p.uid);
     const isSelf = p.uid === CURRENT_USER_UID;
     return `<div class="urow" style="flex-wrap:wrap;gap:6px;padding:12px 13px">
       <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
@@ -1979,12 +1979,17 @@ function bindEvents(){
       const email = player.email||"";
       if(!email){ showToast("Jogador sem email cadastrado — peça para ele fazer login primeiro.","red"); return; }
       DB.admins = DB.admins || [...ADMIN_EMAILS];
-      const isAdm = DB.admins.includes(email);
+      // Support both uid and email in admins list
+      const isAdmByEmail = email && DB.admins.includes(email);
+      const isAdmByUid   = DB.admins.includes(uid);
+      const isAdm = isAdmByEmail || isAdmByUid;
       if(isAdm){
-        DB.admins = DB.admins.filter(e=>e!==email);
+        DB.admins = DB.admins.filter(e=>e!==email && e!==uid);
         showToast(player.nickname+" removido como admin.","green");
       } else {
-        DB.admins.push(email);
+        // Store UID (works even without email)
+        if(uid) DB.admins.push(uid);
+        if(email && !DB.admins.includes(email)) DB.admins.push(email);
         showToast(player.nickname+" agora é admin!","green");
       }
       await save();
@@ -2031,7 +2036,7 @@ onAuthStateChanged(auth, async (user) => {
   if(user){
     CURRENT_USER     = user;
     CURRENT_USER_UID = user.uid;
-    IS_ADMIN         = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email);
+    IS_ADMIN         = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
     dbg("9. Admin: " + IS_ADMIN);
     try {
       dbg("12. Iniciando listeners...");
@@ -2051,33 +2056,47 @@ onAuthStateChanged(auth, async (user) => {
 
 // ── ENSURE PLAYER PROFILE ─────────────────────────────────────────────────────
 async function ensurePlayerProfile(user){
-  // Try to find player by uid first, then by email
+  // Try to find player by uid first
   let player = DB.players.find(p=>p.uid===user.uid);
+  let needsSave = false;
+
   if(!player && user.email){
-    // Match by email — link this Firebase user to existing player
-    player = DB.players.find(p=>p.email===user.email || 
-      (p.name||"").toLowerCase().replace(/\s+/g,"") === (user.displayName||"").toLowerCase().replace(/\s+/g,"")
-    );
-    if(player && player.uid !== user.uid){
-      // Update the player uid to match Firebase Auth uid
-      player.uid = user.uid;
+    // Match by email
+    player = DB.players.find(p=>p.email===user.email);
+    if(!player && user.displayName){
+      // Match by name similarity
+      const normName = (user.displayName||"").toLowerCase().trim();
+      player = DB.players.find(p=>(p.name||"").toLowerCase().trim()===normName);
+    }
+    if(player){
+      // Link this Firebase uid to existing player
+      player.uid   = user.uid;
       player.email = user.email;
+      needsSave = true;
     }
   }
-  if(!player){
-    // Create new player for this user
-    const nick = user.displayName?.split(" ")[0] || user.email.split("@")[0];
-    const newPlayer = {
+
+  if(player){
+    // Always update email if missing
+    if(!player.email && user.email){
+      player.email = user.email;
+      needsSave = true;
+    }
+  } else {
+    // New user — create player profile
+    const nick = user.displayName?.split(" ")[0] || user.email?.split("@")[0] || "Jogador";
+    player = {
       uid: user.uid,
       name: user.displayName || nick,
       nickname: nick,
-      email: user.email,
+      email: user.email||"",
       season: ACTIVE_SEASON
     };
-    DB.players.push(newPlayer);
-    await save();
-    player = newPlayer;
+    DB.players.push(player);
+    needsSave = true;
   }
+
+  if(needsSave && IS_ADMIN) await save(); // only admin can write
   CURRENT_PLAYER = player;
 }
 
@@ -2128,7 +2147,7 @@ function startListeners(user){
       if(user && DB.players.length > 0){
         ensurePlayerProfile(user).then(()=>{
           // Re-check admin status with loaded DB.admins
-          IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email);
+          IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
           dbg("18. Renderizando app...");
           render();
         });
