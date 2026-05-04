@@ -486,31 +486,54 @@ function getP(uid){ return DB.players.find(p=>p.uid===uid); }
 
 // ── CALCULATIONS ──────────────────────────────────────────────────────────────
 function calcRank(type){
-  const fin = DB.stages.filter(s=>s.status==="finished"&&s.type===type&&!s.isFinal&&(s.season===ACTIVE_SEASON||!s.season));
+  const fin = DB.stages.filter(s=>
+    s.status==="finished" && s.type===type && !s.isFinal &&
+    (s.season===ACTIVE_SEASON || !s.season)
+  );
   const sc = {};
+  // Seed with all known players
   DB.players.forEach(p=>{ sc[p.uid]={p,total:0,stages:0,ko:0}; });
+  // Also seed from results (catches any UIDs not yet in players list)
   fin.forEach(s=>(s.results||[]).forEach(r=>{
-    if(!sc[r.playerId])return;
-    const pts = getPts(r.position); // recalculate from table, not stored value
-    sc[r.playerId].total += pts + (type==="knockout"?(r.knockouts||0)*10:0);
+    if(!sc[r.playerId]){
+      const p = getPlayer(r.playerId) || {uid:r.playerId, name:r.playerId, nickname:"?"};
+      sc[r.playerId] = {p, total:0, stages:0, ko:0};
+    }
+  }));
+  fin.forEach(s=>(s.results||[]).forEach(r=>{
+    if(!sc[r.playerId]) return;
+    const pts = getPts(r.position);
+    sc[r.playerId].total  += pts + (type==="knockout"?(r.knockouts||0)*10:0);
     sc[r.playerId].stages++;
-    sc[r.playerId].ko += r.knockouts||0;
+    sc[r.playerId].ko     += r.knockouts||0;
   }));
   return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>b.total-a.total||b.ko-a.ko);
 }
 
 function calcRankGeral(){
   const sc = {};
+  // Seed with all known players
   DB.players.forEach(p=>{ sc[p.uid]={p,total:0,stages:0,ko:0,nlPts:0,koPts:0}; });
-  DB.stages.filter(s=>s.status==="finished"&&!s.isFinal&&(s.season===ACTIVE_SEASON||!s.season)).forEach(s=>{
+  const finStages = DB.stages.filter(s=>
+    s.status==="finished" && !s.isFinal &&
+    (s.season===ACTIVE_SEASON || !s.season)
+  );
+  // Also seed from results (catches UIDs not in players list)
+  finStages.forEach(s=>(s.results||[]).forEach(r=>{
+    if(!sc[r.playerId]){
+      const p = getPlayer(r.playerId) || {uid:r.playerId, name:r.playerId, nickname:"?"};
+      sc[r.playerId] = {p, total:0, stages:0, ko:0, nlPts:0, koPts:0};
+    }
+  }));
+  finStages.forEach(s=>{
     (s.results||[]).forEach(r=>{
-      if(!sc[r.playerId])return;
+      if(!sc[r.playerId]) return;
       const pts = getPts(r.position) + (s.type==="knockout"?(r.knockouts||0)*10:0);
-      sc[r.playerId].total += pts;
+      sc[r.playerId].total  += pts;
       sc[r.playerId].stages++;
-      sc[r.playerId].ko += r.knockouts||0;
+      sc[r.playerId].ko     += r.knockouts||0;
       if(s.type==="nlholdem") sc[r.playerId].nlPts += pts;
-      else sc[r.playerId].koPts += pts;
+      else                    sc[r.playerId].koPts += pts;
     });
   });
   return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>b.total-a.total||b.ko-a.ko);
