@@ -405,7 +405,8 @@ let TAB           = "home";
 let EXPANDED      = null;
 let STAGE_DETAIL  = null;
 let MENU_OPEN     = false;
-let ADMIN_TAB     = "stages";
+let ADMIN_TAB          = "stages";
+let ADMIN_STAGE_DETAIL = null; // stage id expanded in admin
 let RULES_TAB     = "nlholdem";
 let RULES_VIEW    = "rules";
 let RANK_TAB      = "geral";
@@ -1679,45 +1680,134 @@ function renderAdmin(){
 }
 
 function renderAdminStages(){
-  return `<button class="btn by fw mb10" id="btn-new-stage">+ Nova Etapa</button>
-  ${DB.stages.length===0?'<div class="empty">Nenhuma etapa.</div>':''}
-  ${DB.stages.map(s=>`<div class="card" style="border-left:3px solid ${s.isFinal?"var(--blue)":"var(--border2)"}">
-    <div class="btw">
-      <div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.name}${s.isFinal?" 🏆":""}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">${s.date} · ${s.type==="nlholdem"?"NL Hold'em":"Knockout"}${s.location?" · "+s.location:""}</div>
-      </div>
-      <span class="badge ${s.status==="finished"?"bdone":"bnext"}">${s.status==="finished"?"OK":"Pendente"}</span>
-    </div>
-    ${s.status==="upcoming"?`<div style="margin-top:10px">
-      <div class="lbl" style="margin-bottom:6px">Inscritos (${(s.inscriptions||[]).length})</div>
-      <div class="chips">${(s.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:"?",nickname:"?"};return `<div class="chip" style="padding-right:6px">
-        <div class="av" style="width:18px;height:18px;font-size:8px">${ini(pl.name)}</div>
-        ${pl.nickname}
-        <button data-rm-ins="${s.id}|${uid}" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;margin-left:2px;padding:0">✕</button>
-      </div>`;}).join("")}${(s.inscriptions||[]).length===0?'<span style="color:var(--muted);font-size:12px">Nenhum inscrito.</span>':""}</div>
-      ${(()=>{
-        const notIn = DB.players.filter(p=>!(s.inscriptions||[]).includes(p.uid));
-        if(!notIn.length) return "";
-        return `<div style="position:relative;display:inline-block">
-          <button class="btn bo sm" data-add-ins-toggle="${s.id}" style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:14px">＋</span> Adicionar Jogador
-          </button>
-          <div id="add-ins-dropdown-${s.id}" style="display:none;position:absolute;top:100%;left:0;z-index:50;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;min-width:180px;margin-top:4px;box-shadow:0 4px 16px rgba(0,0,0,.5)">
-            ${notIn.map(p=>`<button data-add-ins="${s.id}|${p.uid}" style="display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--text);font-family:'Barlow',sans-serif;font-size:13px;text-align:left" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='none'">
-              <div class="av" style="width:24px;height:24px;font-size:9px;flex-shrink:0">${ini(p.name)}</div>
-              <div><div style="font-weight:600;color:#fff">${p.nickname}</div><div style="font-size:11px;color:var(--muted)">${p.name}</div></div>
-            </button>`).join("")}
+  // If a stage is expanded, show detail view
+  if(ADMIN_STAGE_DETAIL){
+    const s = DB.stages.find(x=>x.id===ADMIN_STAGE_DETAIL);
+    if(s) return renderAdminStageDetail(s);
+    ADMIN_STAGE_DETAIL = null;
+  }
+
+  // Stage list
+  const sorted = [...DB.stages].sort((a,b)=>a.date.localeCompare(b.date));
+  return `
+  <button class="btn by fw mb10" id="btn-new-stage">+ Nova Etapa</button>
+  ${sorted.length===0?'<div class="empty">Nenhuma etapa.</div>':''}
+  ${sorted.map(s=>`
+    <div class="card" style="cursor:pointer;border-left:3px solid ${s.isFinal?"var(--blue)":s.status==="finished"?"var(--green)":"var(--yellow)"}" data-admin-stage="${s.id}">
+      <div class="btw">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">
+            ${s.name}${s.isFinal?" 🏆":""}
           </div>
-        </div>`;
-      })()}
-    </div>`:""}
-    <div class="row g8 mt8">
-      <button class="btn bo sm" data-edit-stage="${s.id}">✏ Editar</button>
-      <button class="btn by sm" data-launch="${s.id}">${s.status==="finished"?"✏ Resultado":"▶ Lançar"}</button>
-      <button class="btn bd sm" data-del-stage="${s.id}">🗑</button>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">
+            ${fmtD(s.date)}${s.time?" às "+s.time:""} · ${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}${s.location?" · "+s.location:""}
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">
+            ${(s.inscriptions||[]).length} inscrito${(s.inscriptions||[]).length!==1?"s":""}
+            ${s.status==="finished"?" · "+(s.results||[]).length+" resultados":""}
+          </div>
+        </div>
+        <span class="badge ${s.status==="finished"?"bdone":"bnext"}" style="flex-shrink:0">
+          ${s.status==="finished"?"✓ OK":"Pendente"}
+        </span>
+      </div>
     </div>
-  </div>`).join("")}`;
+  `).join("")}`;
+}
+
+function renderAdminStageDetail(s){
+  const ins = s.inscriptions||[];
+  const notIn = DB.players
+    .filter(p=>!ins.includes(p.uid))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+
+  return `
+  <div>
+    <!-- Back button -->
+    <button id="btn-admin-stage-back" class="btn bo mb10" style="font-size:12px">‹ Voltar às etapas</button>
+
+    <!-- Stage header -->
+    <div class="card" style="border-left:3px solid ${s.isFinal?"var(--blue)":s.status==="finished"?"var(--green)":"var(--yellow)"};margin-bottom:12px">
+      <div class="btw">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff">
+            ${s.name}${s.isFinal?" 🏆":""}
+          </div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px">
+            📅 ${fmtD(s.date)}${s.time?" às <b style='color:#fff'>"+s.time+"</b>":""}
+            ${s.location?" · 🏠 "+s.location:""}
+          </div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px">
+            ${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}
+            ${s.buyin?" · Buy-in: "+s.buyin:""}
+          </div>
+        </div>
+        <span class="badge ${s.status==="finished"?"bdone":"bnext"}">
+          ${s.status==="finished"?"✓ OK":"Pendente"}
+        </span>
+      </div>
+      <!-- Action buttons -->
+      <div class="row g8 mt8">
+        <button class="btn bo sm" data-edit-stage="${s.id}">✏ Editar</button>
+        <button class="btn by sm" data-launch="${s.id}">${s.status==="finished"?"✏ Resultado":"▶ Lançar"}</button>
+        <button class="btn bd sm" data-del-stage="${s.id}">🗑 Excluir</button>
+      </div>
+    </div>
+
+    <!-- Inscriptions section -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">
+          Inscritos
+          <span style="color:var(--yellow);font-size:16px;margin-left:6px">${ins.length}</span>
+        </div>
+        ${notIn.length>0?`
+        <div style="position:relative">
+          <button class="btn by sm" id="btn-add-ins-toggle" style="display:flex;align-items:center;gap:6px">
+            ＋ Adicionar
+          </button>
+          <div id="add-ins-dd" style="display:none;position:absolute;top:100%;right:0;z-index:100;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;min-width:220px;max-height:280px;overflow-y:auto;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,.6)">
+            <div style="padding:8px;border-bottom:1px solid var(--border)">
+              <input id="ins-search" class="inp" style="margin:0;font-size:12px;padding:6px 10px" placeholder="Buscar jogador..."/>
+            </div>
+            <div id="ins-list">
+              ${notIn.map(p=>`
+              <button data-add-ins="${s.id}|${p.uid}" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--text);text-align:left"
+                onmouseover="this.style.background='var(--surface)'"
+                onmouseout="this.style.background='none'">
+                <div class="av" style="width:28px;height:28px;font-size:10px;flex-shrink:0">${ini(p.name)}</div>
+                <div>
+                  <div style="font-weight:600;color:#fff;font-size:13px">${p.name}</div>
+                  <div style="font-size:11px;color:var(--muted)">"${p.nickname}"</div>
+                </div>
+              </button>`).join("")}
+            </div>
+          </div>
+        </div>`:""}
+      </div>
+
+      ${ins.length===0?'<div style="color:var(--muted);font-size:13px;padding:8px 0">Nenhum inscrito ainda.</div>':""}
+
+      <!-- Inscribed players list -->
+      ${ins.map((uid,i)=>{
+        const pl = getP(uid)||{name:uid,nickname:"?"};
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="color:var(--muted);font-size:13px;width:24px;text-align:center;flex-shrink:0">${i+1}</div>
+          <div class="av" style="width:34px;height:34px;font-size:12px;flex-shrink:0">${ini(pl.name)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:#fff;font-size:14px">${pl.name}</div>
+            <div style="font-size:12px;color:var(--muted)">"${pl.nickname}"</div>
+          </div>
+          <button data-rm-ins="${s.id}|${uid}"
+            style="background:none;border:1px solid var(--border);color:var(--red);cursor:pointer;padding:4px 10px;border-radius:3px;font-size:12px;flex-shrink:0"
+            onmouseover="this.style.borderColor='var(--red)'"
+            onmouseout="this.style.borderColor='var(--border)'">
+            ✕ Remover
+          </button>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
 }
 
 function renderAdminResults(){
@@ -2095,8 +2185,63 @@ function bindEvents(){
   document.querySelectorAll("[data-atab]").forEach(btn=>{btn.addEventListener("click",()=>{ADMIN_TAB=btn.dataset.atab;render();});});
   document.querySelectorAll("[data-profile]").forEach(el=>{el.addEventListener("click",()=>showProfile(el.dataset.profile));});
   document.getElementById("btn-new-stage")?.addEventListener("click",()=>openStageModal());
-  document.querySelectorAll("[data-edit-stage]").forEach(btn=>{btn.addEventListener("click",()=>openStageModal(DB.stages.find(s=>s.id===btn.dataset.editStage)));});
-  document.querySelectorAll("[data-del-stage]").forEach(btn=>{btn.addEventListener("click",()=>{if(confirm("Excluir esta etapa?")){DB.stages=DB.stages.filter(s=>s.id!==btn.dataset.delStage);save();render();}});});
+  // Admin stage list: click card to expand
+  document.querySelectorAll("[data-admin-stage]").forEach(card=>{
+    card.addEventListener("click", e=>{
+      if(e.target.closest("button")) return; // don't expand if clicking a button
+      ADMIN_STAGE_DETAIL = card.dataset.adminStage;
+      render();
+    });
+  });
+
+  // Admin stage detail: back button
+  document.getElementById("btn-admin-stage-back")?.addEventListener("click",()=>{
+    ADMIN_STAGE_DETAIL = null; render();
+  });
+
+  // Admin stage detail: toggle add dropdown
+  document.getElementById("btn-add-ins-toggle")?.addEventListener("click", e=>{
+    e.stopPropagation();
+    const dd = document.getElementById("add-ins-dd");
+    if(dd){ dd.style.display = dd.style.display==="none"?"block":"none"; }
+    // Focus search
+    setTimeout(()=>document.getElementById("ins-search")?.focus(), 50);
+  });
+
+  // Search filter in dropdown
+  document.getElementById("ins-search")?.addEventListener("input", function(){
+    const q = this.value.toLowerCase();
+    document.querySelectorAll("#ins-list button[data-add-ins]").forEach(btn=>{
+      const text = btn.textContent.toLowerCase();
+      btn.style.display = text.includes(q)?"flex":"none";
+    });
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", function closeDD(e){
+    const dd = document.getElementById("add-ins-dd");
+    const btn = document.getElementById("btn-add-ins-toggle");
+    if(dd && !dd.contains(e.target) && e.target!==btn){
+      dd.style.display="none";
+    }
+  }, {once:false});
+
+  document.querySelectorAll("[data-edit-stage]").forEach(btn=>{
+    btn.addEventListener("click", e=>{
+      e.stopPropagation();
+      openStageModal(DB.stages.find(s=>s.id===btn.dataset.editStage));
+    });
+  });
+  document.querySelectorAll("[data-del-stage]").forEach(btn=>{
+    btn.addEventListener("click", e=>{
+      e.stopPropagation();
+      if(confirm("Excluir esta etapa?")){
+        DB.stages=DB.stages.filter(s=>s.id!==btn.dataset.delStage);
+        ADMIN_STAGE_DETAIL=null;
+        save(); render();
+      }
+    });
+  });
   document.querySelectorAll("[data-launch]").forEach(btn=>{btn.addEventListener("click",()=>openResultModal(btn.dataset.launch));});
   document.querySelectorAll("[data-rm-ins]").forEach(btn=>{btn.addEventListener("click",e=>{e.stopPropagation();const[sid,uid]=btn.dataset.rmIns.split("|");DB.stages=DB.stages.map(s=>s.id===sid?{...s,inscriptions:(s.inscriptions||[]).filter(i=>i!==uid)}:s);save();render();});});
   document.querySelectorAll("[data-add-ins-toggle]").forEach(btn=>{
