@@ -872,16 +872,22 @@ function renderLoginScreen(){
   } else {
     document.getElementById("btn-signup").addEventListener("click", async()=>{
       const name  = document.getElementById("auth-name").value.trim();
-      const nick  = document.getElementById("auth-nick").value.trim();
+      const nick  = document.getElementById("auth-nick").value.trim() || name.split(" ")[0];
       const email = document.getElementById("auth-email").value.trim();
       const pass  = document.getElementById("auth-pass").value;
       if(!name||!email||!pass){ showLoginError("auth/missing-fields"); return; }
       try{
+        const btn = document.getElementById("btn-signup");
+        btn.disabled = true;
+        btn.textContent = "Criando conta...";
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        await updateProfile(cred.user, { displayName: name });
-        // Store extra info for ensurePlayerProfile
-        cred.user._pppNick = nick || name.split(" ")[0];
-      }catch(e){ showLoginError(e.code); }
+        // Set displayName as "Nome|Apelido" so ensurePlayerProfile can extract both
+        await updateProfile(cred.user, { displayName: name + "|" + nick });
+      }catch(e){
+        showLoginError(e.code);
+        const btn = document.getElementById("btn-signup");
+        if(btn){ btn.disabled=false; btn.textContent="Criar conta"; }
+      }
     });
   }
 }
@@ -958,16 +964,35 @@ function renderProfileModal(){
     if(pass && pass!==pass2){ errEl.innerHTML='<div class="err-msg">As senhas não coincidem.</div>'; return; }
     if(pass && pass.length<6){ errEl.innerHTML='<div class="err-msg">Senha muito curta.</div>'; return; }
     try{
+      // Validate
+      if(!name){ errEl.innerHTML='<div class="err-msg">Nome não pode ficar vazio.</div>'; return; }
+      if(!nick){ errEl.innerHTML='<div class="err-msg">Apelido não pode ficar vazio.</div>'; return; }
+
+      const saveBtn = box.querySelector("#pf-save");
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Salvando...";
+
       // Update Firebase Auth display name
-      if(name) await updateProfile(u, { displayName: name });
+      await updateProfile(u, { displayName: name });
       // Update password
       if(pass) await updatePassword(u, pass);
-      // Update player in DB array
+
+      // Update player in DB array — do this before save() to prevent snapshot overwrite
       const playerIdx = DB.players.findIndex(pl=>pl.uid===u.uid);
       if(playerIdx >= 0){
-        DB.players[playerIdx] = {...DB.players[playerIdx], name:name||DB.players[playerIdx].name, nickname:nick||DB.players[playerIdx].nickname};
+        DB.players[playerIdx] = {
+          ...DB.players[playerIdx],
+          name:     name,
+          nickname: nick
+        };
+        CURRENT_PLAYER = DB.players[playerIdx];
+      } else {
+        // Player not found — create entry
+        const newPlayer = {uid:u.uid, name, nickname:nick, email:u.email||"", season:ACTIVE_SEASON};
+        DB.players.push(newPlayer);
+        CURRENT_PLAYER = newPlayer;
       }
-      CURRENT_PLAYER = DB.players[playerIdx] || CURRENT_PLAYER;
+
       await save();
       wrap.innerHTML="";
       showToast("Perfil atualizado!","green");
@@ -2401,13 +2426,23 @@ async function ensurePlayerProfile(user){
     }
   } else {
     // New user — create player profile
-    const nick = user.displayName?.split(" ")[0] || user.email?.split("@")[0] || "Jogador";
+    // displayName may be "Nome|Apelido" (set during signup) or just "Nome"
+    let rawName = user.displayName || user.email?.split("@")[0] || "Jogador";
+    let realName = rawName;
+    let nick = rawName.split(" ")[0];
+    if(rawName.includes("|")){
+      const parts = rawName.split("|");
+      realName = parts[0].trim();
+      nick     = parts[1].trim() || parts[0].split(" ")[0];
+      // Fix displayName to remove the pipe separator
+      try{ await updateProfile(user, { displayName: realName }); }catch(e){}
+    }
     player = {
-      uid: user.uid,
-      name: user.displayName || nick,
+      uid:      user.uid,
+      name:     realName,
       nickname: nick,
-      email: user.email||"",
-      season: ACTIVE_SEASON
+      email:    user.email||"",
+      season:   ACTIVE_SEASON
     };
     // Double-check before push to avoid duplicates from concurrent calls
     if(!DB.players.find(p=>p.uid===user.uid)){
@@ -2489,7 +2524,9 @@ function startListeners(user){
           render();
         });
       } else {
-        CURRENT_PLAYER = DB.players.find(p=>p.uid===CURRENT_USER_UID) || null;
+        // Re-apply current player (snapshot may have stale data briefly)
+        const freshPlayer = DB.players.find(p=>p.uid===CURRENT_USER_UID);
+        CURRENT_PLAYER = freshPlayer || CURRENT_PLAYER;
         dbg("18. Renderizando app...");
         render();
       }
