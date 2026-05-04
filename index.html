@@ -1484,22 +1484,36 @@ function renderHOF(){
 }
 
 // ── PLAYERS ───────────────────────────────────────────────────────────────────
+function isValidPlayerName(name){
+  // Filter out obvious username/email accounts (no spaces, all lowercase, has special chars)
+  if(!name) return false;
+  const n = name.trim();
+  if(n.length < 2) return false;
+  return true; // show all, let admin clean up
+}
+
 function renderPlayers(){
+  // Sort alphabetically by name
+  const sorted = [...DB.players]
+    .filter(p=>p.uid && p.name)
+    .sort((a,b)=>(a.name||"").localeCompare(b.name||"","pt-BR",{sensitivity:"base"}));
+
   return `<div class="sec">
-  <div class="st">Joga<span class="ac">dores</span></div><div class="ss">${DB.players.length} membros</div><div class="dv"></div>
-  <div class="pgrid">${DB.players.map(p=>{
+  <div class="st">Joga<span class="ac">dores</span></div>
+  <div class="ss">${sorted.length} membros</div>
+  <div class="dv"></div>
+  <div class="pgrid">${sorted.map(p=>{
     const s=calcStats(p.uid);
     return `<div class="pcrd" data-profile="${p.uid}">
       ${AV(p.uid,"lg")}
       <div class="pn">${p.name}</div>
       <div class="pk2">"${p.nickname}"</div>
       <div style="margin-top:8px;display:flex;justify-content:center;gap:6px;flex-wrap:wrap">
-        ${s.p>0?`<span class="pill py">${s.p} etapas</span>`:""}
+        ${s.p>0?`<span class="pill py">${s.p} etapa${s.p!==1?"s":""}</span>`:""}
         ${s.w>0?`<span class="pill" style="background:rgba(255,215,0,.15);color:#FFD700;border:1px solid rgba(255,215,0,.3)">🏆 ${s.w}</span>`:""}
       </div>
     </div>`;
   }).join("")}</div>
-  <div id="profile-slot"></div>
   </div>`;
 }
 
@@ -1861,8 +1875,9 @@ function renderAdminResults(){
 
 function renderAdminPlayers(){
   const admins = DB.admins || [ADMIN_EMAILS[0]];
-  const linked   = DB.players.filter(p=>p.email&&p.email.trim()!=="").length;
-  const unlinked = DB.players.filter(p=>!p.email||p.email.trim()==="").length;
+  const sortedPlayers = [...DB.players].sort((a,b)=>(a.name||"").localeCompare(b.name||"","pt-BR",{sensitivity:"base"}));
+  const linked   = sortedPlayers.filter(p=>p.email&&p.email.trim()!=="").length;
+  const unlinked = sortedPlayers.filter(p=>!p.email||p.email.trim()==="").length;
 
   return `
   <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
@@ -1876,7 +1891,7 @@ function renderAdminPlayers(){
       </span>
     </div>
   </div>
-  <div class="rl">${DB.players.map(p=>{
+  <div class="rl">${sortedPlayers.map(p=>{
     const st = calcStats(p.uid);
     const isAdm    = ADMIN_EMAILS.includes(p.email) || admins.includes(p.email) || admins.includes(p.uid);
     const isSelf   = p.uid === CURRENT_USER_UID;
@@ -2398,35 +2413,63 @@ onAuthStateChanged(auth, async (user) => {
 
 // ── ENSURE PLAYER PROFILE ─────────────────────────────────────────────────────
 async function ensurePlayerProfile(user){
-  // Try to find player by uid first
   let player = DB.players.find(p=>p.uid===user.uid);
   let needsSave = false;
 
-  if(!player && user.email){
-    // Match by email
-    player = DB.players.find(p=>p.email===user.email);
-    if(!player && user.displayName){
-      // Match by name similarity
-      const normName = (user.displayName||"").toLowerCase().trim();
-      player = DB.players.find(p=>(p.name||"").toLowerCase().trim()===normName);
+  if(!player){
+    // 1. Match by email
+    if(user.email){
+      player = DB.players.find(p=>p.email && p.email.toLowerCase()===user.email.toLowerCase());
     }
+
+    // 2. Match by displayName (normalize: lowercase, no accents, trim)
+    if(!player && user.displayName){
+      const norm = s => (s||"").toLowerCase().normalize("NFD")
+        .replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g,"").trim();
+      // Handle "Nome|Apelido" format from signup
+      const rawDisplay = user.displayName.includes("|")
+        ? user.displayName.split("|")[0].trim()
+        : user.displayName;
+      const normDisplay = norm(rawDisplay);
+      player = DB.players.find(p=>{
+        const normName = norm(p.name||"");
+        // Full name match
+        if(normName === normDisplay) return true;
+        // First + last name match (handles "Victor Asdourian" vs "victor asdourian")
+        const partsA = normDisplay.split(" ").filter(Boolean);
+        const partsB = normName.split(" ").filter(Boolean);
+        if(partsA.length>=2 && partsB.length>=2){
+          return partsA[0]===partsB[0] && partsA[partsA.length-1]===partsB[partsB.length-1];
+        }
+        return false;
+      });
+    }
+
     if(player){
-      // Link this Firebase uid to existing player
+      // Link Firebase uid and update with user's own data
       player.uid   = user.uid;
-      player.email = user.email;
+      player.email = user.email || player.email;
+
+      // If user filled name/nick during signup, use those (override pre-created data)
+      let rawName = user.displayName||"";
+      if(rawName.includes("|")){
+        const parts = rawName.split("|");
+        player.name     = parts[0].trim() || player.name;
+        player.nickname = parts[1].trim() || player.nickname;
+        try{ await updateProfile(user,{displayName:parts[0].trim()}); }catch(e){}
+      } else if(rawName && rawName.trim()){
+        // Google login: use displayName as name, keep existing nickname
+        player.name = rawName.trim();
+      }
       needsSave = true;
     }
   }
 
   if(player){
-    // Always update email if missing
-    if(!player.email && user.email){
-      player.email = user.email;
-      needsSave = true;
-    }
+    // Update email if missing
+    if(!player.email && user.email){ player.email=user.email; needsSave=true; }
   } else {
-    // New user — create player profile
-    // displayName may be "Nome|Apelido" (set during signup) or just "Nome"
+    // New user — create profile
     let rawName = user.displayName || user.email?.split("@")[0] || "Jogador";
     let realName = rawName;
     let nick = rawName.split(" ")[0];
@@ -2434,18 +2477,11 @@ async function ensurePlayerProfile(user){
       const parts = rawName.split("|");
       realName = parts[0].trim();
       nick     = parts[1].trim() || parts[0].split(" ")[0];
-      // Fix displayName to remove the pipe separator
       try{ await updateProfile(user, { displayName: realName }); }catch(e){}
     }
-    player = {
-      uid:      user.uid,
-      name:     realName,
-      nickname: nick,
-      email:    user.email||"",
-      season:   ACTIVE_SEASON
-    };
-    // Double-check before push to avoid duplicates from concurrent calls
+    // Only create if truly new
     if(!DB.players.find(p=>p.uid===user.uid)){
+      player = { uid:user.uid, name:realName, nickname:nick, email:user.email||"", season:ACTIVE_SEASON };
       DB.players.push(player);
       needsSave = true;
     } else {
