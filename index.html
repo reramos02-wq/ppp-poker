@@ -558,11 +558,17 @@ function calcStats(uid){
 }
 
 function calcHOF(){
-  return DB.players.map(pl=>{
-    const st = calcStats(pl.uid);
-    const hofScore = st.wNL*1 + st.wKO*1 + st.wFT*12;
-    return {pl,...st,hofScore};
-  }).filter(h=>h.p>0||h.wFT>0).sort((a,b)=>b.hofScore-a.hofScore||b.p-a.p);
+  // Seed from all players AND from results (catches unregistered UIDs)
+  const allUids = new Set(DB.players.map(p=>p.uid));
+  DB.stages.filter(s=>s.status==="finished").forEach(s=>
+    (s.results||[]).forEach(r=>allUids.add(r.playerId))
+  );
+  return [...allUids].map(uid=>{
+    const pl = getPlayer(uid)||{uid,name:uid,nickname:"?"};
+    const st = calcStats(uid);
+    const wTotal = st.wNL + st.wKO + st.wFT; // all wins
+    return {pl,...st,wTotal};
+  }).filter(h=>h.wTotal>0||h.wFT>0).sort((a,b)=>b.wTotal-a.wTotal||b.wFT-a.wFT||b.p-a.p);
 }
 
 // ── SHARE MODAL ──────────────────────────────────────────────────────────────
@@ -1374,38 +1380,73 @@ function renderStageDetail(sid){
 
 // ── HOF ───────────────────────────────────────────────────────────────────────
 function renderHOF(){
-  const hof = calcHOF();
+  const all = calcHOF();
+
+  // Apply filter
+  let filtered;
+  if(HOF_FILTER==="ft"){
+    filtered = all.filter(h=>h.wFT>0).sort((a,b)=>b.wFT-a.wFT||b.wTotal-a.wTotal);
+  } else if(HOF_FILTER==="stages"){
+    filtered = all.filter(h=>(h.wNL+h.wKO)>0).sort((a,b)=>(b.wNL+b.wKO)-(a.wNL+a.wKO)||b.wTotal-a.wTotal);
+  } else {
+    // total: all wins combined
+    filtered = all.sort((a,b)=>b.wTotal-a.wTotal||b.wFT-a.wFT);
+  }
+
+  const tabs = [
+    {id:"total",  icon:"🏅", label:"Total"},
+    {id:"stages", icon:"🃏", label:"Etapas"},
+    {id:"ft",     icon:"🏆", label:"Mesa Final"},
+  ];
+
   return `<div class="sec">
   <div class="st">Hall of <span class="ac">Fame</span></div>
-  <div class="ss">Pontuação: 🃏 NLH=1pt · 🥊 KO=1pt · 🏆 Mesa Final=12pts</div><div class="dv"></div>
-  ${hof.length===0?'<div class="empty">Nenhuma etapa encerrada ainda.</div>':''}
-  ${hof.map((h,i)=>{
-    const maxScore = hof.length>0?hof[0].hofScore:0;
-    const isTop = h.hofScore===maxScore && maxScore>0;
-    return `<div class="hfc" style="cursor:pointer${isTop?';border-color:rgba(255,215,0,.3);border-top:2px solid #FFD700':''}" data-profile="${h.pl.uid}">
+  <div class="ss">Campeões da Temporada ${ACTIVE_SEASON}</div>
+  <div class="dv"></div>
+
+  <div class="tabs" style="margin-bottom:16px">
+    ${tabs.map(t=>`<button class="tb${HOF_FILTER===t.id?" on":""}" data-hof-tab="${t.id}">
+      ${t.icon} ${t.label}
+    </button>`).join("")}
+  </div>
+
+  ${filtered.length===0?`<div class="empty">Nenhuma vitória ${HOF_FILTER==="ft"?"em Mesa Final":HOF_FILTER==="stages"?"em etapas":""} ainda.</div>`:""}
+
+  ${filtered.map((h,i)=>{
+    const wStages = h.wNL + h.wKO;
+    const isFirst = i===0;
+
+    // What to show based on filter
+    let statMain="", statSub="";
+    if(HOF_FILTER==="ft"){
+      statMain = `${h.wFT}`;
+      statSub = `vitória${h.wFT!==1?"s":""} FT`;
+    } else if(HOF_FILTER==="stages"){
+      statMain = `${wStages}`;
+      statSub = `vitória${wStages!==1?"s":""} etapa`;
+    } else {
+      statMain = `${h.wTotal}`;
+      statSub = `vitória${h.wTotal!==1?"s":""}`;
+    }
+
+    return `<div class="hfc" data-profile="${h.pl.uid}" style="cursor:pointer${isFirst?";border-color:rgba(255,215,0,.4);border-top:2px solid #FFD700":""}">
       <div class="hfr ${pcls(i)}">${i+1}</div>
       ${AV(h.pl.uid,"lg")}
       <div style="flex:1;min-width:0">
         <div class="hfn">${h.pl.name} <span style="color:var(--muted);font-size:13px;font-weight:400">"${h.pl.nickname}"</span></div>
         <div class="hfb">
-          ${h.wNL>0?`<span class="hfbdg hby">🃏 ${h.wNL}</span>`:''}
-          ${h.wKO>0?`<span class="hfbdg hby">🥊 ${h.wKO}</span>`:''}
-          ${h.wFT>0?`<span class="hfbdg" style="background:rgba(52,152,219,.15);color:var(--blue);border:1px solid rgba(52,152,219,.3)">🏆 FT ${h.wFT}</span>`:''}
-          ${h.p>0?`<span class="hfbdg hbg">▶ ${h.p} etapa${h.p!==1?'s':''}</span>`:''}
+          ${h.wNL>0?`<span class="hfbdg hby">🃏 ${h.wNL}</span>`:""}
+          ${h.wKO>0?`<span class="hfbdg hby">🥊 ${h.wKO}</span>`:""}
+          ${h.wFT>0?`<span class="hfbdg" style="background:rgba(52,152,219,.15);color:#3498db;border:1px solid rgba(52,152,219,.3)">🏆 FT ${h.wFT}</span>`:""}
+          <span class="hfbdg hbg">▶ ${h.p} etapa${h.p!==1?"s":""}</span>
         </div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow)">${h.hofScore}</div>
-        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">pts HOF</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--yellow);line-height:1">${statMain}</div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px">${statSub}</div>
       </div>
     </div>`;
   }).join("")}
-  <div style="margin-top:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:3px;font-size:12px;color:var(--muted);line-height:1.8">
-    <b style="color:var(--text)">Como funciona a pontuação HOF:</b><br/>
-    🃏 Vitória em NL Hold'em = <b style="color:var(--yellow)">1 ponto</b><br/>
-    🥊 Vitória em Knockout = <b style="color:var(--yellow)">1 ponto</b><br/>
-    🏆 Vitória em Mesa Final = <b style="color:var(--yellow)">12 pontos</b>
-  </div>
   </div>`;
 }
 
@@ -1430,6 +1471,7 @@ function renderPlayers(){
 }
 
 let PROFILE_FILTER = "geral"; // nlholdem | knockout | geral
+let HOF_FILTER = "total"; // total | stages | ft
 
 function showProfile(uid, filter){
   const p = getP(uid); if(!p)return;
@@ -2094,6 +2136,11 @@ function bindEvents(){
   document.querySelectorAll("[data-share-ins]").forEach(btn=>{
     btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.shareIns;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;openShareModal(stage);});
   });
+  // HOF filter tabs
+  document.querySelectorAll("[data-hof-tab]").forEach(btn=>{
+    btn.addEventListener("click",()=>{ HOF_FILTER=btn.dataset.hofTab; render(); });
+  });
+
   // Add player button (admin players tab)
   document.getElementById("btn-add-player")?.addEventListener("click", ()=>openPlayerModal());
 
