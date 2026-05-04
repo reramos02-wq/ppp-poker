@@ -1134,22 +1134,28 @@ function renderHomeDesktop(){
   const colHOF = (()=>{
     const hof = calcHOF().slice(0,5);
     if(!hof.length) return "<div class='home-col'></div>";
-    const maxScore = hof.length>0?hof[0].hofScore:0;
     return `<div class="home-col">
       ${secHdr("🌟","Hall of Fame","hof")}
-      ${hof.map((h,i)=>`<div class="hfc" data-profile="${h.pl.uid}" style="cursor:pointer${h.hofScore===maxScore&&maxScore>0?";border-color:rgba(255,215,0,.3);border-top:2px solid #FFD700":""}">
-        <div class="hfr ${pcls(i)}">${i+1}</div>${AV(h.pl.uid,"lg")}
-        <div style="flex:1">
-          <div class="hfn">${h.pl.nickname}</div>
-          <div class="hfb">
-            ${h.wNL>0?`<span class="hfbdg hby">🃏 ${h.wNL}</span>`:""}
-            ${h.wKO>0?`<span class="hfbdg hby">🥊 ${h.wKO}</span>`:""}
-            ${h.wFT>0?`<span class="hfbdg" style="background:rgba(52,152,219,.15);color:var(--blue)">🏆 FT</span>`:""}
-            <span class="hfbdg hbg">▶ ${h.p}</span>
+      ${hof.map((h,i)=>{
+        const wStages = h.wNL + h.wKO;
+        const isFirst = i===0;
+        return `<div class="hfc" data-profile="${h.pl.uid}" style="cursor:pointer${isFirst?";border-color:rgba(255,215,0,.3);border-top:2px solid #FFD700":""}">
+          <div class="hfr ${pcls(i)}">${i+1}</div>${AV(h.pl.uid,"lg")}
+          <div style="flex:1;min-width:0">
+            <div class="hfn">${h.pl.nickname}</div>
+            <div class="hfb">
+              ${h.wNL>0?`<span class="hfbdg hby">🃏 ${h.wNL}</span>`:""}
+              ${h.wKO>0?`<span class="hfbdg hby">🥊 ${h.wKO}</span>`:""}
+              ${h.wFT>0?`<span class="hfbdg" style="background:rgba(52,152,219,.15);color:#3498db;border:1px solid rgba(52,152,219,.3)">🏆 FT ${h.wFT}</span>`:""}
+              <span class="hfbdg hbg">▶ ${h.p}</span>
+            </div>
           </div>
-        </div>
-        <div style="text-align:right"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow)">${h.hofScore}</div><div style="font-size:9px;color:var(--muted)">pts HOF</div></div>
-      </div>`).join("")}
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow);line-height:1">${h.wTotal}</div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px">vitória${h.wTotal!==1?"s":""}</div>
+          </div>
+        </div>`;
+      }).join("")}
     </div>`;
   })();
 
@@ -1489,7 +1495,7 @@ function showProfile(uid, filter){
     : allHist.filter(st=>st.type===PROFILE_FILTER);
 
   // HOF score check
-  const hofScore = s.wNL + s.wKO + s.wFT*12;
+  // hofScore removed — no longer displayed
   const disputedFT = DB.stages.some(st=>st.isFinal&&(st.results||[]).find(r=>r.playerId===uid));
   const wonFT = s.wFT > 0;
 
