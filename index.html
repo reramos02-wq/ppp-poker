@@ -407,6 +407,7 @@ let STAGE_DETAIL  = null;
 let MENU_OPEN     = false;
 let ADMIN_TAB          = "stages";
 let ADMIN_STAGE_DETAIL = null; // stage id expanded in admin
+let ADMIN_INS_OPEN    = false; // add inscription panel open
 let RULES_TAB     = "nlholdem";
 let RULES_VIEW    = "rules";
 let RANK_TAB      = "geral";
@@ -1762,28 +1763,9 @@ function renderAdminStageDetail(s){
           <span style="color:var(--yellow);font-size:16px;margin-left:6px">${ins.length}</span>
         </div>
         ${notIn.length>0?`
-        <div style="position:relative">
-          <button class="btn by sm" id="btn-add-ins-toggle" style="display:flex;align-items:center;gap:6px">
-            ＋ Adicionar
-          </button>
-          <div id="add-ins-dd" style="display:none;position:absolute;top:100%;right:0;z-index:100;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;min-width:220px;max-height:280px;overflow-y:auto;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,.6)">
-            <div style="padding:8px;border-bottom:1px solid var(--border)">
-              <input id="ins-search" class="inp" style="margin:0;font-size:12px;padding:6px 10px" placeholder="Buscar jogador..."/>
-            </div>
-            <div id="ins-list">
-              ${notIn.map(p=>`
-              <button data-add-ins="${s.id}|${p.uid}" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--text);text-align:left"
-                onmouseover="this.style.background='var(--surface)'"
-                onmouseout="this.style.background='none'">
-                <div class="av" style="width:28px;height:28px;font-size:10px;flex-shrink:0">${ini(p.name)}</div>
-                <div>
-                  <div style="font-weight:600;color:#fff;font-size:13px">${p.name}</div>
-                  <div style="font-size:11px;color:var(--muted)">"${p.nickname}"</div>
-                </div>
-              </button>`).join("")}
-            </div>
-          </div>
-        </div>`:""}
+        <button class="btn ${ADMIN_INS_OPEN?"bd":"by"} sm" id="btn-add-ins-toggle">
+          ${ADMIN_INS_OPEN?"✕ Fechar":"＋ Adicionar"}
+        </button>`:""}
       </div>
 
       ${ins.length===0?'<div style="color:var(--muted);font-size:13px;padding:8px 0">Nenhum inscrito ainda.</div>':""}
@@ -1799,13 +1781,33 @@ function renderAdminStageDetail(s){
             <div style="font-size:12px;color:var(--muted)">"${pl.nickname}"</div>
           </div>
           <button data-rm-ins="${s.id}|${uid}"
-            style="background:none;border:1px solid var(--border);color:var(--red);cursor:pointer;padding:4px 10px;border-radius:3px;font-size:12px;flex-shrink:0"
-            onmouseover="this.style.borderColor='var(--red)'"
-            onmouseout="this.style.borderColor='var(--border)'">
+            style="background:none;border:1px solid var(--border);color:var(--red);cursor:pointer;padding:4px 10px;border-radius:3px;font-size:12px;flex-shrink:0">
             ✕ Remover
           </button>
         </div>`;
       }).join("")}
+
+      <!-- Inline add panel -->
+      ${ADMIN_INS_OPEN && notIn.length>0 ? `
+      <div style="margin-top:12px;border-top:2px solid var(--yellow);padding-top:12px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">
+          Selecionar jogador
+        </div>
+        <div class="fr" style="margin-bottom:10px">
+          <input id="ins-search" class="inp" style="margin:0" placeholder="🔍 Buscar por nome..."/>
+        </div>
+        <div id="ins-list" style="max-height:300px;overflow-y:auto">
+          ${notIn.map(p=>`
+          <button data-add-ins="${s.id}|${p.uid}"
+            style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:var(--surface2);border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--text);text-align:left;border-radius:0">
+            <div class="av" style="width:32px;height:32px;font-size:11px;flex-shrink:0">${ini(p.name)}</div>
+            <div>
+              <div style="font-weight:600;color:#fff;font-size:13px">${p.name}</div>
+              <div style="font-size:11px;color:var(--muted)">"${p.nickname}"</div>
+            </div>
+          </button>`).join("")}
+        </div>
+      </div>` : ""}
     </div>
   </div>`;
 }
@@ -2196,39 +2198,25 @@ function bindEvents(){
 
   // Admin stage detail: back button
   document.getElementById("btn-admin-stage-back")?.addEventListener("click",()=>{
-    ADMIN_STAGE_DETAIL = null; render();
+    ADMIN_STAGE_DETAIL = null;
+    ADMIN_INS_OPEN = false;
+    render();
   });
 
-  // Admin stage detail: toggle add dropdown
-  const _addBtn = document.getElementById("btn-add-ins-toggle");
-  const _addDd  = document.getElementById("add-ins-dd");
-
-  _addBtn?.addEventListener("click", e=>{
-    e.stopPropagation();
-    e.preventDefault();
-    if(!_addDd) return;
-    const isOpen = _addDd.style.display === "block";
-    _addDd.style.display = isOpen ? "none" : "block";
-    if(!isOpen) setTimeout(()=>document.getElementById("ins-search")?.focus(), 50);
+  // Admin stage detail: toggle add panel (state-based, no dropdown)
+  document.getElementById("btn-add-ins-toggle")?.addEventListener("click", ()=>{
+    ADMIN_INS_OPEN = !ADMIN_INS_OPEN;
+    render();
+    if(ADMIN_INS_OPEN) setTimeout(()=>document.getElementById("ins-search")?.focus(), 50);
   });
 
-  // Search filter in dropdown
+  // Search filter in inline panel
   document.getElementById("ins-search")?.addEventListener("input", function(){
     const q = this.value.toLowerCase();
     document.querySelectorAll("#ins-list button[data-add-ins]").forEach(btn=>{
       btn.style.display = btn.textContent.toLowerCase().includes(q) ? "flex" : "none";
     });
   });
-
-  // Close dropdown when clicking outside — use capture to run before other handlers
-  const _closeDdHandler = function(e){
-    const dd = document.getElementById("add-ins-dd");
-    if(!dd || dd.style.display==="none") return;
-    const toggle = document.getElementById("btn-add-ins-toggle");
-    if(toggle && toggle.contains(e.target)) return; // let toggle handle it
-    if(!dd.contains(e.target)) dd.style.display = "none";
-  };
-  document.addEventListener("click", _closeDdHandler);
 
   document.querySelectorAll("[data-edit-stage]").forEach(btn=>{
     btn.addEventListener("click", e=>{
