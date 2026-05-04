@@ -2200,31 +2200,35 @@ function bindEvents(){
   });
 
   // Admin stage detail: toggle add dropdown
-  document.getElementById("btn-add-ins-toggle")?.addEventListener("click", e=>{
+  const _addBtn = document.getElementById("btn-add-ins-toggle");
+  const _addDd  = document.getElementById("add-ins-dd");
+
+  _addBtn?.addEventListener("click", e=>{
     e.stopPropagation();
-    const dd = document.getElementById("add-ins-dd");
-    if(dd){ dd.style.display = dd.style.display==="none"?"block":"none"; }
-    // Focus search
-    setTimeout(()=>document.getElementById("ins-search")?.focus(), 50);
+    e.preventDefault();
+    if(!_addDd) return;
+    const isOpen = _addDd.style.display === "block";
+    _addDd.style.display = isOpen ? "none" : "block";
+    if(!isOpen) setTimeout(()=>document.getElementById("ins-search")?.focus(), 50);
   });
 
   // Search filter in dropdown
   document.getElementById("ins-search")?.addEventListener("input", function(){
     const q = this.value.toLowerCase();
     document.querySelectorAll("#ins-list button[data-add-ins]").forEach(btn=>{
-      const text = btn.textContent.toLowerCase();
-      btn.style.display = text.includes(q)?"flex":"none";
+      btn.style.display = btn.textContent.toLowerCase().includes(q) ? "flex" : "none";
     });
   });
 
-  // Close dropdown when clicking outside
-  document.addEventListener("click", function closeDD(e){
+  // Close dropdown when clicking outside — use capture to run before other handlers
+  const _closeDdHandler = function(e){
     const dd = document.getElementById("add-ins-dd");
-    const btn = document.getElementById("btn-add-ins-toggle");
-    if(dd && !dd.contains(e.target) && e.target!==btn){
-      dd.style.display="none";
-    }
-  }, {once:false});
+    if(!dd || dd.style.display==="none") return;
+    const toggle = document.getElementById("btn-add-ins-toggle");
+    if(toggle && toggle.contains(e.target)) return; // let toggle handle it
+    if(!dd.contains(e.target)) dd.style.display = "none";
+  };
+  document.addEventListener("click", _closeDdHandler);
 
   document.querySelectorAll("[data-edit-stage]").forEach(btn=>{
     btn.addEventListener("click", e=>{
