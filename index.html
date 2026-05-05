@@ -322,6 +322,11 @@ select.inp{appearance:none;}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
 .forgot{text-align:right;font-size:12px;color:var(--yellow);cursor:pointer;margin-top:-6px;margin-bottom:10px;}
 .err-msg{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:var(--red);padding:8px 12px;border-radius:3px;font-size:13px;margin-bottom:10px;}
+
+/* LIVE badge */
+@keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.4);color:#e74c3c;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;padding:3px 10px;border-radius:3px;text-transform:uppercase}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#e74c3c;animation:livePulse 1.2s infinite}
 </style>
 </head>
 <body>
@@ -379,6 +384,140 @@ const DEFAULT_RULES_SEED = {
 let DEFAULT_RULES = JSON.parse(localStorage.getItem(RK)||"null") || JSON.parse(JSON.stringify(DEFAULT_RULES_SEED));
 
 const mkId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+
+// ── LIVE & RANKING MOVEMENT HELPERS ──────────────────────────────────────────
+function getLiveStage(){
+  // A stage is LIVE if: status=upcoming, date=today, time has been reached
+  const now = new Date();
+  return DB.stages.find(s=>{
+    if(s.status !== "upcoming") return false;
+    if(!s.date || !s.time) return false;
+    const [y,m,d] = s.date.split("-").map(Number);
+    const [h,mi]  = s.time.split(":").map(Number);
+    const stageStart = new Date(y, m-1, d, h, mi, 0);
+    return now >= stageStart;
+  }) || null;
+}
+
+function isLive(stage){
+  if(!stage || stage.status !== "upcoming") return false;
+  if(!stage.date || !stage.time) return false;
+  const now = new Date();
+  const [y,m,d] = stage.date.split("-").map(Number);
+  const [h,mi]  = stage.time.split(":").map(Number);
+  return now >= new Date(y, m-1, d, h, mi, 0);
+}
+
+function shouldShowMovement(){
+  // Show arrows if: there's a live/recently finished stage
+  // Hide if: next upcoming stage starts in < 48h
+  const now = new Date();
+  const nextStage = DB.stages.find(s=>s.status==="upcoming");
+  if(nextStage && nextStage.date && nextStage.time){
+    const [y,m,d] = nextStage.date.split("-").map(Number);
+    const [h,mi]  = nextStage.time.split(":").map(Number);
+    const nextStart = new Date(y, m-1, d, h, mi, 0);
+    const diffHours = (nextStart - now) / (1000*60*60);
+    if(diffHours <= 48) return false;
+  }
+  // Show if last finished stage exists
+  const lastFinished = [...DB.stages].filter(s=>s.status==="finished")
+    .sort((a,b)=>b.date.localeCompare(a.date))[0];
+  return !!lastFinished;
+}
+
+function calcRankingMovement(type){
+  // Returns map of uid → {prev, curr, delta}
+  // prev = rank WITHOUT the live/last stage
+  // curr = rank WITH the live/last stage (including draft)
+  const live = getLiveStage();
+  const lastFinished = [...DB.stages].filter(s=>s.status==="finished")
+    .sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const targetStage = live || lastFinished;
+  if(!targetStage) return {};
+
+  // Helper to rank excluding a stage
+  const rankWithout = (stageId, t) => {
+    const fin = DB.stages.filter(s=>
+      s.status==="finished" && (t==="geral"||s.type===t) && !s.isFinal &&
+      s.id !== stageId && (s.season===ACTIVE_SEASON||!s.season)
+    );
+    const sc = {};
+    const seedUids = new Set(DB.players.map(p=>p.uid));
+    fin.forEach(s=>(s.results||[]).forEach(r=>seedUids.add(r.playerId)));
+    seedUids.forEach(uid=>{
+      const p=getPlayer(uid)||{uid,name:uid,nickname:"?"};
+      sc[uid]={p,total:0};
+    });
+    fin.forEach(s=>(s.results||[]).forEach(r=>{
+      if(!sc[r.playerId]) return;
+      sc[r.playerId].total += getPts(r.position)+(s.type==="knockout"?(r.knockouts||0)*10:0);
+    }));
+    return Object.values(sc).filter(x=>x.total>0)
+      .sort((a,b)=>b.total-a.total)
+      .map((x,i)=>({uid:x.p.uid,rank:i+1}));
+  };
+
+  // Helper to rank including a stage (with draft for live)
+  const rankWith = (stage, t) => {
+    const fin = DB.stages.filter(s=>
+      s.status==="finished" && (t==="geral"||s.type===t) && !s.isFinal &&
+      (s.season===ACTIVE_SEASON||!s.season)
+    );
+    const sc = {};
+    const seedUids = new Set(DB.players.map(p=>p.uid));
+    fin.forEach(s=>(s.results||[]).forEach(r=>seedUids.add(r.playerId)));
+    // Add draft/results from target stage
+    const stageResults = stage.status==="upcoming"
+      ? (stage.draft||[]).map(r=>({playerId:r.uid,position:r.pos,points:getPts(r.pos),knockouts:r.ko||0}))
+      : (stage.results||[]);
+    stageResults.forEach(r=>seedUids.add(r.playerId));
+    seedUids.forEach(uid=>{
+      const p=getPlayer(uid)||{uid,name:uid,nickname:"?"};
+      sc[uid]={p,total:0};
+    });
+    fin.forEach(s=>(s.results||[]).forEach(r=>{
+      if(!sc[r.playerId]) return;
+      sc[r.playerId].total += getPts(r.position)+(s.type==="knockout"?(r.knockouts||0)*10:0);
+    }));
+    // Add target stage
+    if(t==="geral"||stage.type===t){
+      stageResults.forEach(r=>{
+        if(!sc[r.playerId]) return;
+        sc[r.playerId].total += getPts(r.position)+(stage.type==="knockout"?(r.knockouts||0)*10:0);
+      });
+    }
+    return Object.values(sc).filter(x=>x.total>0)
+      .sort((a,b)=>b.total-a.total)
+      .map((x,i)=>({uid:x.p.uid,rank:i+1}));
+  };
+
+  const t = type||"geral";
+  const before = rankWithout(targetStage.id, t);
+  const after  = rankWith(targetStage, t);
+  const beforeMap = {};
+  before.forEach(x=>{ beforeMap[x.uid]=x.rank; });
+  const afterMap = {};
+  after.forEach(x=>{ afterMap[x.uid]=x.rank; });
+
+  const movement = {};
+  after.forEach(x=>{
+    const prev = beforeMap[x.uid] || null;
+    const curr = x.rank;
+    const delta = prev ? prev - curr : 0; // positive = moved up
+    movement[x.uid] = {prev, curr, delta};
+  });
+  return movement;
+}
+
+function movementBadge(uid, type){
+  if(!shouldShowMovement()) return "";
+  const mv = calcRankingMovement(type||"geral");
+  const m = mv[uid];
+  if(!m || m.delta===0 || m.prev===null) return "";
+  if(m.delta > 0) return `<span style="color:#2ecc71;font-size:10px;font-weight:700;margin-left:4px">▲${m.delta}</span>`;
+  return `<span style="color:#e74c3c;font-size:10px;font-weight:700;margin-left:4px">▼${Math.abs(m.delta)}</span>`;
+}
 const ini  = name => (name||"").trim().split(" ").filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase()||"?";
 const fmtD = d => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"});}catch{return d;} };
 const pcls = i => i===0?"rp1":i===1?"rp2":i===2?"rp3":"rpx";
@@ -1157,10 +1296,10 @@ function renderHomeDesktop(){
       ${icon} ${title}<span data-goto="${tab}" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span>
     </div>`;
 
-  const rrRow = (r,i,sub) =>
+  const rrRow = (r,i,sub,type) =>
     `<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-      <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${sub}</div></div>
+      <div class="ri"><div class="rn">${r.p.nickname}${movementBadge(r.p.uid,type||"geral")}</div><div class="rm">${sub}</div></div>
       <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
     </div>`;
 
@@ -1170,7 +1309,10 @@ function renderHomeDesktop(){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px">
       <div style="flex:1">
         <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:6px">📅 Próxima Etapa</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:#fff;line-height:1">${next.name}</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:#fff;line-height:1">${next.name}</div>
+          ${isLive(next)?'<span class="live-badge"><span class="live-dot"></span>LIVE RANKING</span>':""}
+        </div>
         <div style="font-size:13px;color:var(--muted);margin-top:6px">${fmtD(next.date)}${next.time?" às <b style='color:#fff'>"+next.time+"</b>":""} · ${next.location||"A confirmar"}</div>
         <div style="font-size:13px;color:var(--muted);margin-top:2px">${next.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}</div>
       </div>
@@ -1188,16 +1330,16 @@ function renderHomeDesktop(){
 
   // Row 1: NLH + KO
   const colNL = `<div class="home-col">
-    ${nlTop.length ? secHdr("🃏","Ranking NL Hold'em","ranking")+"<div class='rl'>"+nlTop.map((r,i)=>rrRow(r,i,r.stages+" etapa"+(r.stages!==1?"s":""))).join("")+"</div>" : ""}
+    ${nlTop.length ? secHdr("🃏","Ranking NL Hold'em","ranking")+"<div class='rl'>"+nlTop.map((r,i)=>rrRow(r,i,r.stages+" etapa"+(r.stages!==1?"s":""),"nlholdem")).join("")+"</div>" : ""}
   </div>`;
 
   const colKO = `<div class="home-col">
-    ${koTop.length ? secHdr("🥊","Ranking Knockout","ranking")+"<div class='rl'>"+koTop.map((r,i)=>rrRow(r,i,"🥊 "+r.ko+" KO")).join("")+"</div>" : ""}
+    ${koTop.length ? secHdr("🥊","Ranking Knockout","ranking")+"<div class='rl'>"+koTop.map((r,i)=>rrRow(r,i,"🥊 "+r.ko+" KO","knockout")).join("")+"</div>" : ""}
   </div>`;
 
   // Row 2: Geral + HOF
   const colGeral = `<div class="home-col">
-    ${geralTop.length ? secHdr("🏅","Ranking Geral","ranking")+"<div class='rl'>"+geralTop.map((r,i)=>rrRow(r,i,r.stages+" etapa"+(r.stages!==1?"s":""))).join("")+"</div>" : ""}
+    ${geralTop.length ? secHdr("🏅","Ranking Geral","ranking")+"<div class='rl'>"+geralTop.map((r,i)=>rrRow(r,i,r.stages+" etapa"+(r.stages!==1?"s":""),"geral")).join("")+"</div>" : ""}
   </div>`;
 
   const colHOF = (()=>{
