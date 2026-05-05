@@ -2127,6 +2127,130 @@ function renderAdminPlayers(){
   }).join("")}</div>`;
 }
 
+function renderAdminTools(){
+  return `<div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px">
+      Ferramentas de Manutenção
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-weight:700;color:#fff;margin-bottom:4px">🔧 Fix Auditoria #3</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+        Corrige Bruno Heller, Danilo duplicado e Paulo Amaral
+      </div>
+      <button class="btn by sm" id="btn-fix-audit3">▶ Executar</button>
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-weight:700;color:#fff;margin-bottom:4px">🧹 Limpar Duplicatas</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+        Remove entradas duplicadas de mesmo UID, mantém dados do usuário
+      </div>
+      <button class="btn by sm" id="btn-fix-dupes">▶ Executar</button>
+    </div>
+
+    <div id="tools-log" style="background:#111;border:1px solid #333;padding:12px;border-radius:4px;font-size:12px;font-family:monospace;line-height:2;min-height:60px;margin-top:12px;display:none"></div>
+  </div>`;
+}
+
+function toolsLog(msg, cls=""){
+  const el = document.getElementById("tools-log");
+  if(!el) return;
+  el.style.display = "block";
+  const color = cls==="ok"?"#2ecc71":cls==="err"?"#e74c3c":cls==="warn"?"#F5A800":"#aaa";
+  el.innerHTML += `<div style="color:${color}">${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function runFixAudit3(){
+  const PTS={1:25,2:18,3:15,4:12,5:10,6:8,7:6,8:4,9:3};
+  const UID_FIXES = [
+    {oldUid:"p_bruno_heller", newUid:"JT5CNWHf2qYql73ep9qagN1g4iD2", name:"Bruno Heller", nick:"Bruno"},
+    {oldUid:"p_paulo_amaral", newUid:"1JYKpBUMYkPL9SahDEOINiSH3dZ2", name:"Paulo Amaral", nick:"Paulo", needsSetup:true},
+  ];
+
+  // Read fresh data from Firestore
+  const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
+  const data = snap.data();
+  let players = [...(data.players||[])];
+  let stages  = [...(data.stages||[])];
+  const admins = data.admins||[];
+
+  for(const fix of UID_FIXES){
+    toolsLog(`── ${fix.name}`, "warn");
+    let stagesFixed=0;
+    stages = stages.map(s=>{
+      let mod=false;
+      const results=(s.results||[]).map(r=>{ if(r.playerId===fix.oldUid){mod=true;return{...r,playerId:fix.newUid};} return r; });
+      const ins=(s.inscriptions||[]).map(u=>{ if(u===fix.oldUid){mod=true;return fix.newUid;} return u; });
+      if(mod){stagesFixed++;return{...s,results,inscriptions:ins};}
+      return s;
+    });
+    toolsLog(`  ✅ ${stagesFixed} etapas corrigidas`, "ok");
+
+    const mockIdx  = players.findIndex(p=>p.uid===fix.oldUid);
+    const realIdx  = players.findIndex(p=>p.uid===fix.newUid);
+    if(realIdx>=0 && mockIdx>=0){
+      players[realIdx]={...players[realIdx],name:fix.name,nickname:fix.nick,needsSetup:fix.needsSetup||false};
+      players.splice(players.findIndex(p=>p.uid===fix.oldUid),1);
+      toolsLog(`  ✅ Entrada real atualizada, mock removido`, "ok");
+    } else if(mockIdx>=0){
+      players[mockIdx]={...players[mockIdx],uid:fix.newUid,name:fix.name,nickname:fix.nick,needsSetup:fix.needsSetup||false};
+      toolsLog(`  ✅ Mock → UID real`, "ok");
+    }
+  }
+
+  // Fix Danilo duplicate
+  toolsLog(`── Danilo Di Pieri`, "warn");
+  const dUid="nGxrlk3VJMPrFtxF8z69Lmvrkin1";
+  const dEntries=players.filter(p=>p.uid===dUid);
+  if(dEntries.length>1){
+    const keep=dEntries.find(p=>p.name==="Danilo Di Pieri")||dEntries[0];
+    players=players.filter(p=>p.uid!==dUid||p===keep);
+    toolsLog(`  ✅ Duplicata removida, mantido "${keep.name}"`, "ok");
+  } else { toolsLog(`  ℹ️  Sem duplicata`, "info"); }
+
+  // Dedup
+  const seen=new Set(); players=players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
+
+  await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
+  DB.players=players; DB.stages=stages;
+
+  let brunoPts=0;
+  stages.forEach(s=>{const r=(s.results||[]).find(x=>x.playerId==="JT5CNWHf2qYql73ep9qagN1g4iD2");if(r)brunoPts+=(PTS[r.position]||2);});
+  toolsLog(`Bruno: ${brunoPts}pts ${brunoPts===28?"✅":"❌"}`, brunoPts===28?"ok":"err");
+  toolsLog("✅ Concluído! Recarregue a página.", "ok");
+}
+
+async function runFixDupes(){
+  const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
+  const data = snap.data();
+  let players = [...(data.players||[])];
+  const stages = data.stages||[];
+  const admins = data.admins||[];
+  const before = players.length;
+  const seen=new Map();
+  const cleaned=[];
+  players.forEach(p=>{
+    if(!seen.has(p.uid)){
+      seen.set(p.uid,cleaned.length);
+      cleaned.push({...p});
+    } else {
+      const idx=seen.get(p.uid);
+      const existing=cleaned[idx];
+      // Keep user-filled data (has email + non-default nickname)
+      const pIsUser = p.email && p.nickname && p.nickname!==p.name.split(" ")[0];
+      const eIsUser = existing.email && existing.nickname && existing.nickname!==existing.name.split(" ")[0];
+      if(pIsUser && !eIsUser){ cleaned[idx]={...p}; toolsLog(`  🔄 Preferindo dados do usuário: "${p.name}"`, "ok"); }
+      else { toolsLog(`  🗑️  Removido: "${p.name}"`, "warn"); }
+    }
+  });
+  await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players:cleaned,stages,admins,updatedAt:serverTimestamp()});
+  DB.players=cleaned;
+  toolsLog(`Jogadores: ${before} → ${cleaned.length} (${before-cleaned.length} removidos)`, "ok");
+  toolsLog("✅ Concluído!", "ok");
+}
+
 // ── STAGE MODAL ───────────────────────────────────────────────────────────────
 function openStageModal(stage=null){
   const defR=DEFAULT_RULES["nlholdem"]||{};
@@ -2581,6 +2705,20 @@ function bindEvents(){
   document.querySelectorAll("[data-share-ins]").forEach(btn=>{
     btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.shareIns;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;openShareModal(stage);});
   });
+  // Admin tools
+  document.getElementById("btn-fix-audit3")?.addEventListener("click", async()=>{
+    document.getElementById("tools-log").innerHTML="";
+    document.getElementById("btn-fix-audit3").disabled=true;
+    try{ await runFixAudit3(); }catch(e){ toolsLog("❌ "+e.message,"err"); }
+    document.getElementById("btn-fix-audit3").disabled=false;
+  });
+  document.getElementById("btn-fix-dupes")?.addEventListener("click", async()=>{
+    document.getElementById("tools-log").innerHTML="";
+    document.getElementById("btn-fix-dupes").disabled=true;
+    try{ await runFixDupes(); }catch(e){ toolsLog("❌ "+e.message,"err"); }
+    document.getElementById("btn-fix-dupes").disabled=false;
+  });
+
   // HOF filter tabs
   document.querySelectorAll("[data-hof-tab]").forEach(btn=>{
     btn.addEventListener("click",()=>{ HOF_FILTER=btn.dataset.hofTab; render(); });
