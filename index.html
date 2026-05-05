@@ -3193,17 +3193,21 @@ function startListeners(user){
       // Link user to player after data is loaded
       if(user && DB.players.length > 0){
         ensurePlayerProfile(user).then(()=>{
-          // Re-check admin status with loaded DB.admins
           IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
           dbg("18. Renderizando app...");
-          render();
+          if(!DIAGNOSE_EDIT_UID) render();
         });
       } else {
         // Re-apply current player (snapshot may have stale data briefly)
         const freshPlayer = DB.players.find(p=>p.uid===CURRENT_USER_UID);
         CURRENT_PLAYER = freshPlayer || CURRENT_PLAYER;
         dbg("18. Renderizando app...");
-        render();
+        // Don't re-render if admin is editing in tools (would destroy form)
+        if(DIAGNOSE_EDIT_UID){
+          // Just update DB silently, don't touch the DOM
+        } else {
+          render();
+        }
       }
     },
     (err)=>{
