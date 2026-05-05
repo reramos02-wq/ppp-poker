@@ -2186,15 +2186,7 @@ function renderToolsDiagnose(){
   const unlinked = sorted.filter(p=>!p.email||p.email.trim()==="").length;
 
   // If editing a player
-  if(DIAGNOSE_EDIT_UID){
-    // Show edit form in result-modal (outside #app, survives render())
-    const p = DB.players.find(x=>x.uid===DIAGNOSE_EDIT_UID);
-    if(p){
-      setTimeout(()=>showDiagnoseEditModal(p), 0);
-    } else {
-      DIAGNOSE_EDIT_UID=null;
-    }
-  }
+  // Edit opens via window.openDiagnoseEdit directly, not via render()
 
   return `<div>
     <button class="btn bo mb10 sm" id="btn-tools-back">‹ Ferramentas</button>
@@ -2222,7 +2214,7 @@ function renderToolsDiagnose(){
               <div style="font-size:10px;color:${isMock?"var(--red)":"#555"}">${p.uid}</div>
             </div>
           </div>
-          <button class="btn bo sm" data-diagnose-edit="${p.uid}" style="flex-shrink:0">✏ Editar</button>
+          <button class="btn bo sm" onclick="window.openDiagnoseEdit('${btoa(unescape(encodeURIComponent(p.uid)))}')" style="flex-shrink:0">✏ Editar</button>
         </div>`;
       }).join("")}
     </div>
@@ -2848,6 +2840,11 @@ function bindEvents(){
   });
   // ── Global diagnose functions (inline onclick safe) ──────────────────────
   window.navDiagnose = function(){ DIAGNOSE_EDIT_UID=null; render(); };
+  window.openDiagnoseEdit = function(uidB64){
+    const uid = decodeURIComponent(escape(atob(uidB64)));
+    const p = DB.players.find(x=>x.uid===uid);
+    if(p){ DIAGNOSE_EDIT_UID=uid; showDiagnoseEditModal(p); }
+  };
   window.navToolsBack = function(){ TOOLS_VIEW="home"; DIAGNOSE_EDIT_UID=null; render(); };
 
   window.saveDiagnoseEdit = async function(uidB64){
@@ -2952,9 +2949,7 @@ function bindEvents(){
   });
 
   // Diagnose edit button
-  document.querySelectorAll("[data-diagnose-edit]").forEach(btn=>{
-    btn.addEventListener("click",()=>{ DIAGNOSE_EDIT_UID=btn.dataset.diagnoseEdit; render(); });
-  });
+  // diagnose edit handled by window.openDiagnoseEdit inline onclick
 
   // Diagnose back from edit
   document.getElementById("btn-diagnose-back")?.addEventListener("click",()=>{ DIAGNOSE_EDIT_UID=null; render(); });
