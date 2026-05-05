@@ -1919,10 +1919,12 @@ function renderAdmin(){
     <button class="tb${ADMIN_TAB==="stages"?" on":""}" data-atab="stages">📅 Etapas</button>
     <button class="tb${ADMIN_TAB==="results"?" on":""}" data-atab="results">🏁 Resultados</button>
     <button class="tb${ADMIN_TAB==="players"?" on":""}" data-atab="players">👥 Jogadores</button>
+    <button class="tb${ADMIN_TAB==="tools"?" on":""}" data-atab="tools">🔧 Ferramentas</button>
   </div>
   ${ADMIN_TAB==="stages"?renderAdminStages():""}
   ${ADMIN_TAB==="results"?renderAdminResults():""}
   ${ADMIN_TAB==="players"?renderAdminPlayers():""}
+  ${ADMIN_TAB==="tools"?renderAdminTools():""}
   </div>`;
 }
 
