@@ -776,6 +776,12 @@ function renderTopbar(){
 
 function render(){
   try {
+    // If user needs to complete profile, show setup screen
+    if(CURRENT_USER && needsProfileSetup()){
+      document.getElementById("app").innerHTML = renderProfileSetup();
+      bindProfileSetup();
+      return;
+    }
     dbg("render() TAB="+TAB+" desktop="+IS_DESKTOP());
     let html = "";
     if(IS_DESKTOP()){
@@ -805,6 +811,44 @@ function render(){
 
 
 // ── LOGIN / AUTH SCREENS ──────────────────────────────────────────────────────
+function needsProfileSetup(){
+  if(!CURRENT_PLAYER) return false;
+  return !CURRENT_PLAYER.name || CURRENT_PLAYER.name.includes("@") ||
+         CURRENT_PLAYER.name.length < 2 || !CURRENT_PLAYER.nickname ||
+         CURRENT_PLAYER.needsSetup;
+}
+
+function renderProfileSetup(){
+  const u = CURRENT_USER;
+  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-dark);padding:24px;background-image:radial-gradient(ellipse at 50% 40%, rgba(245,168,0,.06) 0%, transparent 70%)">
+    <div style="width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:32px;box-sizing:border-box">
+      <div style="text-align:center;margin-bottom:24px">
+        ${LOGO(48)}
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;color:#fff;margin-top:12px;text-transform:uppercase;letter-spacing:1px">Complete seu perfil</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px">Precisamos de mais algumas informações para continuar</div>
+      </div>
+      <div id="setup-err"></div>
+      <div class="fr">
+        <label class="lbl">Nome completo <span style="color:var(--red)">*</span></label>
+        <input class="inp" id="setup-name" placeholder="Ex: João da Silva" autocomplete="name" value="${u?.displayName&&!u.displayName.includes('@')?u.displayName:''}"/>
+      </div>
+      <div class="fr">
+        <label class="lbl">Apelido <span style="color:var(--red)">*</span></label>
+        <input class="inp" id="setup-nick" placeholder="Ex: Joãozinho"/>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Como será exibido no ranking e nas etapas</div>
+      </div>
+      <button class="btn by fw" id="btn-setup-save" style="padding:14px;font-size:16px;margin-top:8px">
+        ✓ Entrar no PPP Poker
+      </button>
+      <div style="margin-top:16px;text-align:center">
+        <button id="setup-logout" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;text-decoration:underline">
+          Usar outra conta
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderLoginScreen(){
   const logo80Src = LOGO_80;
   document.getElementById("app").innerHTML = `
@@ -2200,6 +2244,67 @@ function openPlayerModal(){
 }
 
 // ── BIND EVENTS ───────────────────────────────────────────────────────────────
+function bindProfileSetup(){
+  document.getElementById("btn-setup-save")?.addEventListener("click", async()=>{
+    const name = document.getElementById("setup-name")?.value.trim();
+    const nick = document.getElementById("setup-nick")?.value.trim();
+    const errEl = document.getElementById("setup-err");
+
+    if(!name || name.length < 2){
+      errEl.innerHTML = '<div class="err-msg">Nome completo é obrigatório (mínimo 2 caracteres).</div>';
+      return;
+    }
+    if(!nick || nick.length < 2){
+      errEl.innerHTML = '<div class="err-msg">Apelido é obrigatório (mínimo 2 caracteres).</div>';
+      return;
+    }
+
+    const btn = document.getElementById("btn-setup-save");
+    btn.disabled = true;
+    btn.textContent = "Salvando...";
+
+    try {
+      // Update Firebase Auth
+      await updateProfile(CURRENT_USER, { displayName: name });
+
+      // Update player in DB
+      const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
+      if(idx>=0){
+        DB.players[idx] = {...DB.players[idx], name, nickname:nick, needsSetup:false};
+        CURRENT_PLAYER = DB.players[idx];
+      } else {
+        const p = {uid:CURRENT_USER_UID, name, nickname:nick, email:CURRENT_USER.email||"", season:ACTIVE_SEASON, needsSetup:false};
+        DB.players.push(p);
+        CURRENT_PLAYER = p;
+      }
+      await savePlayers();
+      render();
+    } catch(e){
+      errEl.innerHTML = `<div class="err-msg">Erro: ${e.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = "✓ Entrar no PPP Poker";
+    }
+  });
+
+  // Enter key on nick field
+  document.getElementById("setup-nick")?.addEventListener("keydown", e=>{
+    if(e.key==="Enter") document.getElementById("btn-setup-save")?.click();
+  });
+
+  // Auto-fill nick from name
+  document.getElementById("setup-name")?.addEventListener("blur", function(){
+    const nickEl = document.getElementById("setup-nick");
+    if(nickEl && !nickEl.value && this.value){
+      nickEl.value = this.value.trim().split(" ")[0];
+    }
+  });
+
+  document.getElementById("setup-logout")?.addEventListener("click", async()=>{
+    stopListeners();
+    await signOut(auth);
+  });
+}
+
 function bindEvents(){
   // Profile button
   document.getElementById("btn-profile")?.addEventListener("click",()=>renderProfileModal());
@@ -2446,20 +2551,30 @@ async function ensurePlayerProfile(user){
     }
 
     if(player){
-      // Link Firebase uid and update with user's own data
+      // Link Firebase uid — user's own data ALWAYS wins over pre-created seed data
       player.uid   = user.uid;
       player.email = user.email || player.email;
 
-      // If user filled name/nick during signup, use those (override pre-created data)
-      let rawName = user.displayName||"";
+      let rawName = (user.displayName||"").trim();
+
       if(rawName.includes("|")){
+        // Email/password signup: "Nome|Apelido" format
         const parts = rawName.split("|");
-        player.name     = parts[0].trim() || player.name;
-        player.nickname = parts[1].trim() || player.nickname;
-        try{ await updateProfile(user,{displayName:parts[0].trim()}); }catch(e){}
-      } else if(rawName && rawName.trim()){
-        // Google login: use displayName as name, keep existing nickname
-        player.name = rawName.trim();
+        const userN = parts[0].trim();
+        const userNick = parts[1].trim();
+        if(userN)    player.name     = userN;
+        if(userNick) player.nickname = userNick;
+        try{ await updateProfile(user,{displayName:userN}); }catch(e){}
+      } else if(rawName && !rawName.includes("@")){
+        // Google login with real displayName: use it as name
+        player.name = rawName;
+        // Keep existing nickname if pre-created, otherwise use first name
+        if(!player.nickname || player.nickname===player.name.split(" ")[0]){
+          player.nickname = rawName.split(" ")[0];
+        }
+      } else if(rawName.includes("@") || !rawName){
+        // Google login with no displayName or email as name — keep pre-created data
+        // Don't override with empty/email values
       }
       needsSave = true;
     }
@@ -2481,7 +2596,13 @@ async function ensurePlayerProfile(user){
     }
     // Only create if truly new
     if(!DB.players.find(p=>p.uid===user.uid)){
-      player = { uid:user.uid, name:realName, nickname:nick, email:user.email||"", season:ACTIVE_SEASON };
+      // If name looks like email or is empty, don't create yet
+      // renderProfileSetup will handle it
+      if(!realName || realName.includes("@") || realName.length<2){
+        realName = "";
+        nick     = "";
+      }
+      player = { uid:user.uid, name:realName, nickname:nick, email:user.email||"", season:ACTIVE_SEASON, needsSetup: !realName };
       DB.players.push(player);
       needsSave = true;
     } else {
