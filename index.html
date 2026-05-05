@@ -2187,9 +2187,13 @@ function renderToolsDiagnose(){
 
   // If editing a player
   if(DIAGNOSE_EDIT_UID){
+    // Show edit form in result-modal (outside #app, survives render())
     const p = DB.players.find(x=>x.uid===DIAGNOSE_EDIT_UID);
-    if(p) return renderDiagnoseEdit(p);
-    DIAGNOSE_EDIT_UID=null;
+    if(p){
+      setTimeout(()=>showDiagnoseEditModal(p), 0);
+    } else {
+      DIAGNOSE_EDIT_UID=null;
+    }
   }
 
   return `<div>
@@ -2225,54 +2229,55 @@ function renderToolsDiagnose(){
   </div>`;
 }
 
-function renderDiagnoseEdit(p){
+function showDiagnoseEditModal(p){
   const stCount = DB.stages.filter(s=>(s.results||[]).find(r=>r.playerId===p.uid)).length;
-  // Encode uid for safe use in onclick
   const uidB64 = btoa(unescape(encodeURIComponent(p.uid)));
-  return `<div>
-    <button class="btn bo mb10 sm" onclick="window.navDiagnose()">‹ Diagnóstico</button>
-    <div class="card">
+  const modal = document.getElementById("result-modal");
+  if(!modal) return;
+  modal.innerHTML = "";
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
+  modal.appendChild(ov);
 
-      <!-- Current data (read-only display) -->
-      <div style="background:var(--surface2);border-radius:3px;padding:12px;margin-bottom:16px">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Dados atuais</div>
-        <div style="font-size:13px;color:#fff;font-weight:600">${p.name}</div>
-        <div style="font-size:12px;color:var(--muted)">"${p.nickname||"?"}" · ${stCount} etapa${stCount!==1?"s":""}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.email||"sem email"}</div>
-        <div style="font-size:10px;color:var(--red);margin-top:2px;word-break:break-all">${p.uid}</div>
-      </div>
+  const box = document.createElement("div");
+  box.style.cssText = "background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px;padding:22px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-sizing:border-box;";
+  ov.appendChild(box);
 
-      <!-- New values -->
-      <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:700">Novos valores (deixe em branco para manter)</div>
-
-      <div class="fr">
-        <label class="lbl">Novo Nome</label>
-        <input class="inp" id="new-name" placeholder="${p.name}"/>
-      </div>
-      <div class="fr">
-        <label class="lbl">Novo Apelido</label>
-        <input class="inp" id="new-nick" placeholder="${p.nickname||""}"/>
-      </div>
-      <div class="fr">
-        <label class="lbl">Novo Email</label>
-        <input class="inp" id="new-email" type="email" placeholder="${p.email||"email@dominio.com"}"/>
-      </div>
-      <div class="fr">
-        <label class="lbl">Novo UID Firebase</label>
-        <input class="inp" id="new-uid" placeholder="${p.uid}" style="font-size:11px"/>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">Cole o UID do Firebase Console → Authentication</div>
-      </div>
-
-      <div id="dedit-msg" style="margin-top:8px"></div>
-
-      <div class="row g8 mt8">
-        <button class="btn by fw" onclick="window.saveDiagnoseEdit('${uidB64}')">✓ Salvar alterações</button>
-        <button class="btn bd sm" onclick="window.deleteDiagnosePlayer('${uidB64}')">🗑</button>
-      </div>
+  box.innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">✏️ Editar Jogador</div>
+    <div style="background:var(--surface2);border-radius:3px;padding:12px;margin-bottom:16px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Dados atuais</div>
+      <div style="font-size:13px;color:#fff;font-weight:600">${p.name}</div>
+      <div style="font-size:12px;color:var(--muted)">"${p.nickname||"?"}" · ${stCount} etapa${stCount!==1?"s":""}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.email||"sem email"}</div>
+      <div style="font-size:10px;color:var(--red);margin-top:4px;word-break:break-all">${p.uid}</div>
     </div>
-  </div>`;
-}
+    <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:700">Novos valores (deixe em branco para manter)</div>
+    <div class="fr"><label class="lbl">Novo Nome</label><input class="inp" id="new-name" placeholder="${p.name}"/></div>
+    <div class="fr"><label class="lbl">Novo Apelido</label><input class="inp" id="new-nick" placeholder="${p.nickname||""}"/></div>
+    <div class="fr"><label class="lbl">Novo Email</label><input class="inp" id="new-email" type="email" placeholder="${p.email||"email@dominio.com"}"/></div>
+    <div class="fr">
+      <label class="lbl">Novo UID Firebase</label>
+      <input class="inp" id="new-uid" placeholder="${p.uid}" style="font-size:11px"/>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Firebase Console → Authentication → copie o UID</div>
+    </div>
+    <div id="dedit-msg" style="margin-top:8px"></div>
+    <div class="row g8 mt8">
+      <button class="btn by fw" id="dedit-save-btn">✓ Salvar alterações</button>
+      <button class="btn bo" id="dedit-cancel-btn">Fechar</button>
+      <button class="btn bd sm" id="dedit-del-btn">🗑</button>
+    </div>`;
 
+  // Bind events directly — no render() dependency
+  box.querySelector("#dedit-cancel-btn").addEventListener("click", ()=>{
+    modal.innerHTML="";
+    DIAGNOSE_EDIT_UID=null;
+  });
+
+  box.querySelector("#dedit-save-btn").addEventListener("click", ()=>window.saveDiagnoseEdit(uidB64));
+  box.querySelector("#dedit-del-btn").addEventListener("click",  ()=>window.deleteDiagnosePlayer(uidB64));
+  ov.addEventListener("click", e=>{ if(e.target===ov){ modal.innerHTML=""; DIAGNOSE_EDIT_UID=null; }});
+}
 // ── AUDIT ─────────────────────────────────────────────────────────────────────
 function renderToolsAudit(){
   const players = DB.players;
@@ -2900,6 +2905,8 @@ function bindEvents(){
       await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
       DB.players=players; DB.stages=stages;
       DIAGNOSE_EDIT_UID=null;
+      TOOLS_VIEW="diagnose";
+      const _m=document.getElementById("result-modal"); if(_m) _m.innerHTML="";
       showToast("✅ Jogador atualizado!","green");
       render();
     } catch(e){
@@ -3224,19 +3231,14 @@ function startListeners(user){
         ensurePlayerProfile(user).then(()=>{
           IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
           dbg("18. Renderizando app...");
-          if(!DIAGNOSE_EDIT_UID && TOOLS_VIEW==="home") render();
+          render();
         });
       } else {
         // Re-apply current player (snapshot may have stale data briefly)
         const freshPlayer = DB.players.find(p=>p.uid===CURRENT_USER_UID);
         CURRENT_PLAYER = freshPlayer || CURRENT_PLAYER;
         dbg("18. Renderizando app...");
-        // Don't re-render if admin is editing in tools (would destroy form)
-        if(DIAGNOSE_EDIT_UID || TOOLS_VIEW==="diagnose" || TOOLS_VIEW==="audit"){
-          // Update DB silently, preserve DOM
-        } else {
-          render();
-        }
+        render();
       }
     },
     (err)=>{
