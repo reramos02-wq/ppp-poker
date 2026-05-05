@@ -2227,25 +2227,47 @@ function renderToolsDiagnose(){
 
 function renderDiagnoseEdit(p){
   const stCount = DB.stages.filter(s=>(s.results||[]).find(r=>r.playerId===p.uid)).length;
+  // Encode uid for safe use in onclick
+  const uidB64 = btoa(unescape(encodeURIComponent(p.uid)));
   return `<div>
-    <button class="btn bo mb10 sm" id="btn-diagnose-back">‹ Diagnóstico</button>
-    <div class="card" style="margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-        ${AV(p.uid,"lg")}
-        <div>
-          <div style="font-weight:700;font-size:16px;color:#fff">${p.name}</div>
-          <div style="font-size:12px;color:var(--muted)">${stCount} etapas · ${p.email||"sem email"}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px">${p.uid}</div>
-        </div>
+    <button class="btn bo mb10 sm" onclick="window.navDiagnose()">‹ Diagnóstico</button>
+    <div class="card">
+
+      <!-- Current data (read-only display) -->
+      <div style="background:var(--surface2);border-radius:3px;padding:12px;margin-bottom:16px">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Dados atuais</div>
+        <div style="font-size:13px;color:#fff;font-weight:600">${p.name}</div>
+        <div style="font-size:12px;color:var(--muted)">"${p.nickname||"?"}" · ${stCount} etapa${stCount!==1?"s":""}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.email||"sem email"}</div>
+        <div style="font-size:10px;color:var(--red);margin-top:2px;word-break:break-all">${p.uid}</div>
       </div>
-      <div class="fr"><label class="lbl">Nome completo</label><input class="inp" id="dedit-name" value="${p.name}"/></div>
-      <div class="fr"><label class="lbl">Apelido</label><input class="inp" id="dedit-nick" value="${p.nickname||""}"/></div>
-      <div class="fr"><label class="lbl">Email</label><input class="inp" id="dedit-email" value="${p.email||""}" placeholder="email@dominio.com"/></div>
-      <div class="fr"><label class="lbl">UID Firebase (para vincular)</label><input class="inp" id="dedit-uid" value="${p.uid}" placeholder="Cole o UID do Firebase Auth"/></div>
-      <div id="dedit-err"></div>
+
+      <!-- New values -->
+      <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:700">Novos valores (deixe em branco para manter)</div>
+
+      <div class="fr">
+        <label class="lbl">Novo Nome</label>
+        <input class="inp" id="new-name" placeholder="${p.name}"/>
+      </div>
+      <div class="fr">
+        <label class="lbl">Novo Apelido</label>
+        <input class="inp" id="new-nick" placeholder="${p.nickname||""}"/>
+      </div>
+      <div class="fr">
+        <label class="lbl">Novo Email</label>
+        <input class="inp" id="new-email" type="email" placeholder="${p.email||"email@dominio.com"}"/>
+      </div>
+      <div class="fr">
+        <label class="lbl">Novo UID Firebase</label>
+        <input class="inp" id="new-uid" placeholder="${p.uid}" style="font-size:11px"/>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">Cole o UID do Firebase Console → Authentication</div>
+      </div>
+
+      <div id="dedit-msg" style="margin-top:8px"></div>
+
       <div class="row g8 mt8">
-        <button class="btn by fw" id="btn-dedit-save" onclick="window.saveDiagnoseEdit('${p.uid}')">✓ Salvar</button>
-        <button class="btn bd sm" id="btn-dedit-del" onclick="window.deleteDiagnosePlayer('${p.uid}')">🗑 Excluir</button>
+        <button class="btn by fw" onclick="window.saveDiagnoseEdit('${uidB64}')">✓ Salvar alterações</button>
+        <button class="btn bd sm" onclick="window.deleteDiagnosePlayer('${uidB64}')">🗑</button>
       </div>
     </div>
   </div>`;
@@ -2823,19 +2845,27 @@ function bindEvents(){
   window.navDiagnose = function(){ DIAGNOSE_EDIT_UID=null; render(); };
   window.navToolsBack = function(){ TOOLS_VIEW="home"; DIAGNOSE_EDIT_UID=null; render(); };
 
-  window.saveDiagnoseEdit = async function(oldUid){
-    const name   = document.getElementById("dedit-name")?.value.trim();
-    const nick   = document.getElementById("dedit-nick")?.value.trim();
-    const email  = document.getElementById("dedit-email")?.value.trim();
-    const newUid = document.getElementById("dedit-uid")?.value.trim();
-    const errEl  = document.getElementById("dedit-err");
-    const saveBtn= document.getElementById("btn-dedit-save");
+  window.saveDiagnoseEdit = async function(uidB64){
+    const oldUid = decodeURIComponent(escape(atob(uidB64)));
+    const newName  = document.getElementById("new-name")?.value.trim();
+    const newNick  = document.getElementById("new-nick")?.value.trim();
+    const newEmail = document.getElementById("new-email")?.value.trim();
+    const newUid   = document.getElementById("new-uid")?.value.trim();
+    const msgEl    = document.getElementById("dedit-msg");
 
-    if(!name||!nick){
-      if(errEl) errEl.innerHTML='<div class="err-msg">Nome e apelido obrigatórios.</div>';
+    // Get current player to use as fallback
+    const cur = DB.players.find(p=>p.uid===oldUid)||{};
+    const finalName  = newName  || cur.name     || "";
+    const finalNick  = newNick  || cur.nickname || "";
+    const finalEmail = newEmail || cur.email    || "";
+    const finalUid   = (newUid && newUid.length>5) ? newUid : oldUid;
+
+    if(!finalName){
+      if(msgEl) msgEl.innerHTML='<div class="err-msg">Nome não pode ficar vazio.</div>';
       return;
     }
-    if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent="Salvando..."; }
+
+    if(msgEl) msgEl.innerHTML='<div style="color:var(--yellow);font-size:12px">Salvando...</div>';
 
     try {
       const snap  = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
@@ -2843,45 +2873,44 @@ function bindEvents(){
       let players = [...(data.players||[])];
       let stages  = [...(data.stages||[])];
       const admins= data.admins||[];
-      const finalUid = (newUid && newUid!==oldUid) ? newUid : oldUid;
 
-      // Update player entry
+      // Update or create player entry
       const pidx = players.findIndex(p=>p.uid===oldUid);
-      if(pidx>=0){
-        players[pidx] = {...players[pidx], name, nickname:nick, email:email||players[pidx].email||"", uid:finalUid};
-      } else {
-        players.push({uid:finalUid, name, nickname:nick, email:email||"", season:ACTIVE_SEASON});
-      }
+      const updated = {uid:finalUid, name:finalName, nickname:finalNick, email:finalEmail, season:ACTIVE_SEASON};
+      if(pidx>=0){ players[pidx]={...players[pidx],...updated}; }
+      else { players.push(updated); }
 
       // Update stages if UID changed
-      if(newUid && newUid!==oldUid){
-        stages = stages.map(s=>({
-          ...s,
-          results:(s.results||[]).map(r=>r.playerId===oldUid?{...r,playerId:finalUid}:r),
-          inscriptions:(s.inscriptions||[]).map(u=>u===oldUid?finalUid:u)
-        }));
-        const stFixed = stages.filter(s=>(s.results||[]).find(r=>r.playerId===finalUid)).length;
-        console.log(`UID updated in ${stFixed} stages`);
+      if(finalUid !== oldUid){
+        let stFixed=0;
+        stages = stages.map(s=>{
+          let mod=false;
+          const results=(s.results||[]).map(r=>{ if(r.playerId===oldUid){mod=true;return{...r,playerId:finalUid};} return r;});
+          const ins=(s.inscriptions||[]).map(u=>{ if(u===oldUid){mod=true;return finalUid;} return u;});
+          if(mod){stFixed++;return{...s,results,inscriptions:ins};}
+          return s;
+        });
+        console.log("Stages updated:", stFixed);
       }
 
-      // Remove duplicates (keep the updated entry)
+      // Dedup
       const seen=new Set();
-      players = players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
+      players=players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
 
       await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
       DB.players=players; DB.stages=stages;
       DIAGNOSE_EDIT_UID=null;
-      showToast("Jogador atualizado!","green");
+      showToast("✅ Jogador atualizado!","green");
       render();
     } catch(e){
-      if(errEl) errEl.innerHTML=`<div class="err-msg">Erro: ${e.message}</div>`;
-      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent="✓ Salvar"; }
+      if(msgEl) msgEl.innerHTML=`<div class="err-msg">Erro: ${e.message}</div>`;
     }
   };
 
-  window.deleteDiagnosePlayer = async function(uid){
+  window.deleteDiagnosePlayer = async function(uidB64){
+    const uid = decodeURIComponent(escape(atob(uidB64)));
     const p=DB.players.find(x=>x.uid===uid);
-    if(!p||!confirm("Excluir "+p.name+"? Esta ação não pode ser desfeita.")) return;
+    if(!p||!confirm("Excluir "+p.name+"?")) return;
     const snap=await getDoc(doc(db,"seasons",ACTIVE_SEASON));
     const data=snap.data();
     const players=(data.players||[]).filter(x=>x.uid!==uid);
