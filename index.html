@@ -2129,29 +2129,203 @@ function renderAdminPlayers(){
   }).join("")}</div>`;
 }
 
+let TOOLS_VIEW = "home"; // home | diagnose | audit
+let DIAGNOSE_EDIT_UID = null;
+
 function renderAdminTools(){
+  if(TOOLS_VIEW==="diagnose") return renderToolsDiagnose();
+  if(TOOLS_VIEW==="audit")    return renderToolsAudit();
+  return renderToolsHome();
+}
+
+function renderToolsHome(){
   return `<div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px">
-      Ferramentas de Manutenção
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px">Ferramentas de Manutenção</div>
+
+    <div class="card" style="margin-bottom:10px;cursor:pointer" id="btn-tool-diagnose">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">🔗</div>
+        <div>
+          <div style="font-weight:700;color:#fff;font-size:15px">Diagnóstico de Jogadores</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Ver vinculações, corrigir UIDs e editar nome/apelido de qualquer jogador</div>
+        </div>
+        <div style="margin-left:auto;color:var(--muted)">›</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;cursor:pointer" id="btn-tool-audit">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">🔬</div>
+        <div>
+          <div style="font-weight:700;color:#fff;font-size:15px">Auditoria Firestore</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Verificar duplicatas, UIDs fantasma e gerar relatório completo</div>
+        </div>
+        <div style="margin-left:auto;color:var(--muted)">›</div>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom:10px">
-      <div style="font-weight:700;color:#fff;margin-bottom:4px">🔧 Fix Auditoria #3</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
-        Corrige Bruno Heller, Danilo duplicado e Paulo Amaral
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">🧹</div>
+        <div style="flex:1">
+          <div style="font-weight:700;color:#fff;font-size:15px">Limpar Duplicatas</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Remove entradas duplicadas de mesmo UID, mantém dados do usuário</div>
+        </div>
+        <button class="btn by sm" id="btn-fix-dupes">▶ Executar</button>
       </div>
-      <button class="btn by sm" id="btn-fix-audit3">▶ Executar</button>
     </div>
 
-    <div class="card" style="margin-bottom:10px">
-      <div style="font-weight:700;color:#fff;margin-bottom:4px">🧹 Limpar Duplicatas</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
-        Remove entradas duplicadas de mesmo UID, mantém dados do usuário
+    <div id="tools-log" style="background:#111;border:1px solid #333;padding:12px;border-radius:4px;font-size:12px;font-family:monospace;line-height:2;min-height:40px;margin-top:8px;display:none"></div>
+  </div>`;
+}
+
+// ── DIAGNOSE ──────────────────────────────────────────────────────────────────
+function renderToolsDiagnose(){
+  const sorted = [...DB.players].sort((a,b)=>(a.name||"").localeCompare(b.name||"","pt-BR",{sensitivity:"base"}));
+  const linked   = sorted.filter(p=>p.email&&p.email.trim()!=="").length;
+  const unlinked = sorted.filter(p=>!p.email||p.email.trim()==="").length;
+
+  // If editing a player
+  if(DIAGNOSE_EDIT_UID){
+    const p = DB.players.find(x=>x.uid===DIAGNOSE_EDIT_UID);
+    if(p) return renderDiagnoseEdit(p);
+    DIAGNOSE_EDIT_UID=null;
+  }
+
+  return `<div>
+    <button class="btn bo mb10 sm" id="btn-tools-back">‹ Ferramentas</button>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="background:rgba(46,204,113,.15);border:1px solid rgba(46,204,113,.3);color:var(--green);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px;letter-spacing:1px">✓ ${linked} vinculados</span>
+      <span style="background:rgba(245,168,0,.1);border:1px solid rgba(245,168,0,.25);color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px;letter-spacing:1px">⚠ ${unlinked} sem login</span>
+    </div>
+    <div class="fr" style="margin-bottom:10px">
+      <input class="inp" id="diagnose-search" placeholder="🔍 Buscar jogador..." style="margin:0"/>
+    </div>
+    <div id="diagnose-list">
+      ${sorted.map(p=>{
+        const isLinked = p.email&&p.email.trim()!=="";
+        const isMock   = p.uid.startsWith("p_");
+        const stCount  = DB.stages.filter(s=>(s.results||[]).find(r=>r.playerId===p.uid)).length;
+        return `<div class="urow" style="flex-wrap:wrap;gap:6px;padding:10px 13px;border-left:3px solid ${isLinked?"var(--green)":"rgba(245,168,0,.4)"}">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+            ${AV(p.uid)}
+            <div style="min-width:0">
+              <div style="font-weight:600;color:#fff;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                ${p.name}
+                ${isLinked?`<span style="color:var(--green);font-size:11px">✓</span>`:`<span style="color:var(--yellow);font-size:10px;font-weight:700">⚠ sem login</span>`}
+              </div>
+              <div style="font-size:11px;color:var(--muted)">"${p.nickname||"?"}" · ${stCount} etapa${stCount!==1?"s":""}${p.email?` · ${p.email}`:""}</div>
+              <div style="font-size:10px;color:${isMock?"var(--red)":"#555"}">${p.uid}</div>
+            </div>
+          </div>
+          <button class="btn bo sm" data-diagnose-edit="${p.uid}" style="flex-shrink:0">✏ Editar</button>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+function renderDiagnoseEdit(p){
+  const stCount = DB.stages.filter(s=>(s.results||[]).find(r=>r.playerId===p.uid)).length;
+  return `<div>
+    <button class="btn bo mb10 sm" id="btn-diagnose-back">‹ Diagnóstico</button>
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        ${AV(p.uid,"lg")}
+        <div>
+          <div style="font-weight:700;font-size:16px;color:#fff">${p.name}</div>
+          <div style="font-size:12px;color:var(--muted)">${stCount} etapas · ${p.email||"sem email"}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${p.uid}</div>
+        </div>
       </div>
-      <button class="btn by sm" id="btn-fix-dupes">▶ Executar</button>
+      <div class="fr"><label class="lbl">Nome completo</label><input class="inp" id="dedit-name" value="${p.name}"/></div>
+      <div class="fr"><label class="lbl">Apelido</label><input class="inp" id="dedit-nick" value="${p.nickname||""}"/></div>
+      <div class="fr"><label class="lbl">Email</label><input class="inp" id="dedit-email" value="${p.email||""}" placeholder="email@dominio.com"/></div>
+      <div class="fr"><label class="lbl">UID Firebase (para vincular)</label><input class="inp" id="dedit-uid" value="${p.uid}" placeholder="Cole o UID do Firebase Auth"/></div>
+      <div id="dedit-err"></div>
+      <div class="row g8 mt8">
+        <button class="btn by fw" id="btn-dedit-save">✓ Salvar</button>
+        <button class="btn bd sm" id="btn-dedit-del">🗑 Excluir</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── AUDIT ─────────────────────────────────────────────────────────────────────
+function renderToolsAudit(){
+  const players = DB.players;
+  const stages  = DB.stages;
+  const allResultUids = new Set();
+  stages.forEach(s=>(s.results||[]).forEach(r=>allResultUids.add(r.playerId)));
+  const playerUids = new Set(players.map(p=>p.uid));
+
+  // Duplicates
+  const nameMap={};
+  players.forEach(p=>{const k=(p.name||"").toLowerCase().trim();if(!nameMap[k])nameMap[k]=[];nameMap[k].push(p);});
+  const dupes = Object.entries(nameMap).filter(([k,v])=>v.length>1);
+  const uidMap={};
+  players.forEach(p=>{if(!uidMap[p.uid])uidMap[p.uid]=[];uidMap[p.uid].push(p);});
+  const uidDupes = Object.entries(uidMap).filter(([k,v])=>v.length>1);
+
+  // Ghost UIDs
+  const ghosts=[...allResultUids].filter(u=>!playerUids.has(u));
+
+  // No email
+  const noEmail=players.filter(p=>!p.email||p.email.trim()==="");
+  const mocks=players.filter(p=>p.uid.startsWith("p_"));
+
+  return `<div>
+    <button class="btn bo mb10 sm" id="btn-tools-back">‹ Ferramentas</button>
+
+    <!-- Summary -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div class="ps"><div class="psv">${players.length}</div><div class="psl">Total jogadores</div></div>
+      <div class="ps" style="${ghosts.length>0?"border-color:var(--red)":""}"><div class="psv" style="${ghosts.length>0?"color:var(--red)":""}">${ghosts.length}</div><div class="psl">UIDs fantasma</div></div>
+      <div class="ps" style="${uidDupes.length>0?"border-color:var(--red)":""}"><div class="psv" style="${uidDupes.length>0?"color:var(--red)":""}">${uidDupes.length}</div><div class="psl">UIDs duplicados</div></div>
+      <div class="ps"><div class="psv">${mocks.length}</div><div class="psl">Sem conta (p_*)</div></div>
     </div>
 
-    <div id="tools-log" style="background:#111;border:1px solid #333;padding:12px;border-radius:4px;font-size:12px;font-family:monospace;line-height:2;min-height:60px;margin-top:12px;display:none"></div>
+    ${ghosts.length>0?`
+    <div class="card" style="border-left:3px solid var(--red);margin-bottom:10px">
+      <div style="font-weight:700;color:var(--red);margin-bottom:8px">❌ UIDs Fantasma (${ghosts.length})</div>
+      ${ghosts.map(uid=>{
+        const inStages=stages.filter(s=>(s.results||[]).find(r=>r.playerId===uid)).map(s=>s.name);
+        return `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
+          <div style="color:var(--red);font-family:monospace">${uid}</div>
+          <div style="color:var(--muted)">em: ${inStages.join(", ")}</div>
+        </div>`;
+      }).join("")}
+    </div>`:""}
+
+    ${uidDupes.length>0?`
+    <div class="card" style="border-left:3px solid var(--red);margin-bottom:10px">
+      <div style="font-weight:700;color:var(--red);margin-bottom:8px">⚠ UIDs Duplicados (${uidDupes.length})</div>
+      ${uidDupes.map(([uid,list])=>`
+        <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;color:var(--muted);font-family:monospace">${uid}</div>
+          ${list.map(p=>`<div style="font-size:12px;color:#fff;padding:2px 0">${p.name} / "${p.nickname}" ${p.email?`· ${p.email}`:""}</div>`).join("")}
+        </div>`).join("")}
+      <button class="btn by sm mt8" id="btn-fix-dupes-audit">🧹 Limpar duplicatas agora</button>
+    </div>`:""}
+
+    ${dupes.length>0?`
+    <div class="card" style="border-left:3px solid var(--yellow);margin-bottom:10px">
+      <div style="font-weight:700;color:var(--yellow);margin-bottom:8px">⚠ Nomes Duplicados (${dupes.length})</div>
+      ${dupes.map(([name,list])=>`
+        <div style="margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600;color:#fff">${list[0].name}</div>
+          ${list.map(p=>`<div style="font-size:11px;color:var(--muted)">${p.uid} · ${p.email||"sem email"}</div>`).join("")}
+        </div>`).join("")}
+    </div>`:""}
+
+    ${ghosts.length===0&&uidDupes.length===0&&dupes.length===0?`
+    <div class="card" style="border-left:3px solid var(--green)">
+      <div style="color:var(--green);font-weight:700">🎉 Base saudável! Nenhum problema encontrado.</div>
+    </div>`:""}
+
+    <!-- Export -->
+    <button class="btn bo sm mt8" id="btn-audit-export">📋 Exportar JSON</button>
+    <div id="tools-log" style="background:#111;border:1px solid #333;padding:12px;border-radius:4px;font-size:12px;font-family:monospace;line-height:2;margin-top:8px;display:none"></div>
   </div>`;
 }
 
@@ -2162,66 +2336,6 @@ function toolsLog(msg, cls=""){
   const color = cls==="ok"?"#2ecc71":cls==="err"?"#e74c3c":cls==="warn"?"#F5A800":"#aaa";
   el.innerHTML += `<div style="color:${color}">${msg}</div>`;
   el.scrollTop = el.scrollHeight;
-}
-
-async function runFixAudit3(){
-  const PTS={1:25,2:18,3:15,4:12,5:10,6:8,7:6,8:4,9:3};
-  const UID_FIXES = [
-    {oldUid:"p_bruno_heller", newUid:"JT5CNWHf2qYql73ep9qagN1g4iD2", name:"Bruno Heller", nick:"Bruno"},
-    {oldUid:"p_paulo_amaral", newUid:"1JYKpBUMYkPL9SahDEOINiSH3dZ2", name:"Paulo Amaral", nick:"Paulo", needsSetup:true},
-  ];
-
-  // Read fresh data from Firestore
-  const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
-  const data = snap.data();
-  let players = [...(data.players||[])];
-  let stages  = [...(data.stages||[])];
-  const admins = data.admins||[];
-
-  for(const fix of UID_FIXES){
-    toolsLog(`── ${fix.name}`, "warn");
-    let stagesFixed=0;
-    stages = stages.map(s=>{
-      let mod=false;
-      const results=(s.results||[]).map(r=>{ if(r.playerId===fix.oldUid){mod=true;return{...r,playerId:fix.newUid};} return r; });
-      const ins=(s.inscriptions||[]).map(u=>{ if(u===fix.oldUid){mod=true;return fix.newUid;} return u; });
-      if(mod){stagesFixed++;return{...s,results,inscriptions:ins};}
-      return s;
-    });
-    toolsLog(`  ✅ ${stagesFixed} etapas corrigidas`, "ok");
-
-    const mockIdx  = players.findIndex(p=>p.uid===fix.oldUid);
-    const realIdx  = players.findIndex(p=>p.uid===fix.newUid);
-    if(realIdx>=0 && mockIdx>=0){
-      players[realIdx]={...players[realIdx],name:fix.name,nickname:fix.nick,needsSetup:fix.needsSetup||false};
-      players.splice(players.findIndex(p=>p.uid===fix.oldUid),1);
-      toolsLog(`  ✅ Entrada real atualizada, mock removido`, "ok");
-    } else if(mockIdx>=0){
-      players[mockIdx]={...players[mockIdx],uid:fix.newUid,name:fix.name,nickname:fix.nick,needsSetup:fix.needsSetup||false};
-      toolsLog(`  ✅ Mock → UID real`, "ok");
-    }
-  }
-
-  // Fix Danilo duplicate
-  toolsLog(`── Danilo Di Pieri`, "warn");
-  const dUid="nGxrlk3VJMPrFtxF8z69Lmvrkin1";
-  const dEntries=players.filter(p=>p.uid===dUid);
-  if(dEntries.length>1){
-    const keep=dEntries.find(p=>p.name==="Danilo Di Pieri")||dEntries[0];
-    players=players.filter(p=>p.uid!==dUid||p===keep);
-    toolsLog(`  ✅ Duplicata removida, mantido "${keep.name}"`, "ok");
-  } else { toolsLog(`  ℹ️  Sem duplicata`, "info"); }
-
-  // Dedup
-  const seen=new Set(); players=players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
-
-  await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
-  DB.players=players; DB.stages=stages;
-
-  let brunoPts=0;
-  stages.forEach(s=>{const r=(s.results||[]).find(x=>x.playerId==="JT5CNWHf2qYql73ep9qagN1g4iD2");if(r)brunoPts+=(PTS[r.position]||2);});
-  toolsLog(`Bruno: ${brunoPts}pts ${brunoPts===28?"✅":"❌"}`, brunoPts===28?"ok":"err");
-  toolsLog("✅ Concluído! Recarregue a página.", "ok");
 }
 
 async function runFixDupes(){
@@ -2240,17 +2354,15 @@ async function runFixDupes(){
     } else {
       const idx=seen.get(p.uid);
       const existing=cleaned[idx];
-      // Keep user-filled data (has email + non-default nickname)
       const pIsUser = p.email && p.nickname && p.nickname!==p.name.split(" ")[0];
       const eIsUser = existing.email && existing.nickname && existing.nickname!==existing.name.split(" ")[0];
-      if(pIsUser && !eIsUser){ cleaned[idx]={...p}; toolsLog(`  🔄 Preferindo dados do usuário: "${p.name}"`, "ok"); }
-      else { toolsLog(`  🗑️  Removido: "${p.name}"`, "warn"); }
+      if(pIsUser && !eIsUser){ cleaned[idx]={...p}; toolsLog(`🔄 Preferindo: "${p.name}"`, "ok"); }
+      else { toolsLog(`🗑️ Removido: "${p.name}"`, "warn"); }
     }
   });
   await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players:cleaned,stages,admins,updatedAt:serverTimestamp()});
   DB.players=cleaned;
-  toolsLog(`Jogadores: ${before} → ${cleaned.length} (${before-cleaned.length} removidos)`, "ok");
-  toolsLog("✅ Concluído!", "ok");
+  toolsLog(`✅ ${before} → ${cleaned.length} jogadores (${before-cleaned.length} removidos)`, "ok");
 }
 
 // ── STAGE MODAL ───────────────────────────────────────────────────────────────
@@ -2707,18 +2819,99 @@ function bindEvents(){
   document.querySelectorAll("[data-share-ins]").forEach(btn=>{
     btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.shareIns;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;openShareModal(stage);});
   });
-  // Admin tools
-  document.getElementById("btn-fix-audit3")?.addEventListener("click", async()=>{
-    document.getElementById("tools-log").innerHTML="";
-    document.getElementById("btn-fix-audit3").disabled=true;
-    try{ await runFixAudit3(); }catch(e){ toolsLog("❌ "+e.message,"err"); }
-    document.getElementById("btn-fix-audit3").disabled=false;
+  // Admin tools — home
+  document.getElementById("btn-tool-diagnose")?.addEventListener("click",()=>{ TOOLS_VIEW="diagnose"; render(); });
+  document.getElementById("btn-tool-audit")?.addEventListener("click",()=>{ TOOLS_VIEW="audit"; render(); });
+  document.getElementById("btn-tools-back")?.addEventListener("click",()=>{ TOOLS_VIEW="home"; DIAGNOSE_EDIT_UID=null; render(); });
+
+  // Diagnose fix-dupes (both from home and audit)
+  ["btn-fix-dupes","btn-fix-dupes-audit"].forEach(id=>{
+    document.getElementById(id)?.addEventListener("click", async()=>{
+      const el=document.getElementById(id); if(el)el.disabled=true;
+      const logEl=document.getElementById("tools-log"); if(logEl)logEl.innerHTML="";
+      try{ await runFixDupes(); render(); }catch(e){ toolsLog("❌ "+e.message,"err"); }
+      if(el)el.disabled=false;
+    });
   });
-  document.getElementById("btn-fix-dupes")?.addEventListener("click", async()=>{
-    document.getElementById("tools-log").innerHTML="";
-    document.getElementById("btn-fix-dupes").disabled=true;
-    try{ await runFixDupes(); }catch(e){ toolsLog("❌ "+e.message,"err"); }
-    document.getElementById("btn-fix-dupes").disabled=false;
+
+  // Diagnose search
+  document.getElementById("diagnose-search")?.addEventListener("input",function(){
+    const q=this.value.toLowerCase();
+    document.querySelectorAll("#diagnose-list .urow").forEach(row=>{
+      row.style.display=row.textContent.toLowerCase().includes(q)?"flex":"none";
+    });
+  });
+
+  // Diagnose edit button
+  document.querySelectorAll("[data-diagnose-edit]").forEach(btn=>{
+    btn.addEventListener("click",()=>{ DIAGNOSE_EDIT_UID=btn.dataset.diagnoseEdit; render(); });
+  });
+
+  // Diagnose back from edit
+  document.getElementById("btn-diagnose-back")?.addEventListener("click",()=>{ DIAGNOSE_EDIT_UID=null; render(); });
+
+  // Diagnose save edit
+  document.getElementById("btn-dedit-save")?.addEventListener("click", async()=>{
+    const name  = document.getElementById("dedit-name")?.value.trim();
+    const nick  = document.getElementById("dedit-nick")?.value.trim();
+    const email = document.getElementById("dedit-email")?.value.trim();
+    const newUid= document.getElementById("dedit-uid")?.value.trim();
+    const errEl = document.getElementById("dedit-err");
+    if(!name||!nick){ if(errEl)errEl.innerHTML='<div class="err-msg">Nome e apelido obrigatórios.</div>'; return; }
+    const oldUid = DIAGNOSE_EDIT_UID;
+    const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
+    const data  = snap.data();
+    let players = [...(data.players||[])];
+    let stages  = data.stages||[];
+    const admins= data.admins||[];
+    // Update player entry
+    players = players.map(p=>p.uid===oldUid?{...p,name,nickname:nick,email:email||p.email,uid:newUid||p.uid}:p);
+    // Update stages if UID changed
+    if(newUid && newUid!==oldUid){
+      stages = stages.map(s=>({
+        ...s,
+        results:(s.results||[]).map(r=>r.playerId===oldUid?{...r,playerId:newUid}:r),
+        inscriptions:(s.inscriptions||[]).map(u=>u===oldUid?newUid:u)
+      }));
+    }
+    // Dedup
+    const seen=new Set(); players=players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
+    await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
+    DB.players=players; DB.stages=stages;
+    DIAGNOSE_EDIT_UID=null;
+    showToast("Jogador atualizado!","green");
+    render();
+  });
+
+  // Diagnose delete player
+  document.getElementById("btn-dedit-del")?.addEventListener("click", async()=>{
+    const p=DB.players.find(x=>x.uid===DIAGNOSE_EDIT_UID);
+    if(!p||!confirm("Excluir "+p.name+"?")) return;
+    const snap=await getDoc(doc(db,"seasons",ACTIVE_SEASON));
+    const data=snap.data();
+    let players=(data.players||[]).filter(x=>x.uid!==DIAGNOSE_EDIT_UID);
+    await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages:data.stages||[],admins:data.admins||[],updatedAt:serverTimestamp()});
+    DB.players=players;
+    DIAGNOSE_EDIT_UID=null;
+    showToast(p.name+" removido.","green");
+    render();
+  });
+
+  // Audit export
+  document.getElementById("btn-audit-export")?.addEventListener("click",()=>{
+    const players=DB.players; const stages=DB.stages;
+    const allUids=new Set(); stages.forEach(s=>(s.results||[]).forEach(r=>allUids.add(r.playerId)));
+    const pUids=new Set(players.map(p=>p.uid));
+    const report={
+      summary:{totalPlayers:players.length,totalStages:stages.length,linkedPlayers:players.filter(p=>p.email&&p.email.trim()!=="").length,unlinkedPlayers:players.filter(p=>!p.email||p.email.trim()==="").length,mockUids:players.filter(p=>p.uid.startsWith("p_")).length},
+      duplicates:[],ghostUids:[...[...allUids].filter(u=>!pUids.has(u)).map(uid=>({uid,stages:stages.filter(s=>(s.results||[]).find(r=>r.playerId===uid)).map(s=>s.name)}))],
+      playerList:[...players].sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(p=>({uid:p.uid,name:p.name,nickname:p.nickname,email:p.email||"",isMock:p.uid.startsWith("p_"),stagesCount:stages.filter(s=>(s.results||[]).find(r=>r.playerId===p.uid)).length}))
+    };
+    const nm={}; players.forEach(p=>{const k=(p.name||"").toLowerCase().trim();if(!nm[k])nm[k]=[];nm[k].push(p);}); 
+    report.duplicates=Object.entries(nm).filter(([k,v])=>v.length>1).map(([name,list])=>({name,entries:list.map(p=>({uid:p.uid,email:p.email||"",isMock:p.uid.startsWith("p_")}))}));
+    const blob=new Blob([JSON.stringify(report,null,2)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ppp-audit-report.json";a.click();
+    showToast("Relatório exportado!","green");
   });
 
   // HOF filter tabs
