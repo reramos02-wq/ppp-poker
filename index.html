@@ -2244,8 +2244,8 @@ function renderDiagnoseEdit(p){
       <div class="fr"><label class="lbl">UID Firebase (para vincular)</label><input class="inp" id="dedit-uid" value="${p.uid}" placeholder="Cole o UID do Firebase Auth"/></div>
       <div id="dedit-err"></div>
       <div class="row g8 mt8">
-        <button class="btn by fw" id="btn-dedit-save">✓ Salvar</button>
-        <button class="btn bd sm" id="btn-dedit-del">🗑 Excluir</button>
+        <button class="btn by fw" id="btn-dedit-save" onclick="window.saveDiagnoseEdit('${p.uid}')">✓ Salvar</button>
+        <button class="btn bd sm" id="btn-dedit-del" onclick="window.deleteDiagnosePlayer('${p.uid}')">🗑 Excluir</button>
       </div>
     </div>
   </div>`;
@@ -2819,6 +2819,79 @@ function bindEvents(){
   document.querySelectorAll("[data-share-ins]").forEach(btn=>{
     btn.addEventListener("click",e=>{e.stopPropagation();const sid=btn.dataset.shareIns;const stage=DB.stages.find(s=>s.id===sid);if(!stage)return;openShareModal(stage);});
   });
+  // ── Global diagnose functions (inline onclick safe) ──────────────────────
+  window.navDiagnose = function(){ DIAGNOSE_EDIT_UID=null; render(); };
+  window.navToolsBack = function(){ TOOLS_VIEW="home"; DIAGNOSE_EDIT_UID=null; render(); };
+
+  window.saveDiagnoseEdit = async function(oldUid){
+    const name   = document.getElementById("dedit-name")?.value.trim();
+    const nick   = document.getElementById("dedit-nick")?.value.trim();
+    const email  = document.getElementById("dedit-email")?.value.trim();
+    const newUid = document.getElementById("dedit-uid")?.value.trim();
+    const errEl  = document.getElementById("dedit-err");
+    const saveBtn= document.getElementById("btn-dedit-save");
+
+    if(!name||!nick){
+      if(errEl) errEl.innerHTML='<div class="err-msg">Nome e apelido obrigatórios.</div>';
+      return;
+    }
+    if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent="Salvando..."; }
+
+    try {
+      const snap  = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
+      const data  = snap.data();
+      let players = [...(data.players||[])];
+      let stages  = [...(data.stages||[])];
+      const admins= data.admins||[];
+      const finalUid = (newUid && newUid!==oldUid) ? newUid : oldUid;
+
+      // Update player entry
+      const pidx = players.findIndex(p=>p.uid===oldUid);
+      if(pidx>=0){
+        players[pidx] = {...players[pidx], name, nickname:nick, email:email||players[pidx].email||"", uid:finalUid};
+      } else {
+        players.push({uid:finalUid, name, nickname:nick, email:email||"", season:ACTIVE_SEASON});
+      }
+
+      // Update stages if UID changed
+      if(newUid && newUid!==oldUid){
+        stages = stages.map(s=>({
+          ...s,
+          results:(s.results||[]).map(r=>r.playerId===oldUid?{...r,playerId:finalUid}:r),
+          inscriptions:(s.inscriptions||[]).map(u=>u===oldUid?finalUid:u)
+        }));
+        const stFixed = stages.filter(s=>(s.results||[]).find(r=>r.playerId===finalUid)).length;
+        console.log(`UID updated in ${stFixed} stages`);
+      }
+
+      // Remove duplicates (keep the updated entry)
+      const seen=new Set();
+      players = players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
+
+      await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
+      DB.players=players; DB.stages=stages;
+      DIAGNOSE_EDIT_UID=null;
+      showToast("Jogador atualizado!","green");
+      render();
+    } catch(e){
+      if(errEl) errEl.innerHTML=`<div class="err-msg">Erro: ${e.message}</div>`;
+      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent="✓ Salvar"; }
+    }
+  };
+
+  window.deleteDiagnosePlayer = async function(uid){
+    const p=DB.players.find(x=>x.uid===uid);
+    if(!p||!confirm("Excluir "+p.name+"? Esta ação não pode ser desfeita.")) return;
+    const snap=await getDoc(doc(db,"seasons",ACTIVE_SEASON));
+    const data=snap.data();
+    const players=(data.players||[]).filter(x=>x.uid!==uid);
+    await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages:data.stages||[],admins:data.admins||[],updatedAt:serverTimestamp()});
+    DB.players=players;
+    DIAGNOSE_EDIT_UID=null;
+    showToast(p.name+" removido.","green");
+    render();
+  };
+
   // Admin tools — home
   document.getElementById("btn-tool-diagnose")?.addEventListener("click",()=>{ TOOLS_VIEW="diagnose"; render(); });
   document.getElementById("btn-tool-audit")?.addEventListener("click",()=>{ TOOLS_VIEW="audit"; render(); });
@@ -2850,52 +2923,7 @@ function bindEvents(){
   // Diagnose back from edit
   document.getElementById("btn-diagnose-back")?.addEventListener("click",()=>{ DIAGNOSE_EDIT_UID=null; render(); });
 
-  // Diagnose save edit
-  document.getElementById("btn-dedit-save")?.addEventListener("click", async()=>{
-    const name  = document.getElementById("dedit-name")?.value.trim();
-    const nick  = document.getElementById("dedit-nick")?.value.trim();
-    const email = document.getElementById("dedit-email")?.value.trim();
-    const newUid= document.getElementById("dedit-uid")?.value.trim();
-    const errEl = document.getElementById("dedit-err");
-    if(!name||!nick){ if(errEl)errEl.innerHTML='<div class="err-msg">Nome e apelido obrigatórios.</div>'; return; }
-    const oldUid = DIAGNOSE_EDIT_UID;
-    const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
-    const data  = snap.data();
-    let players = [...(data.players||[])];
-    let stages  = data.stages||[];
-    const admins= data.admins||[];
-    // Update player entry
-    players = players.map(p=>p.uid===oldUid?{...p,name,nickname:nick,email:email||p.email,uid:newUid||p.uid}:p);
-    // Update stages if UID changed
-    if(newUid && newUid!==oldUid){
-      stages = stages.map(s=>({
-        ...s,
-        results:(s.results||[]).map(r=>r.playerId===oldUid?{...r,playerId:newUid}:r),
-        inscriptions:(s.inscriptions||[]).map(u=>u===oldUid?newUid:u)
-      }));
-    }
-    // Dedup
-    const seen=new Set(); players=players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
-    await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
-    DB.players=players; DB.stages=stages;
-    DIAGNOSE_EDIT_UID=null;
-    showToast("Jogador atualizado!","green");
-    render();
-  });
-
-  // Diagnose delete player
-  document.getElementById("btn-dedit-del")?.addEventListener("click", async()=>{
-    const p=DB.players.find(x=>x.uid===DIAGNOSE_EDIT_UID);
-    if(!p||!confirm("Excluir "+p.name+"?")) return;
-    const snap=await getDoc(doc(db,"seasons",ACTIVE_SEASON));
-    const data=snap.data();
-    let players=(data.players||[]).filter(x=>x.uid!==DIAGNOSE_EDIT_UID);
-    await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages:data.stages||[],admins:data.admins||[],updatedAt:serverTimestamp()});
-    DB.players=players;
-    DIAGNOSE_EDIT_UID=null;
-    showToast(p.name+" removido.","green");
-    render();
-  });
+  // Diagnose save/delete handled by window.saveDiagnoseEdit and window.deleteDiagnosePlayer (inline onclick)
 
   // Audit export
   document.getElementById("btn-audit-export")?.addEventListener("click",()=>{
