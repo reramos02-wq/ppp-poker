@@ -3224,7 +3224,7 @@ function startListeners(user){
         ensurePlayerProfile(user).then(()=>{
           IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
           dbg("18. Renderizando app...");
-          if(!DIAGNOSE_EDIT_UID) render();
+          if(!DIAGNOSE_EDIT_UID && TOOLS_VIEW==="home") render();
         });
       } else {
         // Re-apply current player (snapshot may have stale data briefly)
@@ -3232,8 +3232,8 @@ function startListeners(user){
         CURRENT_PLAYER = freshPlayer || CURRENT_PLAYER;
         dbg("18. Renderizando app...");
         // Don't re-render if admin is editing in tools (would destroy form)
-        if(DIAGNOSE_EDIT_UID){
-          // Just update DB silently, don't touch the DOM
+        if(DIAGNOSE_EDIT_UID || TOOLS_VIEW==="diagnose" || TOOLS_VIEW==="audit"){
+          // Update DB silently, preserve DOM
         } else {
           render();
         }
