@@ -78,7 +78,7 @@ body{background:var(--bg-dark);color:var(--text);font-family:'Barlow',sans-serif
 .rr{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--border);}
 .rr:last-child{border-bottom:none;}
 .rpos{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;width:28px;text-align:center;flex-shrink:0;}
-.rp1{color:#FFD700;}.rp2{color:#C0C0C0;}.rp3{color:#CD7F32;}.rpx{color:var(--muted);font-size:14px;}
+.rp1{color:#FFD700;font-size:22px;}.rp2{color:#C0C0C0;font-size:20px;}.rp3{color:#CD7F32;font-size:18px;}.rpx{color:var(--muted);font-size:14px;}
 .av{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;flex-shrink:0;}
 .avlg{width:52px;height:52px;font-size:15px;border-width:2px;}
 .avxl{width:64px;height:64px;font-size:18px;border:3px solid var(--yellow);}
@@ -159,7 +159,7 @@ body{background:var(--bg-dark);color:var(--text);font-family:'Barlow',sans-serif
 .rbdg{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;padding:2px 8px;letter-spacing:1px;text-transform:uppercase;}
 .rm2{background:rgba(255,215,0,.15);color:#FFD700;border:1px solid rgba(255,215,0,.3);}
 .ru{background:rgba(128,128,128,.12);color:var(--muted);border:1px solid rgba(128,128,128,.2);}
-.rp2{background:rgba(245,168,0,.1);color:var(--yellow);border:1px solid rgba(245,168,0,.25);}
+
 
 /* BUTTONS */
 .btn{padding:9px 18px;border-radius:2px;border:none;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px;}
@@ -426,21 +426,25 @@ function isLive(stage){
 }
 
 function shouldShowMovement(){
-  // Show arrows if: there's a live/recently finished stage
-  // Hide if: next upcoming stage starts in < 48h
   const now = new Date();
+  // Check if there's a live stage
+  const live = getLiveStage();
+  if(live) return true;
+  // Check if last finished stage was recent enough
+  const lastFinished = [...DB.stages].filter(s=>s.status==="finished")
+    .sort((a,b)=>b.date.localeCompare(a.date))[0];
+  if(!lastFinished) return false;
+  // Hide 48h BEFORE next upcoming stage (not after)
   const nextStage = DB.stages.find(s=>s.status==="upcoming");
   if(nextStage && nextStage.date && nextStage.time){
     const [y,m,d] = nextStage.date.split("-").map(Number);
     const [h,mi]  = nextStage.time.split(":").map(Number);
     const nextStart = new Date(y, m-1, d, h, mi, 0);
     const diffHours = (nextStart - now) / (1000*60*60);
-    if(diffHours <= 48) return false;
+    // Only hide if next stage is in less than 48h AND hasn't started yet
+    if(diffHours > 0 && diffHours <= 48) return false;
   }
-  // Show if last finished stage exists
-  const lastFinished = [...DB.stages].filter(s=>s.status==="finished")
-    .sort((a,b)=>b.date.localeCompare(a.date))[0];
-  return !!lastFinished;
+  return true;
 }
 
 function calcRankingMovement(type){
