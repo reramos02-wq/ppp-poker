@@ -327,6 +327,23 @@ select.inp{appearance:none;}
 @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.4);color:#e74c3c;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;padding:3px 10px;border-radius:3px;text-transform:uppercase}
 .live-dot{width:7px;height:7px;border-radius:50%;background:#e74c3c;animation:livePulse 1.2s infinite}
+.rn{display:flex;align-items:center;gap:2px;}
+
+/* PODIUM */
+.podium-wrap{display:flex;align-items:flex-end;justify-content:center;gap:8px;padding:24px 12px 0;margin-bottom:4px}
+.podium-slot{display:flex;flex-direction:column;align-items:center;flex:1;max-width:140px}
+.podium-photo{border-radius:50%;background:var(--surface2);border:3px solid #888;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;color:#fff;flex-shrink:0;margin-bottom:8px}
+.podium-photo.p1{width:80px;height:80px;font-size:24px;border-color:#FFD700;box-shadow:0 0 20px rgba(255,215,0,.3)}
+.podium-photo.p2{width:66px;height:66px;font-size:20px;border-color:#C0C0C0}
+.podium-photo.p3{width:58px;height:58px;font-size:17px;border-color:#CD7F32}
+.podium-name{font-size:12px;color:#fff;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;max-width:120px}
+.podium-nick{font-size:11px;color:var(--muted);text-align:center}
+.podium-pts{font-family:'Barlow Condensed',sans-serif;font-weight:900;color:var(--yellow);text-align:center}
+.podium-pts.p1{font-size:22px}.podium-pts.p2{font-size:18px}.podium-pts.p3{font-size:16px}
+.podium-base{width:100%;border-radius:4px 4px 0 0;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff}
+.podium-base.p1{height:72px;background:linear-gradient(180deg,rgba(255,215,0,.25) 0%,rgba(255,215,0,.1) 100%);border:1px solid rgba(255,215,0,.3);border-bottom:none;font-size:26px}
+.podium-base.p2{height:54px;background:linear-gradient(180deg,rgba(192,192,192,.15) 0%,rgba(192,192,192,.05) 100%);border:1px solid rgba(192,192,192,.2);border-bottom:none}
+.podium-base.p3{height:42px;background:linear-gradient(180deg,rgba(205,127,50,.15) 0%,rgba(205,127,50,.05) 100%);border:1px solid rgba(205,127,50,.2);border-bottom:none}
 </style>
 </head>
 <body>
@@ -515,8 +532,8 @@ function movementBadge(uid, type){
   const mv = calcRankingMovement(type||"geral");
   const m = mv[uid];
   if(!m || m.delta===0 || m.prev===null) return "";
-  if(m.delta > 0) return `<span style="color:#2ecc71;font-size:10px;font-weight:700;margin-left:4px">▲${m.delta}</span>`;
-  return `<span style="color:#e74c3c;font-size:10px;font-weight:700;margin-left:4px">▼${Math.abs(m.delta)}</span>`;
+  if(m.delta > 0) return `<span style="color:#2ecc71;font-size:9px;font-weight:700;margin-left:3px;white-space:nowrap">▲${m.delta}</span>`;
+  return `<span style="color:#e74c3c;font-size:9px;font-weight:700;margin-left:3px;white-space:nowrap">▼${Math.abs(m.delta)}</span>`;
 }
 const ini  = name => (name||"").trim().split(" ").filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase()||"?";
 const fmtD = d => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"});}catch{return d;} };
@@ -1463,7 +1480,7 @@ function renderRanking(){
   <div class="rl">${list.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
     <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
     <div class="ri">
-      <div class="rn">${r.p.nickname}</div>
+      <div class="rn">${r.p.nickname}${movementBadge(r.p.uid,RANK_TAB)}</div>
       <div class="rm">${r.stages} etapa${r.stages!==1?"s":""}${isKO?` · 🥊 ${r.ko}`:""}${isGeral&&r.ko>0?` · 🥊 ${r.ko}`:""}${isGeral?` <span style="font-size:10px;color:var(--muted)">(🃏${r.nlPts} + 🥊${r.koPts})</span>`:""}</div>
     </div>
     <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
@@ -1506,7 +1523,8 @@ function renderStageDetail(sid){
   const iAmIn = ins.includes(CURRENT_USER_UID||"");
   const upcoming = DB.stages.filter(x=>x.status==="upcoming");
   const isNext = upcoming.length>0 && upcoming[0].id===s.id;
-  const badgeCls = s.isFinal?"bfin":s.status==="finished"?"bdone":isNext?"bnext":"bfuture";
+  const live = isLive(s);
+  const badgeCls = s.isFinal?"bfin":s.status==="finished"?"bdone":live?"":"bnext";
   const badgeLbl = s.isFinal?"🏆 Final":s.status==="finished"?"Encerrada":isNext?"Próxima":"Futura";
   const tipo = s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout";
 
@@ -1593,22 +1611,67 @@ function renderStageDetail(sid){
         </div>`;}).join("")}
     </div>`:""}
 
-    ${s.status==="finished"&&(s.results||[]).length?`
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden">
-      <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Resultado Final</div>
-      </div>
-      ${(s.results||[]).map(r=>{const pl=getP(r.playerId)||{nickname:"?",name:"?"};return `
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #1a1a1a">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:${r.position<=3?"var(--yellow)":"var(--muted)"};width:32px;text-align:center">${r.position}º</div>
-        ${AV(r.playerId)}
-        <div style="flex:1"><div style="font-size:14px;color:#fff;font-weight:600">${pl.nickname}</div></div>
-        <div style="text-align:right">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow)">${r.points}<span style="font-size:10px;margin-left:2px">pts</span></div>
-          ${s.type==="knockout"?`<div style="font-size:11px;color:var(--muted)">🥊 ${r.knockouts||0} KO</div>`:""}
+    ${(()=>{
+      const res = (s.results||[]).sort((a,b)=>a.position-b.position);
+      if(!res.length || s.status!=="finished") return "";
+      const isKO = s.type==="knockout";
+      const top3 = res.filter(r=>r.position<=3);
+      const rest = res.filter(r=>r.position>3);
+
+      // Podium order: 2nd left, 1st center, 3rd right
+      const podiumOrder = [
+        top3.find(r=>r.position===2),
+        top3.find(r=>r.position===1),
+        top3.find(r=>r.position===3),
+      ].filter(Boolean);
+
+      const podiumSlot = (r, cls) => {
+        if(!r) return `<div class="podium-slot"></div>`;
+        const pl = getP(r.playerId)||{nickname:"?",name:"?"};
+        const medal = cls==="p1"?"🥇":cls==="p2"?"🥈":"🥉";
+        return `<div class="podium-slot">
+          <div class="podium-pts ${cls}">${r.points}<span style="font-size:10px">pts</span></div>
+          ${isKO&&r.knockouts>0?`<div style="font-size:10px;color:var(--muted);margin-bottom:4px">🥊${r.knockouts}</div>`:""}
+          <div class="podium-photo ${cls}" data-profile="${r.playerId}">${ini(pl.name)}</div>
+          <div class="podium-name">${pl.name}</div>
+          <div class="podium-nick">"${pl.nickname}"</div>
+          <div class="podium-base ${cls}">${medal}</div>
+        </div>`;
+      };
+
+      return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:0">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Resultado Final</div>
+          <button id="btn-export-podium" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;cursor:pointer;border-radius:3px;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px">📸 EXPORTAR PÓDIO</button>
         </div>
-      </div>`;}).join("")}
-    </div>`:""}
+
+        <!-- Podium -->
+        <div id="podium-export" style="background:linear-gradient(180deg,#1a1a1a 0%,var(--surface) 100%);padding-bottom:0">
+          <div style="text-align:center;padding:16px 0 0;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;letter-spacing:3px;color:var(--muted);text-transform:uppercase">${s.name} · ${s.type==="nlholdem"?"NL Hold'em":"Knockout"} · ${fmtD(s.date)}</div>
+          <div class="podium-wrap">
+            ${podiumSlot(podiumOrder[0],"p2")}
+            ${podiumSlot(podiumOrder[1],"p1")}
+            ${podiumSlot(podiumOrder[2],"p3")}
+          </div>
+          <div style="height:3px;background:linear-gradient(90deg,transparent,rgba(255,215,0,.3),transparent);margin:0 20px"></div>
+        </div>
+
+        <!-- Rest of results -->
+        ${rest.map(r=>{
+          const pl=getP(r.playerId)||{nickname:"?",name:"?"};
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #1a1a1a">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--muted);width:32px;text-align:center">${r.position}º</div>
+            ${AV(r.playerId)}
+            <div style="flex:1">
+              <div style="font-size:13px;color:#fff;font-weight:600">${pl.nickname}</div>
+              ${isKO&&r.knockouts>0?`<div style="font-size:10px;color:var(--muted)">🥊 ${r.knockouts} KO</div>`:""}
+            </div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${r.points}<span style="font-size:9px">pts</span></div>
+          </div>`;
+        }).join("")}
+      </div>`;
+    })()}
   </div>`;
 }
 
@@ -2658,6 +2721,37 @@ function openPlayerModal(){
 }
 
 // ── BIND EVENTS ───────────────────────────────────────────────────────────────
+// Export podium as image
+window.exportPodium = async function(){
+  const el = document.getElementById("podium-export");
+  if(!el){ showToast("Pódio não encontrado","red"); return; }
+  try {
+    // Load html2canvas if not loaded
+    if(!window.html2canvas){
+      await new Promise((res,rej)=>{
+        const s=document.createElement("script");
+        s.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+        s.onload=res; s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    showToast("Gerando imagem...","green");
+    const canvas = await html2canvas(el, {
+      backgroundColor:"#1a1a1a",
+      scale:2,
+      useCORS:true,
+      logging:false
+    });
+    const link = document.createElement("a");
+    link.download = "podium-ppp-poker.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    showToast("Imagem salva!","green");
+  } catch(e){
+    showToast("Erro ao exportar: "+e.message,"red");
+  }
+};
+
 function bindProfileSetup(){
   document.getElementById("btn-setup-save")?.addEventListener("click", async()=>{
     const name = document.getElementById("setup-name")?.value.trim();
@@ -2972,6 +3066,9 @@ function bindEvents(){
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ppp-audit-report.json";a.click();
     showToast("Relatório exportado!","green");
   });
+
+  // Export podium
+  document.getElementById("btn-export-podium")?.addEventListener("click", window.exportPodium);
 
   // HOF filter tabs
   document.querySelectorAll("[data-hof-tab]").forEach(btn=>{
