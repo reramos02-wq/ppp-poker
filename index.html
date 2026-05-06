@@ -82,8 +82,8 @@ body{background:var(--bg-dark);color:var(--text);font-family:'Barlow',sans-serif
 .av{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;flex-shrink:0;}
 .avlg{width:52px;height:52px;font-size:15px;border-width:2px;}
 .avxl{width:64px;height:64px;font-size:18px;border:3px solid var(--yellow);}
-.ri{flex:1;min-width:0;}
-.rn{font-size:14px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ri{flex:1;min-width:0;overflow:visible;}
+.rn{font-size:14px;color:#fff;font-weight:600;white-space:nowrap;overflow:visible;}
 .rm{font-size:11px;color:var(--muted);margin-top:1px;}
 .rv{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--yellow);}
 .rvl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
@@ -327,7 +327,7 @@ select.inp{appearance:none;}
 @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.4);color:#e74c3c;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;padding:3px 10px;border-radius:3px;text-transform:uppercase}
 .live-dot{width:7px;height:7px;border-radius:50%;background:#e74c3c;animation:livePulse 1.2s infinite}
-.rn{display:flex;align-items:center;gap:2px;}
+.rn{display:flex;align-items:center;gap:3px;}
 
 /* PODIUM */
 .podium-wrap{display:flex;align-items:flex-end;justify-content:center;gap:8px;padding:24px 12px 0;margin-bottom:4px}
@@ -1445,7 +1445,7 @@ function renderHome(){
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Líderes Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${geralTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-        <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
+        <div class="ri"><div class="rn">${r.p.nickname}${movementBadge(r.p.uid,"geral")}</div><div class="rm">${r.stages} etapa${r.stages!==1?"s":""}</div></div>
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
       </div>`).join("")}</div>
     </div>`:""}
@@ -1453,7 +1453,7 @@ function renderHome(){
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🃏 Líderes NL Hold'em<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${nlTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-        <div class="ri"><div class="rn">${r.p.nickname}</div></div>
+        <div class="ri"><div class="rn">${r.p.nickname}${movementBadge(r.p.uid,"nlholdem")}</div></div>
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
       </div>`).join("")}</div>
     </div>`:""}
@@ -1461,7 +1461,7 @@ function renderHome(){
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Líderes Knockout<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${koTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
-        <div class="ri"><div class="rn">${r.p.nickname}</div><div class="rm">🥊 ${r.ko} KO</div></div>
+        <div class="ri"><div class="rn">${r.p.nickname}${movementBadge(r.p.uid,"knockout")}</div><div class="rm">🥊 ${r.ko} KO</div></div>
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
       </div>`).join("")}</div>
     </div>`:""}
