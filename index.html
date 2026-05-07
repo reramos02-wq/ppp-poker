@@ -2089,6 +2089,17 @@ function renderAdminStageDetail(s){
         <button class="btn by sm" data-launch="${s.id}">${s.status==="finished"?"✏ Resultado":"▶ Lançar"}</button>
         <button class="btn bd sm" data-del-stage="${s.id}">🗑 Excluir</button>
       </div>
+      ${s.status==="upcoming" ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 0;border-top:1px solid var(--border)">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#fff">Inscrições abertas</div>
+          <div style="font-size:11px;color:var(--muted)">Permitir que jogadores se inscrevam</div>
+        </div>
+        <button onclick="window.toggleInscriptions('${s.id}','${s.allowInscriptions===false?'open':'close'}')"
+          style="background:${s.allowInscriptions===false?'#333':'var(--yellow)'};border:none;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer;color:${s.allowInscriptions===false?'#888':'#000'};transition:.2s">
+          ${s.allowInscriptions===false?'🔒 Fechadas':'🔓 Abertas'}
+        </button>
+      </div>` : ""}
     </div>
 
     <!-- Inscriptions section -->
@@ -2959,6 +2970,15 @@ function bindEvents(){
   });
   // ── Global diagnose functions (inline onclick safe) ──────────────────────
   window.navDiagnose = function(){ DIAGNOSE_EDIT_UID=null; render(); };
+
+  window.toggleInscriptions = async function(sid, action){
+    const stage = DB.stages.find(s=>s.id===sid);
+    if(!stage) return;
+    stage.allowInscriptions = (action==='open');
+    await save();
+    render();
+    showToast(action==='open'?"Inscrições abertas!":"Inscrições encerradas!","green");
+  };
   window.openDiagnoseEdit = function(uidB64){
     const uid = decodeURIComponent(escape(atob(uidB64)));
     const p = DB.players.find(x=>x.uid===uid);
