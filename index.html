@@ -1607,9 +1607,12 @@ function renderStageDetail(sid){
     <!-- Action buttons -->
     ${s.status==="upcoming"?`
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
-      <button class="btn fw ${iAmIn?"bd":"by"}" style="padding:14px;font-size:16px" data-inscribe="${s.id}">
-        ${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}
-      </button>
+      ${s.allowInscriptions===false && !iAmIn
+        ? `<div style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:#e74c3c;padding:12px 14px;border-radius:3px;font-size:14px;text-align:center">🔒 Inscrições encerradas</div>`
+        : `<button class="btn fw ${iAmIn?"bd":"by"}" style="padding:14px;font-size:16px" data-inscribe="${s.id}">
+            ${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}
+          </button>`
+      }
       <div style="display:flex;gap:8px">
         ${ins.length>0?`<button class="btn bo fw" style="padding:12px" data-share-ins="${s.id}">📤 Compartilhar Lista</button>`:""}
         ${s.address?`<button class="btn bo fw" style="padding:12px" onclick="openRouteModal(\`${s.address}\`)">🗺️ Traçar Rota</button>`:""}
@@ -1850,7 +1853,7 @@ function showProfile(uid, filter){
       <!-- Stats grid 2 colunas -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
         <div class="ps"><div class="psv">${s.p}</div><div class="psl">Participações</div></div>
-        <div class="ps"><div class="psv">${s.ft}</div><div class="psl">FT Etapa</div></div>
+        <div class="ps"><div class="psv">${(()=>{const rank=calcRankGeral();const pos=rank.findIndex(r=>r.p.uid===uid);return pos>=0?(pos+1)+"º":"-";})()}</div><div class="psl">Ranking</div></div>
         <div class="ps"><div class="psv">${s.wNL+s.wKO}</div><div class="psl">Campeão Etapa</div></div>
         ${disputedFT
           ?`<div class="ps"><div class="psv">${allHist.filter(st=>st.isFinal).length}</div><div class="psl">FT Ranking</div></div>`
@@ -2946,6 +2949,11 @@ function bindEvents(){
       if(!stage)return;
       const ins=stage.inscriptions||[];
       const alreadyIn=ins.includes(CURRENT_USER_UID);
+      // Block if inscriptions closed and not already in
+      if(stage.allowInscriptions===false && !alreadyIn){
+        showToast("Inscrições encerradas para esta etapa","red");
+        return;
+      }
       try {
         // Use arrayUnion/arrayRemove for atomic inscription (no race condition)
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
