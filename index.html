@@ -924,6 +924,45 @@ function openShareModal(stage){
     }
   },100);
 }
+// ── PROFILE SETUP SCREEN ─────────────────────────────────────────────────────
+function needsProfileSetup(){
+  if(!CURRENT_PLAYER) return false;
+  return !CURRENT_PLAYER.name || CURRENT_PLAYER.name.includes("@") ||
+         CURRENT_PLAYER.name.length < 2 || !CURRENT_PLAYER.nickname ||
+         CURRENT_PLAYER.needsSetup;
+}
+
+function renderProfileSetup(){
+  const u = CURRENT_USER;
+  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-dark);padding:24px;background-image:radial-gradient(ellipse at 50% 40%, rgba(245,168,0,.06) 0%, transparent 70%)">
+    <div style="width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:32px;box-sizing:border-box">
+      <div style="text-align:center;margin-bottom:24px">
+        ${LOGO(48)}
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;color:#fff;margin-top:12px;text-transform:uppercase;letter-spacing:1px">Complete seu perfil</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px">Precisamos de mais algumas informações para continuar</div>
+      </div>
+      <div id="setup-err"></div>
+      <div class="fr">
+        <label class="lbl">Nome completo <span style="color:var(--red)">*</span></label>
+        <input class="inp" id="setup-name" placeholder="Ex: João da Silva" autocomplete="name" value="${u?.displayName&&!u.displayName.includes('@')?u.displayName:''}"/>
+      </div>
+      <div class="fr">
+        <label class="lbl">Apelido <span style="color:var(--red)">*</span></label>
+        <input class="inp" id="setup-nick" placeholder="Ex: Joãozinho"/>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Como será exibido no ranking e nas etapas</div>
+      </div>
+      <button class="btn by fw" id="btn-setup-save" style="padding:14px;font-size:16px;margin-top:8px">
+        ✓ Entrar no PPP Poker
+      </button>
+      <div style="margin-top:16px;text-align:center">
+        <button id="setup-logout" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;text-decoration:underline">
+          Usar outra conta
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function render(){
   try {
