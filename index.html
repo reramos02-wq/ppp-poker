@@ -843,6 +843,21 @@ function openShareModal(stage){
         </div>`;
       el.appendChild(header);
 
+      // Tournament structure
+      if(stage.buyin||stage.rebuy||stage.addon||stage.timechip){
+        const struct = document.createElement("div");
+        struct.style.cssText = "padding:10px 22px;border-bottom:1px solid #222;";
+        struct.innerHTML = `
+          <div style="font-family:Arial,sans-serif;font-weight:700;font-size:10px;color:#F5A800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">ESTRUTURA</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
+            ${stage.buyin?`<div style="font-size:11px;color:#aaa">💵 Buy-in</div><div style="font-size:11px;color:#fff;text-align:right">${stage.buyin}</div>`:''}
+            ${stage.rebuy?`<div style="font-size:11px;color:#aaa">🔄 Rebuy</div><div style="font-size:11px;color:#fff;text-align:right">${stage.rebuy}</div>`:''}
+            ${stage.addon?`<div style="font-size:11px;color:#aaa">💰 Add-on</div><div style="font-size:11px;color:#fff;text-align:right">${stage.addon}</div>`:''}
+            ${stage.timechip?`<div style="font-size:11px;color:#aaa">⏳ Time Chip</div><div style="font-size:11px;color:#fff;text-align:right">${stage.timechip}</div>`:''}
+          </div>`;
+        el.appendChild(struct);
+      }
+
       // Inscriptions title
       const insTitle = document.createElement("div");
       insTitle.style.cssText = "padding:12px 22px 8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:#F5A800;letter-spacing:2px;text-transform:uppercase;";
@@ -2903,18 +2918,26 @@ function bindEvents(){
         return;
       }
       try {
-        // Use arrayUnion/arrayRemove for atomic inscription (no race condition)
+        const newIns = alreadyIn
+          ? ins.filter(i=>i!==CURRENT_USER_UID)
+          : [...ins, CURRENT_USER_UID];
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
           stages: DB.stages.map(s=>{
             if(s.id!==sid) return s;
-            return {...s, inscriptions: alreadyIn
-              ? ins.filter(i=>i!==CURRENT_USER_UID)
-              : [...ins, CURRENT_USER_UID]
-            };
+            return {...s, inscriptions: newIns};
           }),
           updatedAt: serverTimestamp()
         });
-        // Local update will come from onSnapshot listener automatically
+        // Update local DB immediately
+        const localStage = DB.stages.find(s=>s.id===sid);
+        if(localStage) localStage.inscriptions = newIns;
+        // If just inscribed (not cancelled), open share modal
+        if(!alreadyIn){
+          render();
+          setTimeout(()=>openShareModal(DB.stages.find(s=>s.id===sid)), 300);
+        } else {
+          render();
+        }
       } catch(err) {
         console.error("Inscription error:", err);
         showToast("Erro ao salvar inscrição. Tente novamente.","red");
