@@ -791,7 +791,7 @@ function openShareModal(stage){
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">
       📤 Compartilhar Lista
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Gerando imagem...</div>
+    <div id="share-gen-msg" style="font-size:12px;color:var(--muted);margin-bottom:12px">Gerando imagem...</div>
     <div id="share-img-preview" style="margin-bottom:14px;border-radius:4px;overflow:hidden;display:none"></div>
     <div class="row g8" id="share-btns" style="display:none">
       <button id="share-wa-btn" class="btn fw" style="background:#25D366;color:#fff;font-size:15px">💬 Compartilhar no WhatsApp</button>
@@ -809,7 +809,8 @@ function openShareModal(stage){
         await new Promise((res,rej)=>{
           const sc=document.createElement("script");
           sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-          sc.onload=res; sc.onerror=rej;
+          sc.onload=res;
+          sc.onerror=()=>rej(new Error("Falha ao carregar html2canvas"));
           document.head.appendChild(sc);
         });
       }
@@ -821,7 +822,7 @@ function openShareModal(stage){
       const colW = use2col ? Math.floor((imgW-60)/2) : imgW-40;
 
       const el = document.createElement("div");
-      el.style.cssText = `position:fixed;left:-9999px;top:0;width:${imgW}px;background:#111;font-family:'Barlow',sans-serif;padding:0;box-sizing:border-box;`;
+      el.style.cssText = `position:absolute;left:-9999px;top:0;width:${imgW}px;background:#111;font-family:Arial,sans-serif;padding:0;box-sizing:border-box;color:#fff;`;
       document.body.appendChild(el);
 
       // Header
@@ -874,16 +875,28 @@ function openShareModal(stage){
       el.appendChild(footer);
 
       // Generate canvas
-      const canvas = await html2canvas(el,{backgroundColor:"#111",scale:2,useCORS:true,logging:false});
+      const canvas = await html2canvas(el,{
+        backgroundColor:"#111",
+        scale:2,
+        logging:false,
+        allowTaint:true,
+        useCORS:false,
+        windowWidth:imgW,
+        width:imgW
+      });
       document.body.removeChild(el);
       const dataUrl = canvas.toDataURL("image/png");
 
       // Show preview
       const preview = modal.querySelector("#share-img-preview");
-      preview.innerHTML = `<img src="${dataUrl}" style="width:100%;border-radius:4px;display:block"/>`;
-      preview.style.display = "block";
-      modal.querySelector("div[style*='Gerando']").style.display = "none";
-      modal.querySelector("#share-btns").style.display = "flex";
+      if(preview){
+        preview.innerHTML = `<img src="${dataUrl}" style="width:100%;border-radius:4px;display:block"/>`;
+        preview.style.display = "block";
+      }
+      const genMsg = modal.querySelector("#share-gen-msg");
+      if(genMsg) genMsg.style.display = "none";
+      const shareBtns = modal.querySelector("#share-btns");
+      if(shareBtns) shareBtns.style.display = "flex";
 
       // WhatsApp caption
       const caption = encodeURIComponent(`Inscreva-se em https://ppp-poker.vercel.app`);
@@ -922,7 +935,13 @@ function openShareModal(stage){
       });
 
     }catch(err){
-      modal.querySelector("div[style*='Gerando']").textContent="Erro ao gerar imagem: "+err.message;
+      const genMsg = modal.querySelector("#share-gen-msg");
+      if(genMsg) genMsg.innerHTML = `<div style="color:var(--red)">Erro: ${err.message}</div>`;
+      const shareBtns = modal.querySelector("#share-btns");
+      if(shareBtns) shareBtns.style.display = "flex";
+      // Remove wa button on error
+      const waBtn = modal.querySelector("#share-wa-btn");
+      if(waBtn) waBtn.style.display = "none";
     }
   },100);
 }
