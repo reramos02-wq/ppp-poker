@@ -449,84 +449,70 @@ function shouldShowMovement(){
 
 function calcRankingMovement(type){
   // Returns map of uid → {prev, curr, delta}
-  // prev = rank WITHOUT the live/last stage
-  // curr = rank WITH the live/last stage (including draft)
+  // Uses the SAME calcRank/calcRankGeral functions the app uses
+  // to guarantee consistency with the displayed ranking
+
   const live = getLiveStage();
-  const lastFinished = [...DB.stages].filter(s=>s.status==="finished")
+  const lastFinished = [...DB.stages]
+    .filter(s=>s.status==="finished")
     .sort((a,b)=>b.date.localeCompare(a.date))[0];
   const targetStage = live || lastFinished;
   if(!targetStage) return {};
 
-  // Helper to rank excluding a stage
-  const rankWithout = (stageId, t) => {
-    const fin = DB.stages.filter(s=>
-      s.status==="finished" && (t==="geral"||s.type===t) && !s.isFinal &&
-      s.id !== stageId && (s.season===ACTIVE_SEASON||!s.season)
-    );
-    const sc = {};
-    const seedUids = new Set(DB.players.map(p=>p.uid));
-    fin.forEach(s=>(s.results||[]).forEach(r=>seedUids.add(r.playerId)));
-    seedUids.forEach(uid=>{
-      const p=getPlayer(uid)||{uid,name:uid,nickname:"?"};
-      sc[uid]={p,total:0};
-    });
-    fin.forEach(s=>(s.results||[]).forEach(r=>{
-      if(!sc[r.playerId]) return;
-      sc[r.playerId].total += getPts(r.position)+(s.type==="knockout"?(r.knockouts||0)*10:0);
-    }));
-    return Object.values(sc).filter(x=>x.total>0)
-      .sort((a,b)=>b.total-a.total)
-      .map((x,i)=>({uid:x.p.uid,rank:i+1}));
-  };
-
-  // Helper to rank including a stage (with draft for live)
-  const rankWith = (stage, t) => {
-    const fin = DB.stages.filter(s=>
-      s.status==="finished" && (t==="geral"||s.type===t) && !s.isFinal &&
-      (s.season===ACTIVE_SEASON||!s.season)
-    );
-    const sc = {};
-    const seedUids = new Set(DB.players.map(p=>p.uid));
-    fin.forEach(s=>(s.results||[]).forEach(r=>seedUids.add(r.playerId)));
-    // Add draft/results from target stage
-    const stageResults = stage.status==="upcoming"
-      ? (stage.draft||[]).map(r=>({playerId:r.uid,position:r.pos,points:getPts(r.pos),knockouts:r.ko||0}))
-      : (stage.results||[]);
-    stageResults.forEach(r=>seedUids.add(r.playerId));
-    seedUids.forEach(uid=>{
-      const p=getPlayer(uid)||{uid,name:uid,nickname:"?"};
-      sc[uid]={p,total:0};
-    });
-    fin.forEach(s=>(s.results||[]).forEach(r=>{
-      if(!sc[r.playerId]) return;
-      sc[r.playerId].total += getPts(r.position)+(s.type==="knockout"?(r.knockouts||0)*10:0);
-    }));
-    // Add target stage
-    if(t==="geral"||stage.type===t){
-      stageResults.forEach(r=>{
-        if(!sc[r.playerId]) return;
-        sc[r.playerId].total += getPts(r.position)+(stage.type==="knockout"?(r.knockouts||0)*10:0);
-      });
-    }
-    return Object.values(sc).filter(x=>x.total>0)
-      .sort((a,b)=>b.total-a.total)
-      .map((x,i)=>({uid:x.p.uid,rank:i+1}));
-  };
-
   const t = type||"geral";
-  const before = rankWithout(targetStage.id, t);
-  const after  = rankWith(targetStage, t);
+
+  // Temporarily hide targetStage from DB to calculate "before" ranking
+  const savedResults   = targetStage.results;
+  const savedStatus    = targetStage.status;
+  const savedDraft     = targetStage.draft;
+
+  // ── BEFORE: remove targetStage results ──────────────────────────────────
+  targetStage.results = [];
+  targetStage.status  = "upcoming"; // hide from finished filter
+  targetStage.draft   = null;
+
+  let before;
+  if(t==="geral")       before = calcRankGeral();
+  else if(t==="nlholdem") before = calcRank("nlholdem");
+  else                   before = calcRank("knockout");
+
+  // ── AFTER: restore targetStage ───────────────────────────────────────────
+  targetStage.results = savedResults;
+  targetStage.status  = savedStatus;
+  targetStage.draft   = savedDraft;
+
+  // For live stage, inject draft into results temporarily
+  if(live && live.status==="upcoming" && (live.draft||[]).length){
+    targetStage.results = (live.draft||[]).map(r=>({
+      playerId:r.uid, position:r.pos,
+      points:getPts(r.pos), knockouts:r.ko||0
+    }));
+    targetStage.status = "finished";
+  }
+
+  let after;
+  if(t==="geral")       after = calcRankGeral();
+  else if(t==="nlholdem") after = calcRank("nlholdem");
+  else                   after = calcRank("knockout");
+
+  // Restore live stage
+  if(live && live.status==="upcoming"){
+    targetStage.results = savedResults;
+    targetStage.status  = savedStatus;
+    targetStage.draft   = savedDraft;
+  }
+
+  // Build movement map
   const beforeMap = {};
-  before.forEach(x=>{ beforeMap[x.uid]=x.rank; });
-  const afterMap = {};
-  after.forEach(x=>{ afterMap[x.uid]=x.rank; });
+  before.forEach((r,i)=>{ beforeMap[r.p.uid] = i+1; });
 
   const movement = {};
-  after.forEach(x=>{
-    const prev = beforeMap[x.uid] || null;
-    const curr = x.rank;
-    const delta = prev ? prev - curr : 0; // positive = moved up
-    movement[x.uid] = {prev, curr, delta};
+  after.forEach((r,i)=>{
+    const curr = i+1;
+    const prev = beforeMap[r.p.uid] || null;
+    // delta > 0 = moved UP (smaller rank number = better position)
+    const delta = prev ? prev - curr : 0;
+    movement[r.p.uid] = {prev, curr, delta};
   });
   return movement;
 }
@@ -1636,7 +1622,7 @@ function renderStageDetail(sid){
         return `<div class="podium-slot">
           <div class="podium-pts ${cls}">${r.points}<span style="font-size:10px">pts</span></div>
           ${isKO&&r.knockouts>0?`<div style="font-size:10px;color:var(--muted);margin-bottom:4px">🥊${r.knockouts}</div>`:""}
-          <div class="podium-photo ${cls}" data-profile="${r.playerId}">${ini(pl.name)}</div>
+          <div class="podium-photo ${cls}" data-profile="${r.playerId}" style="cursor:pointer">${ini(pl.name)}</div>
           <div class="podium-name">${pl.name}</div>
           <div class="podium-nick">"${pl.nickname}"</div>
           <div class="podium-base ${cls}">${medal}</div>
@@ -1664,7 +1650,7 @@ function renderStageDetail(sid){
         <!-- Rest of results -->
         ${rest.map(r=>{
           const pl=getP(r.playerId)||{nickname:"?",name:"?"};
-          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #1a1a1a">
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #1a1a1a;cursor:pointer" data-profile="${r.playerId}">
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--muted);width:32px;text-align:center">${r.position}º</div>
             ${AV(r.playerId)}
             <div style="flex:1">
