@@ -648,6 +648,29 @@ function showToast(msg, color){
 function getP(uid){ return DB.players.find(p=>p.uid===uid); }
 
 // ── CALCULATIONS ──────────────────────────────────────────────────────────────
+// ── TIEBREAKER ────────────────────────────────────────────────────────────────
+// In case of equal points: most 1st places → most 2nd places → ... → most Nth places
+function buildPositionCounts(uid, stageFilter){
+  const counts = {}; // position → count
+  DB.stages.filter(stageFilter).forEach(s=>{
+    const r = (s.results||[]).find(x=>x.playerId===uid);
+    if(r) counts[r.position] = (counts[r.position]||0) + 1;
+  });
+  return counts;
+}
+
+function tiebreak(a, b, stageFilter){
+  // Compare position by position: 1st, 2nd, 3rd, ...
+  const maxPos = 20;
+  const ca = buildPositionCounts(a.p.uid, stageFilter);
+  const cb = buildPositionCounts(b.p.uid, stageFilter);
+  for(let pos=1; pos<=maxPos; pos++){
+    const diff = (cb[pos]||0) - (ca[pos]||0);
+    if(diff !== 0) return diff; // more of this position wins
+  }
+  return 0; // truly equal
+}
+
 function calcRank(type){
   const fin = DB.stages.filter(s=>
     s.status==="finished" && s.type===type && !s.isFinal &&
@@ -670,7 +693,13 @@ function calcRank(type){
     sc[r.playerId].stages++;
     sc[r.playerId].ko     += r.knockouts||0;
   }));
-  return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>b.total-a.total||b.ko-a.ko);
+  const stageFilter = s =>
+    s.status==="finished" && s.type===type && !s.isFinal &&
+    (s.season===ACTIVE_SEASON||!s.season);
+  return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>{
+    if(b.total !== a.total) return b.total - a.total;
+    return tiebreak(a, b, stageFilter);
+  });
 }
 
 function calcRankGeral(){
@@ -699,7 +728,13 @@ function calcRankGeral(){
       else                    sc[r.playerId].koPts += pts;
     });
   });
-  return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>b.total-a.total||b.ko-a.ko);
+  const stageFilterGeral = s =>
+    s.status==="finished" && !s.isFinal &&
+    (s.season===ACTIVE_SEASON||!s.season);
+  return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>{
+    if(b.total !== a.total) return b.total - a.total;
+    return tiebreak(a, b, stageFilterGeral);
+  });
 }
 
 function calcStats(uid){
