@@ -771,385 +771,159 @@ function calcHOF(){
 
 // ── SHARE MODAL ──────────────────────────────────────────────────────────────
 function openShareModal(stage){
-  const ins = stage.inscriptions||[];
+  const ins  = stage.inscriptions||[];
   const tipo = stage.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout";
-  const dataFmt = fmtD(stage.date);
-  const local = stage.location?" · "+stage.location:"";
 
-  // Text for WhatsApp
-  const timeStr = stage.time?stage.time+" · ":"";
-  const lines = [
-    "🃏 *PPP POKER — "+stage.name+(stage.isFinal?" 🏆":"")+"*",
-    "━━━━━━━━━━━━━━━━",
-    "📅 "+dataFmt+(stage.time?" às "+stage.time:""),
-    "🏠 Local: "+(stage.location||"A confirmar"),
-  ];
-  if(stage.address) lines.push("📍 "+stage.address);
-  lines.push("━━━━━━━━━━━━━━━━");
-  if(stage.buyin||stage.rebuy||stage.addon||stage.timechip){
-    if(stage.buyin)  lines.push("💵 Buyin: "+stage.buyin);
-    if(stage.rebuy)  lines.push("💸 Rebuy: "+stage.rebuy);
-    if(stage.addon)  lines.push("💰 Addon: "+stage.addon);
-    if(stage.timechip) lines.push("⏳ Time Chip: "+stage.timechip);
-    lines.push("━━━━━━━━━━━━━━━━");
-  }
-  lines.push("*Lista de Inscritos ("+ins.length+")*");
-  lines.push("");
-  ins.forEach(function(uid,i){
-    const pl=getP(uid)||{name:uid,nickname:uid};
-    lines.push((i+1)+". "+pl.nickname+(pl.name&&pl.name!==pl.nickname?" ("+pl.name+")":""));
-  });
-  lines.push("");
-  lines.push("_Inscreva-se em ppp-poker.vercel.app_");
-  const text = lines.join("\n");
-
-  // Build modal
   const wrap = document.getElementById("result-modal");
   wrap.innerHTML="";
-
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
   wrap.appendChild(ov);
-
   const modal=document.createElement("div");
-  modal.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px;padding:20px;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;box-sizing:border-box;";
-  modal.addEventListener("click",function(e){e.stopPropagation();});
+  modal.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;box-sizing:border-box;";
+  modal.addEventListener("click",e=>e.stopPropagation());
   ov.appendChild(modal);
+  ov.addEventListener("click",()=>wrap.innerHTML="");
 
-  // Title
-  const title=document.createElement("div");
-  title.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px";
-  title.textContent="📤 Compartilhar Lista";
-  modal.appendChild(title);
-
-  // Preview card
-  const preview=document.createElement("div");
-  preview.style.cssText="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.9;color:var(--text);white-space:pre-wrap;font-family:'Barlow',sans-serif;max-height:300px;overflow-y:auto;";
-  preview.textContent=text;
-  modal.appendChild(preview);
-
-  // Buttons
-  const btns=document.createElement("div");
-  btns.className="row g8";
-
-  // WhatsApp button
-  const waBtn=document.createElement("button");
-  waBtn.className="btn fw";
-  waBtn.style.cssText="background:#25D366;color:#fff;font-size:15px;";
-  waBtn.innerHTML="<span style='font-size:18px'>💬</span> Abrir no WhatsApp";
-  waBtn.addEventListener("click",function(){
-    const encoded=encodeURIComponent(text);
-    window.open("https://wa.me/?text="+encoded,"_blank");
-  });
-  btns.appendChild(waBtn);
-
-  // Copy button
-  const copyBtn=document.createElement("button");
-  copyBtn.className="btn bo";
-  copyBtn.textContent="📋 Copiar";
-  copyBtn.addEventListener("click",function(){
-    navigator.clipboard.writeText(text).then(function(){
-      copyBtn.textContent="✓ Copiado!";
-      copyBtn.style.color="var(--green)";
-      setTimeout(function(){ copyBtn.textContent="📋 Copiar"; copyBtn.style.color=""; },2000);
-    }).catch(function(){
-      // Fallback for mobile browsers that block clipboard
-      const ta=document.createElement("textarea");
-      ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
-      document.body.appendChild(ta); ta.select(); document.execCommand("copy");
-      document.body.removeChild(ta);
-      copyBtn.textContent="✓ Copiado!";
-      setTimeout(function(){ copyBtn.textContent="📋 Copiar"; },2000);
-    });
-  });
-  btns.appendChild(copyBtn);
-
-  // Close
-  const closeBtn=document.createElement("button");
-  closeBtn.className="btn bo fw";
-  closeBtn.textContent="Fechar";
-  closeBtn.style.marginTop="8px";
-  closeBtn.addEventListener("click",function(){ wrap.innerHTML=""; });
-  modal.appendChild(btns);
-  modal.appendChild(closeBtn);
-}
-
-// ── ROUTE MODAL ──────────────────────────────────────────────────────────────
-function openRouteModal(address){
-  const encoded = encodeURIComponent(address);
-  const wazeUrl = "https://waze.com/ul?q="+encoded+"&navigate=yes";
-  const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination="+encoded;
-
-  const wrap = document.getElementById("result-modal");
-  wrap.innerHTML="";
-  const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:300;display:flex;align-items:flex-end;justify-content:center;padding:12px;box-sizing:border-box;";
-  wrap.appendChild(ov);
-  const box=document.createElement("div");
-  box.style.cssText="background:var(--surface);border-top:3px solid var(--yellow);border:1px solid var(--border);border-radius:4px 4px 0 0;padding:20px;width:100%;max-width:480px;box-sizing:border-box;";
-  box.addEventListener("click",e=>e.stopPropagation());
-  ov.appendChild(box);
-
-  box.innerHTML=`
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">🗺️ Traçar Rota</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">📍 ${address}</div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <a href="${wazeUrl}" target="_blank" rel="noopener"
-        style="display:flex;align-items:center;gap:12px;background:#08B2D7;color:#fff;padding:14px 16px;border-radius:4px;text-decoration:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:.5px">
-        <span style="font-size:24px">🚗</span> Abrir no Waze
-      </a>
-      <a href="${mapsUrl}" target="_blank" rel="noopener"
-        style="display:flex;align-items:center;gap:12px;background:#4285F4;color:#fff;padding:14px 16px;border-radius:4px;text-decoration:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:.5px">
-        <span style="font-size:24px">📍</span> Abrir no Google Maps
-      </a>
+  modal.innerHTML=`
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">
+      📤 Compartilhar Lista
     </div>
-    <button onclick="document.getElementById('result-modal').innerHTML=''" style="width:100%;margin-top:12px;background:none;border:1px solid var(--border2);color:var(--muted);padding:12px;border-radius:4px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1px">Fechar</button>`;
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Gerando imagem...</div>
+    <div id="share-img-preview" style="margin-bottom:14px;border-radius:4px;overflow:hidden;display:none"></div>
+    <div class="row g8" id="share-btns" style="display:none">
+      <button id="share-wa-btn" class="btn fw" style="background:#25D366;color:#fff;font-size:15px">💬 Compartilhar no WhatsApp</button>
+      <button id="share-dl-btn" class="btn bo">⬇️ Baixar</button>
+      <button id="share-close-btn" class="btn bo">Fechar</button>
+    </div>`;
 
-  ov.addEventListener("click",function(e){ if(e.target===ov) wrap.innerHTML=""; });
-}
+  modal.querySelector("#share-close-btn").addEventListener("click",()=>wrap.innerHTML="");
 
-// ── RENDER ────────────────────────────────────────────────────────────────────
-const IS_DESKTOP = () => window.innerWidth >= 768;
-
-const ALL_TABS_BASE = [
-  {id:"home",    icon:"🏠", lbl:"Início"},
-  {id:"ranking", icon:"🏆", lbl:"Ranking"},
-  {id:"stages",  icon:"📅", lbl:"Etapas"},
-  {id:"hof",     icon:"🌟", lbl:"Hall of Fame"},
-  {id:"players", icon:"👥", lbl:"Jogadores"},
-  {id:"rules",   icon:"📖", lbl:"Regras"},
-  {id:"admin",   icon:"⚙️", lbl:"Admin", badge:"ADMIN"},
-];
-const ALL_TABS = () => IS_ADMIN ? ALL_TABS_BASE : ALL_TABS_BASE.filter(t=>t.id!=="admin");
-
-const PAGE_TITLES = {
-  home:"Início", ranking:"Ranking", stages:"Etapas",
-  hof:"Hall of Fame", players:"Jogadores", rules:"Regras", admin:"Admin"
-};
-
-function renderSidebar(){
-  return `<aside class="sidebar">
-    <div class="sb-logo">
-      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFoAAAAyCAYAAADcD8w1AAAa4UlEQVR42qWcabBlV3Xff2vvc8699009qxvRUotuOyISimThSBFidGFIYil2UgE0IYGVlCvlVKQKcRVlSIIrJIYk5QoJwi7zgUoFcHCJMW4gEmkhCcmgiZYaIqEnQatHqcfX/e57dzhn75UP+wz73HubL3ldr9507zlnr73Wf631X//dsmPHDu2vrpIXBQDGGATwKHhAFBAEUNofAjjvESDrZFibkKYpnSxDAfU+fEVR5xmNRyQ2QYzBe4fq9LVFyp80uos0P9evQ0DAGoO1BmNsuI/XcF1RBkNlfZSQpqb+2wU/RJi8A6pouU5EEDxpAt0M0iS81KuUj+sjq4TLqTZfE1T53bvvZseOHRTOIQhGpLxP+dC1AcCrIoBIMFbhHEWec+rUKZaXl3nppZdYWTlLkqTMz82hKEXuSNKEK668gm63i3eeoshx3mPEYKxBRJp7lQ9b/2ykXJSv7TIajljtr9Lv9xkMhozzHGstxgh4ZTgWbvxbyt//OwX9NYN3jqLw9fUqA6hXRML6FCntrIhp/g5C4S0nVuDFw8rLx4WzawlGYK7rEQHnpbVvqqXJy51KRIR7/sU97N6zm//fD++UI0cP89hjj/GVr3yFffv2YURYXFykcAWj4Yjr/vb1GAN5niMiiAQji5GwMPVhU8sF66Thg3uh3lEUDucd/X6fQ4cOsby8zPnz5+l0OnQyw/Ixw87tOb/93j6cygEDpvLeMkpkVpxOfGj1e4MfKIdOwhMvdfjLR7s8+HR4pqUeFL6KzvDUdTQoyM6dO/Vb3/oWV111Fa5wWGsjiJiK1/bNS0+ojGKsxRhTv+Tbe7/Npz71KfY/u59NGzeyPhiwdcsW3vGOt9PtdFEUEVNHTxy8AbFKECsXWkeV9yAlzEkJHWJYXT3PT37yU5ZfWi49NGGlr/yHD63xL//BGv21hCS1ZaQ00aPxOmXa4Fp5OWCtIUsUMgUs33km5d9/KeXHy5ZNS4p3iqrUkFtdyc7Pz33ijjvu4OKLLwYEm1issRgRjAlhXX+KCb8z0c9SfS/hoVVxhcN75fI3Xs4tt97CYDDgkUcfZX5+jpWVFc6ePcuvXn55gIwSaytgC4YPRg2bJqXHh3tV+CfGlEYC7xx5XpClKbvecBmv37mTkydOMlhfZb4Hf/Ujw69cYrn2Sk8xEhIbHMQIGAnXMwLGgDUBWoyh/SkSYEkMhUI+Ap8rb9wDt77LsTqAR56zdDKt4V6izbILiwuf+OAdH2THjh2gWntN221/SWRNeEANB0ZwztHpdHj3u99Nr9dj7969LC4ucu7cOay17Nq1izwfh/tqkwilNDSVl4tpPXRIIdK6vZSQUriCjUsb2XXZLo4fP8751fPMdTP2Hch47695dmwck4+FMpCiJDyB09KsqrqfCPWnkfBzPvRkRvm7b8mZz4QHnk7J0vL5pbm2XVpa/MQdd3yQ7du3l4luwqoSmVyYBJUa7lpvqR/G4L3inOPGG99Ct9vlwQceZGlpA68eP862rVtZWlrCuaJ8MCmzewhUEdAKnip4mQrtqA4pPT/Pc9Ik4ZJLdnLk6FFGw3XWBpafHPS8/22j0otNa0HVRoUv2rZCZTSZsEtpbPVQjAxvvd7TM/DtJy1zHcVrc00TEpBOYL9Oea9ohVVQRnBUotE8iE7EgwjWWgpX8JGPfITbbr+dc+fOAfCjJ37EeDwqPTn20PJCIiVcNF4W8DnymPr7xvBGhPF4TLfT4e1vfwdp1mWh53js/3b4y8cWyBYthZ9+1qack3LjDIrgfHP5qQIxoAkiyui0495/vM5t7xxxelVIbGNAM/lWRdu4GRleJpJDkiTRQ8alTfjBRN4tGLz3fPKTn+TSSy+lcAVnzpzh8OEjZFnWytRTy9F660nTtMHqanelLkZaiXlcFGzffhHXXXcdzilzHeG+/5Vw/qySikMJpVn1fo02UMvyzxpDtwdeTR1ttJ5S2tA1SPj0P1GuuAyGY4MxYU1mFuiqtLdaVFowUTUFX/va12tcVdUI0qWpnqodFcEVji1btnDvvffQ76+RJCkHXzlYe+6sVFBHjCppmnH8+Ks476K6O3KMqMkJFYJlNByxZ89utm7dhmHETw4avvNUQjJfNhu16aoLaO04YpX1sWffc12ynsW7aciqYE4BY4R8rGzeVPCRfzRifeQRQuiYGZHQ1K1olG3Cl7woMNZw//1f5dZbb+Gr99+PMYai7Czrrqi0dNmkISIkSYKqcsstt3L11VczHo85ceIkp06dxloTauiy8ooqMLz3dLodTp48yYMPfo/l5WW6vV6IvsoqGsFXZAvnHajyxr/5xtA42IS/emYBSBvv1BBL0up4hXQR/vy7Pf7hJ+fY/xJ0OgV5oUzky7poUBRrlbzv+e3rR1x1WcHasKxumGVpjTw5umJROLIs5bHHHuMP/uBfsXnzZu65915+8OgPyDpZbew6cVa4Js2mee+Ym5vjlls+QJHn5OMxR44cDg9aQkQdwoRu0CaWlbMrPProoxgrHHjuAIePHKbX7eG8b+enCSAUEYrCccnOS9iyeRupLXjiBc/RVwuyxOOraqdKxAJFAb3FMd/cl/CfvtYlxfPh/5xy9BT0uh7nTARzE04qUDhhfsFwy7uUUSF1+ThR0s0A+zLskzThhRd+xl133cXaWp8sTRmsr/PhD3+I559/njRLKfIi6qSqjYugpdz5d73rN1hYmMd5x8rZlbq8qne5TLaJteTjnIe+/33Onz9PYhPyouCh/7OPo8eOkWVpybdECbXuP0Jt770nTVO2btsGmnPslHLgkEU6IdmVSaQ0stDbKPzg2Q7/9DMdvCuY7zp+dtRw139ZZK2wpJmr/b+dvUJ3awTI4Z1XjlnoKs4LhkkjK1Nw4ZwnSRMOHz7MHXfczpkzp+n15hiPx8wvzHN25Szvf9/7WF5eJs3SUBloXLA3SUbEgAq/smcPr7v49YxGI9bW1krPMnXsqyrWJuR5zvcffpgzZ86QpgmFcxgjjPMxDz20j9NnzoQuU5uQriMo8jmvnq1bt2ANeBJ+fqILSZmiStKqcNBd9Dz9fMJdf7IBr5bMwmgMmxfhh8+n/O6fLJID1pYklTZdpUblrRt79lzsuXR7eL+RC0GHVPioWGs4ceIEt956K8vLy8zPL+CcAxGKomCuN8fhI0e47bbbOHLkCDaxeO9rnJ4s/r1zzM3Ps3v3brxTxvmY0WhUh7BE0PPwI49y9OhRsizFe62fKUkSRqMRDz/8MKv9fqhcvA/R47VVbUpJC2zatJms0wGFg68CrgDvUO/xHroLlp/+IuOWP+6ysuroZuBKBs55w+ZFZe+PDL//2Q1IGko6ncjeVWNTeGFxUbjsIs+4UIzOJFCajC8Cg8GAu+++m2ef3c+GDRsoiiLu0yiKgg1LS7zwwvPceeedrJ4/X5JE2qoGqrxVGeySSy7BlB3keDwKr/G+9GbL44//NUeOHKHb6eCdj+uiEg4y+qt9vv/QQwyGwzJaIsytYqqslLI0JbEW5wqOn/bgK7gyJD3h2Enl9k93OXXeMNeFwmmrCcsdbF1S/uIhy0c/3yHrVUm78Sato0pACrZtcCV0MNEN1kSR4p3HGMMXvvAFHvjfD7B502aKPEeiHFlBwjgfs2njRh577Afcd999GGMa/jeCXi3/AWzevLlMVgVFXpRdliNLEw4dOsxLL71Ep9PBtxoqDYso4SXrZLx24jWeeeZp0jStmyRp1QQeH2ozRAxGQI2FxAYKVgSbKP/mvyf89KBnsecpiqYtlxJ7hWDsTQsFf7Y343s/7tHtCc5pnRqrKki9A4HFxQCHpmLPplnBQOqoKg888AALi/M45+qkZmqvacDJq7JhwwYe/N6D5Hlevn+aEzFlXsjzvK6TVUPYi7EgwsFXXim9URsGPa7t4/yRpBw9epT1wTrW2olex9cRZYwhSRKSJKGTWRANMGQcx08ojz7fY/OSJc8rIr+pfqqGRDUMOrzC1x+3kBjEmKiFidr3ErJUFROT+y1eUKnDfzQcltgTeGNjDV4VXxreJiXhXmaj/mofV7g6MpiiCMKjvPbaCYqiwBpLlmZ1BSBi6lLPq5Z0qrSakfo16mu6NJD4VQPlYwYKMQbng2d7FbrWQckyGoFBkZJ7S1IOBYTA4KlWnAU1oSrltOXEWQdOK3vGgRuYR+85veJCeceUkZtvnXcYY7jhLW/h9JkzQKgE1tfWcc6RZimosLa2XtKnwslTp3jrW99Kt9cNHdxkuhUwNtz2lbIrTJKE7txceEhVxBh27NjOaDQsBwGGosgxInQ6GWJMyZGEyBoOB1x00UUsLCzgXDFVRxtjSZKU9fU1BsMhznt2bMzrLrbwlp1bhd3bxpxYcYEWtYa1QbjGXNcwzpW1oceKogojl/Geax1ojncxNVrtr6K54dgpS2LBzCLzq98Zgpfcc8893HbbbawPBvRXz3Pttdfy8Y99HO+VP/zYH3Ltm9/MYDBkNBrzvve9j499/OMNka+t0rhmw86cOc0vfnGQNE3YsGEDnU6n9sjRcMie3bu54oorAz56z9zcHNdccw0gvOnKK9m2bRvj8Rjvlddf/Hp+7ZprQllZt+3S8iFrLWfOnGU0HJMY5ardgASMdl5JGfOpO1e5cpdjMBL66/Bb13v+2c05iPBv7xyzaxv0B8LawPPPbxrwoffm5ENBIsatSviJhVPnLK+cSOikSnLBCUq521ri7pe+9CUOHDjAysoKN9xwA3v37uXYsWNs376dBx94gMcf/2vm5ytjEKoEkSnywrkwxXnuuec4ceI1sixj27ZtJNYyKsdY6j1iDO985ztZWVlhrb/K5s2bWVk5x9mVs3R7PW6+6SYOHzlMlnbYunUrAhRFgTG2NLhGw4EAc8ePHyMvlC0blasvA/LwV1HPeF359T3Kw58e8pMjii/GvO3agj/+4hwHX1Xe8aaCO98x4Ec/y9i+Rbl654B8ZFEJQ4+axBRwCKYDzz4nHDnpWexBotpUAe3RTUNcOBcSwFVXXRUGo6MRn/nMZwD43H33cfPNN3PjjW+pvUlD99GEU0kAhWEnSCLs3buXPM9ZWlriou0XlZx0lenCdcajERuWllhaWkSAF198Erzy8ssvs2fPbi7ZeSmqnjwvWhP0QOBTJi2PNYZ+v8+Z06dwZLxpl+PSbSPGo2imZ4RhbpjP4MYrxmAcJ47Dlx/qoLnw374ufP7enPf8egj50XoaNimawEqMDFb47o9T8rJ6MVMNuxI1lyH8jQkTkzwv8N7zzDNP0+l0+MAH3s/GjRt5+uln8N4zHo/rh46xoqpU1Afe4pVXDvGNb3yDTqfDpk2b2LplK+PxuOGBo2w/Ho/xzrOyco7RaMgb3vAG0iTh7NmzYTPyvDZuzSKWQwctqw5rDcvLywwG64jp8FtvzrEmDzxzlYCNwdoAI+urHjc2PPHzeS67WPidt40520945dUuxUgZDgKGS1xV1clbSFM4dkz51g9TFnqC95BMY7S2tRNRPZWUg9vrrrue73znO1HSDFxDmqQtwl8ioqiaDlsj3PfZz3Ls6FEWlxa57LJdZFnG+vpaSKgiU9oN5x3z8/O8+zd/E/UeY8IgoSjyUofSRMwkQZ/YhPX1AS8uL1N4y6UXFfzODWPc0GIknhxpTeeKVdxIec81Y266bkhwy5RhDt4LVpqwr6OnZPa9A9uDP/tyxqHXYNsSFB4SJpqVipeV+Ik1whNVrLF452sDWmvqbk+iFl5pFu+8J0kSnnzySb74pS+yuLRIr9dj16WXMs7HGGNnT93Le6sQCKuSRZykZFtShGii3ul0ePKppxgN1xjmXT78ngGve50yXLEYW3NerdFoPUTwjuG6EighxUaT7XpTJZZbCL2e45mfWj7/3Q4b5zRMcpCSvYsHg/FiY9FOuRgxIbmESXEIOx9xC62cWo2f1JMkljNnznDvvfdSFDmCcM3V19Dr9eqau/aOqiSviP1a0lANfxuqvmIG64Fu+ULnCrqdDi///Oe8+OILjIqEX319wd3vHeHWBbENhVtvULyCcopjy4l/Q8A00giNCLPCQdrxrA7g9z/XZX0ENvIdg8hUMmwNI+MqXGhToDrhATOGt64osNaytrbGXXfdxYEDz2GNZefOnVx++d8IvInIdNlTJ+mGJ1YUr76GpnoztJJslRDiPb3eHAdfOcgjjzxSQg38uzvX2bToyPMZupl4Xlk5FhNzUG2MG4YOwTCFEzodKJzn9/7rIs+9krLYU5xvrmpaMDG12LKKKDNkTXVW0xOmw6fqeLWcfqdZyslTJ7nt9tvZt28fCwsLZJ0O111/Xahmym4zDiGd2C1pwqqkJsONNcoHqAaJmbF0Ol1e/vnLPPLIo6AF59fg9/7eiJtuGDHqg7UN/zzTyBXHUVVL5bCq1gqaMD90CkWh9BaVlVHC7f9xkW/+MGHzQpjQNJKDqo5u3a0p9mVKyaMtuKYN3aHtLTO+tUGNsm/fPj760Y/y4s9+xtatW1hfX2fTpk3Mz8+XkBFp7GgAsxU40XB2SouoilIaOEspCscz+3/M/v37sWLIsgS3plxxaY5qoENNKUObbB2Cts9E+o5o3RrAqqxcMcbQ7TqQggef6PCv/8cCzx8SNi0WFG56DptMlncxiVJNu2OZl/xS9V3zuv37n+VP//RzfPX++4Ggv8vHeVW84Yqi5ismhTqqHmNtyV+4EkipsbLim02ShMTsHaPRmEOHD3PgwAFOnToV+GkNdKo1ltyZWhWqrbFilfwhMRIR9D6SgwZpmhgFC1gFl7H/Fx0++8057v9BgjGepTlaRpZorJfMnLBEHKwiDAZDhsNBPRZqbCK11iJIBw7z7LPP8tD3H+KpJ59i9fx5lpaWwoDAOWIoNiYQU7FEQFVqKPDeo+pxRR7gwpRiyHLEVRQF43HO+vqA1068yuHDRzh37hzGCJ0sK6lVrTcpTU0jSIlnG+pBDM4knM8FXzi8L0o61ZSJ1uBcxtlVx6GThqdfhEd+mvLswQ79dWWx52qsnmXKINu90Ecpk7XW8hf/88v80Sf+iE2bNpIXLkBKpaMuF722tk6/32c8HpGmKXNz82zctBFXuBLjaCBBY/2xNvCkoW1Ps4yHH36E48ePk6ZJPRqrEFw1bG6e5xQuzCitMaRpUtO1zQhNm26VWHjYwGCnJzzxi4S7Pp0hvgiIrEE+ULGSzglrQzi3rozGSpooC13HhnnBedNiQGdpyZMp9i56ZfXm9bV1jh07xnA4mBqyVg9vrWF+bo6FhYUSC30YdzUjudmwo6CitWCx0oSs9fv0V1fJup1GSxI9vim7uSxNowm6NsLkiWV5bWdZ1Wi4Kp61tTGHjlvmOiHRtfKGBCixBha6QaKrGvDaOZ2eAEpTn9dC9Ek+ulo00s56nU5Gp9PBFW6qnqy+d94jVV07WRHGyawsKWNxTN1NitTzSGtt/SxiIwV+s/paLC+T9XuLONRIrdzuditJkqB0OoZOBs7HlVizeSGSJKCRTlW5Uc8RPYNWHj0la4xHQI0euaYeqYafddHTeKNMFvOTxKBO/EEnlD8S4EpsqyoI1UBJyLe8crayVWcl+ClhbPyUBmOTcq1Nd9lqwS50r1bh0Gi7JwlRI1HHUw8DJwrZSqccpGCTStNI+6ZTItQZGXYWLxs6MY26PCb6pOlNokW26wXqIokze6W+0onnEW1BZbt2nYW4zYStdYxiJt9cTlzas7g24yZTjFPUVAhIJaPVCWnvhMCU9iRteo4YiWwkVrNGsssJzVoc0RGUUZdqEnW2coGDQS3qofXwpUOJtLTYkzPLpoGWqHGKRKEyq/BlmvRn5h5I1I7K1CbW2yETJ6giHZ/MlDjoFL5NCk2U6QNbOiHHUp3YhFi6Vc1CI/6mdpIJWJEZMCRtwWpdOtYBo9KoUyM4kUp7Jxcw9i+RfNQ7GpMy1Um1Cktb6CszRloTp6/aoam1d7aksfExjIlzP3G+k6lIbCwQcFRmn36Til6SKan7FHVfLVYnhLzR4L6qlQxTlNIsebJvjjlM7iqNXmNCOdtecfQGlTYHPDOxRaVezMW08VCac4hT+pFIF6e0I0pKI82AVNGZY85JNrmdxuNzkDr5GkF0Ajrkgg12RLbUmVXaGVZjHrqM0nJiLBPnLiTidNvZvZIRTOx3hd3arrhalJpMnfBoHkQuMEWqxUJSa751hiZ16jfSFA6qGokq2y+OW37zS49U6AW2IeKDdYKIjiFjEj7iUFadSLB1gvNN6pxecwsDiWnUeBAgM8pLmX6S5ho+OhWkMyFT22V3S+PREs/G0aRNuWtQfjkYcwGx6XRE1tVQXRRJky+mXaLJ7O036XSpKZNnGsPFNaZxVZpuTGOsjZ1Iaet6m6xZDxRULmAAqdcqsVpqRuUVR0xTdcj0KazJzC+mOkJMSwcc37QdrrROjU4eUJ08elx7m/dMIEkDQ3HEVTmhFVna6r5FK6HhNHZOAa5Iu2SZGDEJjXJU20fFidlUYXYZXkNHJTyRiQCvSxzva+asAsjaq+NyZur8yQXa1MhgEu1O5XXWxCdwo8UqUwcaak+brOXjaZC2YaadFcsN9q7mP6Y3ZjrJTbYy8e1qW0QvSFxR4Fxg4FzhsYnWF/beoQSlqHeu3V2JlBisre5QG7lbm8SPvCmIZLRWeMYHjSop2jTXSCvsZaK6kGjndGITqzOFhYapSGDvg4GdB1sIKgabGMC1yj2dKKLqoaxOj1gnG9jYuxJjLZs2by5VlkyRewDzc/P1oZt2w9JubHSiw241NFGHZ21Cd64X1Kk1j1JKastjy0VRRCd5tQ3hEUhKXHHojLAqXWxxXkg2EiYdJhphFwpzylLmcM6XS5apakVnN9CtAcl04df8KjFGuO+z97F9+0XN4sqwzfOcLMt48qmngsrf+9lnMLRNDba6qNZAN0xr1tb6PP3U08HQ1ZHkVjgra2v9IIaMamyVdksv2lxfZlUKpfNmifK1xxMOn15gsO7L6UxYoy8c3czw8nHF4huBhkzPT2UGtzSLwGoZvrLHjh07tN/vlyeqpP5vHIyR8nhxwfz8Ar1eLxxdkMlyvOmKJCogdQLfpDy/KOXRiKDR0PZ7JdxftTy4aUw0sZxd5cdFQtw2N/8xSXjB2hDGuamvVo2sfDlBSSwsdN1sr4wYSialyBNOJ60Rs9Qw8/8AJu35EBzHOYkAAAAASUVORK5CYII=" alt="PPP Poker" style="height:40px;width:auto;display:block"/>
-      <div>
-        <div class="sb-title" style="font-size:15px;letter-spacing:2px"><span class="pk">POKER</span></div>
-        <div class="sb-sub">${IS_ADMIN?"Admin":"Olá, "+(CURRENT_PLAYER?.nickname||"Jogador")}</div>
-      </div>
-    </div>
-    <nav class="sb-nav">
-      <div class="sb-section-label">Menu</div>
-      ${ALL_TABS().map(t=>`
-      <button class="sb-item${TAB===t.id?" on":""}" data-tab="${t.id}">
-        <span class="sb-item-icon">${t.icon}</span>
-        ${t.lbl}
-        ${t.badge?`<span class="sb-badge">${t.badge}</span>`:""}
-      </button>`).join("")}
-    </nav>
-    <div class="sb-footer">
-      <div class="sb-season">Temporada 2026</div>
-      ${DB.players.length} jogadores · ${DB.stages.filter(s=>s.status==="finished").length} etapas
-    </div>
-  </aside>`;
-}
-
-function renderTopbar(){
-  const t = ALL_TABS().find(t=>t.id===TAB)||ALL_TABS[0];
-  const title = PAGE_TITLES[TAB]||"";
-  // Split title for accent on last word
-  const words = title.split(" ");
-  const accent = words.pop();
-  const rest   = words.join(" ");
-  return `<div class="topbar">
-    <div class="topbar-title">${rest?rest+" ":""}<span class="ac">${accent}</span></div>
-    <div class="topbar-right" style="display:flex;align-items:center;gap:8px">
-      ${IS_ADMIN?'<span class="hbdg" style="font-size:10px">⚙ ADMIN</span>':""}
-      <button id="btn-profile" style="background:none;border:none;cursor:pointer;display:flex;align-items:center">
-        <div class="av" style="width:34px;height:34px;font-size:11px;border:2px solid var(--yellow)">${ini(CURRENT_PLAYER?.name||CURRENT_USER?.displayName||"?")}</div>
-      </button>
-    </div>
-  </div>`;
-}
-
-function render(){
-  try {
-    // If user needs to complete profile, show setup screen
-    if(CURRENT_USER && needsProfileSetup()){
-      document.getElementById("app").innerHTML = renderProfileSetup();
-      bindProfileSetup();
-      return;
-    }
-    dbg("render() TAB="+TAB+" desktop="+IS_DESKTOP());
-    let html = "";
-    if(IS_DESKTOP()){
-      html = renderSidebar() +
-        '<div class="main-wrap">' +
-        renderTopbar() +
-        '<div id="page">' + (TAB==="home"?renderHomeDesktop():renderPage()) + '</div>' +
-        '</div>';
-    } else {
-      html = '<div id="wrap">' +
-        renderHeader() +
-        '<div id="page">' + renderPage() + '</div>' +
-        renderNav() +
-        '</div>';
-    }
-    document.getElementById("app").innerHTML = html;
-    dbg("render() OK");
-    bindEvents();
-  } catch(e) {
-    dbg("ERRO render(): " + e.message + " | " + e.stack?.split("\n")[0]);
-    document.getElementById("app").innerHTML =
-      '<div style="padding:24px;color:#e74c3c;font-family:monospace;font-size:12px;background:#0e0e0e;min-height:100vh">' +
-      '<b>Erro no render():</b><br/>' + e.message + '<br/><br/>' +
-      (e.stack||"").replace(/\n/g,"<br/>") + '</div>';
-  }
-}
-
-
-// ── LOGIN / AUTH SCREENS ──────────────────────────────────────────────────────
-function needsProfileSetup(){
-  if(!CURRENT_PLAYER) return false;
-  return !CURRENT_PLAYER.name || CURRENT_PLAYER.name.includes("@") ||
-         CURRENT_PLAYER.name.length < 2 || !CURRENT_PLAYER.nickname ||
-         CURRENT_PLAYER.needsSetup;
-}
-
-function renderProfileSetup(){
-  const u = CURRENT_USER;
-  return `<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-dark);padding:24px;background-image:radial-gradient(ellipse at 50% 40%, rgba(245,168,0,.06) 0%, transparent 70%)">
-    <div style="width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:32px;box-sizing:border-box">
-      <div style="text-align:center;margin-bottom:24px">
-        ${LOGO(48)}
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;color:#fff;margin-top:12px;text-transform:uppercase;letter-spacing:1px">Complete seu perfil</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:6px">Precisamos de mais algumas informações para continuar</div>
-      </div>
-      <div id="setup-err"></div>
-      <div class="fr">
-        <label class="lbl">Nome completo <span style="color:var(--red)">*</span></label>
-        <input class="inp" id="setup-name" placeholder="Ex: João da Silva" autocomplete="name" value="${u?.displayName&&!u.displayName.includes('@')?u.displayName:''}"/>
-      </div>
-      <div class="fr">
-        <label class="lbl">Apelido <span style="color:var(--red)">*</span></label>
-        <input class="inp" id="setup-nick" placeholder="Ex: Joãozinho"/>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">Como será exibido no ranking e nas etapas</div>
-      </div>
-      <button class="btn by fw" id="btn-setup-save" style="padding:14px;font-size:16px;margin-top:8px">
-        ✓ Entrar no PPP Poker
-      </button>
-      <div style="margin-top:16px;text-align:center">
-        <button id="setup-logout" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;text-decoration:underline">
-          Usar outra conta
-        </button>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderLoginScreen(){
-  const logo80Src = LOGO_80;
-  document.getElementById("app").innerHTML = `
-  <div class="login-wrap">
-    <div class="login-box">
-      <div class="login-logo">
-        <img src="${logo80Src}" style="height:72px;width:auto;margin:0 auto 12px;display:block"/>
-        <div class="login-title">PPP Poker</div>
-        <div class="login-sub">Temporada ${ACTIVE_SEASON}</div>
-      </div>
-      <div class="login-tabs">
-        <button class="ltb${LOGIN_TAB==="login"?" on":""}" id="ltb-login">Entrar</button>
-        <button class="ltb${LOGIN_TAB==="signup"?" on":""}" id="ltb-signup">Cadastrar</button>
-      </div>
-      <div id="login-err"></div>
-      <button class="google-btn" id="btn-google">
-        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
-        Continuar com Google
-      </button>
-      <div class="divider">ou</div>
-      ${LOGIN_TAB==="login"?`
-        <div class="fr"><label class="lbl">Email</label><input class="inp" id="auth-email" type="email" placeholder="seu@email.com" autocomplete="email"/></div>
-        <div class="fr"><label class="lbl">Senha</label><input class="inp" id="auth-pass" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
-        <div class="forgot" id="btn-forgot">Esqueci minha senha</div>
-        <button class="btn by fw" id="btn-login" style="padding:13px;font-size:16px">Entrar</button>
-      `:`
-        <div class="fr"><label class="lbl">Nome completo</label><input class="inp" id="auth-name" placeholder="Ex: João da Silva" autocomplete="name"/></div>
-        <div class="fr"><label class="lbl">Apelido</label><input class="inp" id="auth-nick" placeholder="Ex: Joãozinho"/></div>
-        <div class="fr"><label class="lbl">Email</label><input class="inp" id="auth-email" type="email" placeholder="seu@email.com" autocomplete="email"/></div>
-        <div class="fr"><label class="lbl">Senha</label><input class="inp" id="auth-pass" type="password" placeholder="mínimo 6 caracteres" autocomplete="new-password"/></div>
-        <button class="btn by fw" id="btn-signup" style="padding:13px;font-size:16px">Criar conta</button>
-      `}
-    </div>
-  </div>`;
-
-  document.getElementById("ltb-login").addEventListener("click",()=>{ LOGIN_TAB="login"; renderLoginScreen(); });
-  document.getElementById("ltb-signup").addEventListener("click",()=>{ LOGIN_TAB="signup"; renderLoginScreen(); });
-
-  // Google
-  document.getElementById("btn-google").addEventListener("click", async()=>{
+  // Build image using canvas
+  setTimeout(async()=>{
     try{
-      await signInWithPopup(auth, googleProvider);
-    }catch(e){ showLoginError(e.code); }
-  });
-
-  if(LOGIN_TAB==="login"){
-    document.getElementById("btn-login").addEventListener("click", async()=>{
-      const email = document.getElementById("auth-email").value.trim();
-      const pass  = document.getElementById("auth-pass").value;
-      if(!email||!pass) return;
-      try{
-        await signInWithEmailAndPassword(auth, email, pass);
-      }catch(e){ showLoginError(e.code); }
-    });
-    // Enter key
-    document.getElementById("auth-pass").addEventListener("keydown",e=>{ if(e.key==="Enter") document.getElementById("btn-login").click(); });
-    document.getElementById("btn-forgot").addEventListener("click", async()=>{
-      const email = document.getElementById("auth-email").value.trim();
-      if(!email){ showLoginError("auth/missing-email"); return; }
-      try{
-        await sendPasswordResetEmail(auth, email);
-        document.getElementById("login-err").innerHTML='<div class="err-msg" style="background:rgba(46,204,113,.1);border-color:rgba(46,204,113,.3);color:var(--green)">✓ Email de redefinição enviado!</div>';
-      }catch(e){ showLoginError(e.code); }
-    });
-  } else {
-    document.getElementById("btn-signup").addEventListener("click", async()=>{
-      const name  = document.getElementById("auth-name").value.trim();
-      const nick  = document.getElementById("auth-nick").value.trim() || name.split(" ")[0];
-      const email = document.getElementById("auth-email").value.trim();
-      const pass  = document.getElementById("auth-pass").value;
-      if(!name||!email||!pass){ showLoginError("auth/missing-fields"); return; }
-      try{
-        const btn = document.getElementById("btn-signup");
-        btn.disabled = true;
-        btn.textContent = "Criando conta...";
-        const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        // Set displayName as "Nome|Apelido" so ensurePlayerProfile can extract both
-        await updateProfile(cred.user, { displayName: name + "|" + nick });
-      }catch(e){
-        showLoginError(e.code);
-        const btn = document.getElementById("btn-signup");
-        if(btn){ btn.disabled=false; btn.textContent="Criar conta"; }
+      // Load html2canvas if needed
+      if(!window.html2canvas){
+        await new Promise((res,rej)=>{
+          const sc=document.createElement("script");
+          sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+          sc.onload=res; sc.onerror=rej;
+          document.head.appendChild(sc);
+        });
       }
-    });
-  }
-}
 
-function showLoginError(code){
-  const msgs = {
-    "auth/wrong-password":       "Senha incorreta.",
-    "auth/user-not-found":       "Usuário não encontrado.",
-    "auth/email-already-in-use": "Email já cadastrado. Faça login.",
-    "auth/weak-password":        "Senha muito fraca (mínimo 6 caracteres).",
-    "auth/invalid-email":        "Email inválido.",
-    "auth/missing-email":        "Digite seu email primeiro.",
-    "auth/missing-fields":       "Preencha todos os campos.",
-    "auth/popup-closed-by-user": "",
-    "auth/too-many-requests":    "Muitas tentativas. Tente mais tarde.",
-  };
-  const msg = msgs[code] || "Erro ao autenticar. Tente novamente.";
-  if(!msg) return;
-  const el = document.getElementById("login-err");
-  if(el) el.innerHTML = `<div class="err-msg">${msg}</div>`;
-}
+      // Build off-screen div
+      const isMobile = window.innerWidth < 768;
+      const imgW = isMobile ? 400 : 520;
+      const use2col = ins.length >= 15;
+      const colW = use2col ? Math.floor((imgW-60)/2) : imgW-40;
 
+      const el = document.createElement("div");
+      el.style.cssText = `position:fixed;left:-9999px;top:0;width:${imgW}px;background:#111;font-family:'Barlow',sans-serif;padding:0;box-sizing:border-box;`;
+      document.body.appendChild(el);
+
+      // Header
+      const header = document.createElement("div");
+      header.style.cssText = "background:linear-gradient(135deg,#1a1a1a 0%,#222 100%);padding:20px 22px 16px;border-bottom:3px solid #F5A800;";
+      header.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;line-height:1">
+            <span style="color:#F5A800">P</span><span style="color:#e0e0e0">P</span><span style="color:#888">P</span>
+            <span style="color:#fff;font-size:14px;margin-left:4px;letter-spacing:3px">POKER</span>
+          </div>
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff;letter-spacing:1px">${stage.name}${stage.isFinal?" 🏆":""}</div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px">${tipo}</div>
+        <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
+          <div style="font-size:12px;color:#ccc">📅 ${fmtD(stage.date)}${stage.time?" às <b style='color:#fff'>"+stage.time+"</b>":""}</div>
+          ${stage.location?`<div style="font-size:12px;color:#ccc">🏠 ${stage.location}</div>`:""}
+        </div>`;
+      el.appendChild(header);
+
+      // Inscriptions title
+      const insTitle = document.createElement("div");
+      insTitle.style.cssText = "padding:12px 22px 8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:#F5A800;letter-spacing:2px;text-transform:uppercase;";
+      insTitle.textContent = `INSCRITOS (${ins.length})`;
+      el.appendChild(insTitle);
+
+      // Players list
+      const listWrap = document.createElement("div");
+      listWrap.style.cssText = `padding:0 16px 20px;${use2col?"display:grid;grid-template-columns:1fr 1fr;gap:2px":""}`;
+      el.appendChild(listWrap);
+
+      ins.forEach((uid,i)=>{
+        const pl = getP(uid)||{name:uid,nickname:uid};
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 6px;border-bottom:1px solid #1e1e1e;";
+        row.innerHTML = `
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:#555;width:20px;text-align:right;flex-shrink:0">${i+1}</div>
+          <div style="width:28px;height:28px;border-radius:50%;background:#2a2a2a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;flex-shrink:0">${ini(pl.name)}</div>
+          <div style="min-width:0">
+            <div style="font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.nickname}</div>
+            <div style="font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name!==pl.nickname?pl.name:""}</div>
+          </div>`;
+        listWrap.appendChild(row);
+      });
+
+      // Footer
+      const footer = document.createElement("div");
+      footer.style.cssText = "padding:10px 22px;background:#0e0e0e;border-top:1px solid #222;text-align:center;font-size:11px;color:#555;letter-spacing:1px;";
+      footer.textContent = "ppp-poker.vercel.app";
+      el.appendChild(footer);
+
+      // Generate canvas
+      const canvas = await html2canvas(el,{backgroundColor:"#111",scale:2,useCORS:true,logging:false});
+      document.body.removeChild(el);
+      const dataUrl = canvas.toDataURL("image/png");
+
+      // Show preview
+      const preview = modal.querySelector("#share-img-preview");
+      preview.innerHTML = `<img src="${dataUrl}" style="width:100%;border-radius:4px;display:block"/>`;
+      preview.style.display = "block";
+      modal.querySelector("div[style*='Gerando']").style.display = "none";
+      modal.querySelector("#share-btns").style.display = "flex";
+
+      // WhatsApp caption
+      const caption = encodeURIComponent(`Inscreva-se em https://ppp-poker.vercel.app`);
+
+      // Bind buttons
+      modal.querySelector("#share-dl-btn").addEventListener("click",()=>{
+        const a=document.createElement("a");
+        a.href=dataUrl;
+        a.download=`ppp-lista-${stage.name.replace(/\s+/g,"-").toLowerCase()}.png`;
+        a.click();
+      });
+
+      modal.querySelector("#share-wa-btn").addEventListener("click",async()=>{
+        // Try Web Share API first (mobile)
+        if(navigator.share && navigator.canShare){
+          try{
+            const blob = await(await fetch(dataUrl)).blob();
+            const file = new File([blob],"lista-ppp.png",{type:"image/png"});
+            if(navigator.canShare({files:[file]})){
+              await navigator.share({
+                files:[file],
+                text:`Inscreva-se em https://ppp-poker.vercel.app`
+              });
+              return;
+            }
+          }catch(e){ console.log("Share API failed, fallback"); }
+        }
+        // Fallback: download image + open WhatsApp
+        const a=document.createElement("a");
+        a.href=dataUrl;
+        a.download=`ppp-lista-${stage.name.replace(/\s+/g,"-").toLowerCase()}.png`;
+        a.click();
+        setTimeout(()=>{
+          window.open(`https://wa.me/?text=${caption}`,"_blank");
+        },800);
+      });
+
+    }catch(err){
+      modal.querySelector("div[style*='Gerando']").textContent="Erro ao gerar imagem: "+err.message;
+    }
+  },100);
+}
 // ── PROFILE SCREEN (user settings) ───────────────────────────────────────────
 function renderProfileModal(){
   const u = CURRENT_USER;
@@ -1853,11 +1627,9 @@ function showProfile(uid, filter){
       <!-- Stats grid 2 colunas -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
         <div class="ps"><div class="psv">${s.p}</div><div class="psl">Participações</div></div>
-        <div class="ps"><div class="psv">${(()=>{const rank=calcRankGeral();const pos=rank.findIndex(r=>r.p.uid===uid);return pos>=0?(pos+1)+"º":"-";})()}</div><div class="psl">Ranking</div></div>
+        <div class="ps"><div class="psv">${s.ft||"-"}</div><div class="psl">FT Etapa</div></div>
         <div class="ps"><div class="psv">${s.wNL+s.wKO}</div><div class="psl">Campeão Etapa</div></div>
-        ${disputedFT
-          ?`<div class="ps"><div class="psv">${allHist.filter(st=>st.isFinal).length}</div><div class="psl">FT Ranking</div></div>`
-          :`<div class="ps" style="opacity:.35"><div class="psv">—</div><div class="psl">FT Ranking</div></div>`}
+        <div class="ps"><div class="psv">${(()=>{const rank=calcRankGeral();const pos=rank.findIndex(r=>r.p.uid===uid);return pos>=0?(pos+1)+"º":"-";})()}</div><div class="psl">Ranking</div></div>
         ${wonFT
           ?`<div class="ps" style="border-color:var(--yellow)"><div class="psv">🏆 ${s.wFT}</div><div class="psl">Campeão Ranking</div></div>`
           :`<div class="ps" style="opacity:.35"><div class="psv">—</div><div class="psl">Campeão Ranking</div></div>`}
