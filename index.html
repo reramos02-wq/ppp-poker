@@ -645,6 +645,8 @@ function showToast(msg, color){
   clearTimeout(t._timer);
   t._timer=setTimeout(function(){t.style.opacity='0';},2500);
 }
+const IS_DESKTOP = () => window.innerWidth > 768;
+
 function getP(uid){ return DB.players.find(p=>p.uid===uid); }
 
 // ── CALCULATIONS ──────────────────────────────────────────────────────────────
