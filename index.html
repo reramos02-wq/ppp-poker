@@ -2645,12 +2645,16 @@ function drawResultModal(){
       rd.appendChild(ps);
       if(isKO){
         var curKO=parseInt(row.ko)||0;
-        var ks=document.createElement("select");
-        ks.style.cssText="background:var(--surface2);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:10px 2px;text-align:center;text-align-last:center;font-size:15px;font-family:Barlow Condensed,sans-serif;font-weight:700;width:100%;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;";
-        var koH="";
-        for(var k=0;k<=maxPos;k++) koH+="<option value='"+k+"'"+(curKO===k?" selected":"")+">"+k+" \uD83E\uDD4A</option>";
-        ks.innerHTML=koH;
-        (function(rowRef,ksEl){ksEl.addEventListener("change",function(){rowRef.ko=ksEl.value;autoSaveDraft();});})(row,ks);
+        var ks=document.createElement("input");
+        ks.type="number";
+        ks.inputMode="numeric";
+        ks.pattern="[0-9]*";
+        ks.min="0";
+        ks.value=curKO;
+        ks.placeholder="0";
+        ks.style.cssText="background:var(--surface2);border:2px solid var(--border2);border-radius:4px;color:#fff;padding:10px 6px;text-align:center;font-size:15px;font-family:Barlow Condensed,sans-serif;font-weight:700;width:100%;outline:none;box-sizing:border-box;";
+        ks.addEventListener("input",function(){var v=parseInt(ks.value);if(isNaN(v)||v<0){v=0;ks.value=0;}row.ko=v;autoSaveDraft();});
+        ks.addEventListener("blur",function(){if(ks.value===""||isNaN(parseInt(ks.value))){ks.value=0;row.ko=0;autoSaveDraft();}});
         rd.appendChild(ks);
       }
       listEl.appendChild(rd);
