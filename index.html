@@ -888,14 +888,15 @@ function openShareModal(stage){
 
       ins.forEach((uid,i)=>{
         const pl = getP(uid)||{name:uid,nickname:uid};
+        const isLatePlayer = (stage.lateList||[]).includes(uid);
         const row = document.createElement("div");
         row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 6px;border-bottom:1px solid #1e1e1e;";
         row.innerHTML = `
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:#555;width:20px;text-align:right;flex-shrink:0">${i+1}</div>
           <div style="width:28px;height:28px;border-radius:50%;background:#2a2a2a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;flex-shrink:0">${ini(pl.name)}</div>
-          <div style="min-width:0">
-            <div style="font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.nickname}</div>
-            <div style="font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name!==pl.nickname?pl.name:""}</div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${isLatePlayer?"⏳ ":""}${pl.nickname}</div>
+            <div style="font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name!==pl.nickname?pl.name:""}${isLatePlayer?' · <span style="color:#F5A800">LATE</span>':""}</div>
           </div>`;
         listWrap.appendChild(row);
       });
