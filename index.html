@@ -355,9 +355,21 @@ select.inp{appearance:none;}
 </div>
 <div id="result-modal"></div>
 <script>
-setTimeout(function(){
-  var app=document.getElementById("app");
-  if(app&&app.innerHTML.indexOf("border:3px so")>-1){app.innerHTML='<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0e0e0e;padding:24px;text-align:center"><div style="color:#F5A800;font-size:48px;margin-bottom:16px">⚠️</div><div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:8px">Erro de conexão</div><div style="color:#888;font-size:13px;margin-bottom:24px">Não foi possível conectar.<br/>Verifique sua conexão e tente novamente.</div><button onclick="location.reload()" style="background:#F5A800;color:#000;border:none;padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;border-radius:4px">🔄 Tentar novamente</button></div>';}},10000);
+// Auth timeout — if onAuthStateChanged hasn't fired in 8s, show login
+var _authResolved = false;
+var _authTimeout = setTimeout(function(){
+  if(_authResolved) return;
+  var app = document.getElementById("app");
+  if(!app) return;
+  // Show login screen — better than spinner forever
+  app.innerHTML = '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0e0e0e;padding:24px;text-align:center">'
+    + '<div style="color:#F5A800;font-size:48px;margin-bottom:16px">⚠️</div>'
+    + '<div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:8px">Erro ao carregar</div>'
+    + '<div style="color:#888;font-size:13px;margin-bottom:24px">Verifique sua conexão e tente novamente.<br/>Se o problema persistir, limpe o cache do navegador.</div>'
+    + '<button onclick="location.reload(true)" style="background:#F5A800;color:#000;border:none;padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;border-radius:4px;margin-bottom:12px">🔄 Tentar novamente</button>'
+    + '<button onclick="caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)});location.reload(true)})" style="background:none;border:1px solid #444;color:#888;padding:10px 20px;font-size:12px;cursor:pointer;border-radius:4px">🧹 Limpar cache e recarregar</button>'
+    + '</div>';
+}, 8000);
 </script>
 <div id="admin-modal"></div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
@@ -1587,9 +1599,21 @@ function renderStageDetail(sid){
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
       ${s.allowInscriptions===false && !iAmIn
         ? `<div style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:#e74c3c;padding:12px 14px;border-radius:3px;font-size:14px;text-align:center">🔒 Inscrições encerradas</div>`
-        : `<button class="btn fw ${iAmIn?"bd":"by"}" style="padding:14px;font-size:16px" data-inscribe="${s.id}">
-            ${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}
-          </button>`
+        : `<div>
+            <button class="btn fw ${iAmIn?"bd":"by"}" style="padding:14px;font-size:16px" data-inscribe="${s.id}">
+              ${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}
+            </button>
+            ${iAmIn?`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;padding:10px 14px;background:var(--surface2);border-radius:4px;border:1px solid var(--border)">
+              <input type="checkbox" id="late-chk-${s.id}" data-late="${s.id}"
+                ${(s.lateList||[]).includes(CURRENT_USER_UID)?"checked":""}
+                style="width:18px;height:18px;cursor:pointer;accent-color:var(--yellow);flex-shrink:0"/>
+              <span style="font-size:14px">⏳</span>
+              <div>
+                <div style="font-size:13px;color:#fff;font-weight:600">Entro em Late</div>
+                <div style="font-size:11px;color:var(--muted)">Marque se vai chegar depois do início</div>
+              </div>
+            </label>`:""}
+          </div>`
       }
       <div style="display:flex;gap:8px">
         ${ins.length>0?`<button class="btn bo fw" style="padding:12px" data-share-ins="${s.id}">📤 Compartilhar Lista</button>`:""}
@@ -3260,6 +3284,8 @@ window.addEventListener('unhandledrejection', function(e){
 
 dbg("6. Aguardando auth...");
 onAuthStateChanged(auth, async (user) => {
+  _authResolved = true;
+  clearTimeout(_authTimeout);
   dbg("7. Auth state: " + (user ? "logado " + user.email : "deslogado"));
   dbg("8. Iniciando fluxo...");
   if(user){
