@@ -3212,6 +3212,9 @@ function bindEvents(){
       });
       const localStage = DB.stages.find(s=>s.id===sid);
       if(localStage) localStage.lateList = newLate;
+      // Keep current stage detail view after late toggle
+      STAGE_DETAIL = sid;
+      TAB = "stages";
       showToast(isLate?"⏳ Marcado como Late":"Late removido","green");
       render();
     });
