@@ -354,6 +354,11 @@ select.inp{appearance:none;}
   </div>
 </div>
 <div id="result-modal"></div>
+<script>
+setTimeout(function(){
+  var app=document.getElementById("app");
+  if(app&&app.innerHTML.indexOf("border:3px so")>-1){app.innerHTML='<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0e0e0e;padding:24px;text-align:center"><div style="color:#F5A800;font-size:48px;margin-bottom:16px">⚠️</div><div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:8px">Erro de conexão</div><div style="color:#888;font-size:13px;margin-bottom:24px">Não foi possível conectar.<br/>Verifique sua conexão e tente novamente.</div><button onclick="location.reload()" style="background:#F5A800;color:#000;border:none;padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;border-radius:4px">🔄 Tentar novamente</button></div>';}},10000);
+</script>
 <div id="admin-modal"></div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
@@ -1177,7 +1182,15 @@ function renderTopbar(){
 }
 
 function renderLoginScreen(){
+  const ua = navigator.userAgent||"";
+  const isInApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|MicroMessenger/i.test(ua);
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
   return `<div class="login-wrap">
+    ${isInApp?`<div style="background:#F5A800;color:#000;padding:14px 16px;text-align:center;font-size:13px;font-weight:700;line-height:1.6;width:100%;box-sizing:border-box">
+      ⚠️ Login não funciona neste navegador.<br/>
+      <span style="font-weight:400;font-size:12px">Abra o PPP Poker no ${isIOS?"Safari":"Chrome"} para fazer login.<br/>Toque em ··· → "Abrir no ${isIOS?"Safari":"navegador"}"</span>
+    </div>`:""}
+    <div class="login-box">
     <div class="login-box">
       <div class="login-logo" style="text-align:center;margin-bottom:20px">${LOGO(56)}</div>
       <div class="login-title" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;color:#fff;text-align:center;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px">PPP POKER</div>
@@ -2819,6 +2832,64 @@ function bindProfileSetup(){
   });
 }
 
+function bindLoginEvents(){
+  // Google login
+  document.getElementById("btn-google-login")?.addEventListener("click", async()=>{
+    try{
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    }catch(e){ showLoginError(e.code); }
+  });
+
+  // Tab switching
+  document.getElementById("tab-login")?.addEventListener("click",()=>{ LOGIN_TAB="login"; document.getElementById("app").innerHTML=renderLoginScreen(); bindLoginEvents(); });
+  document.getElementById("tab-signup")?.addEventListener("click",()=>{ LOGIN_TAB="signup"; document.getElementById("app").innerHTML=renderLoginScreen(); bindLoginEvents(); });
+
+  // Login
+  document.getElementById("btn-login")?.addEventListener("click", async()=>{
+    const email = document.getElementById("auth-email")?.value.trim();
+    const pass  = document.getElementById("auth-pass")?.value;
+    if(!email||!pass){ showLoginError("auth/missing-fields"); return; }
+    try{
+      await signInWithEmailAndPassword(auth, email, pass);
+    }catch(e){ showLoginError(e.code); }
+  });
+
+  // Enter key on password
+  document.getElementById("auth-pass")?.addEventListener("keydown", e=>{
+    if(e.key==="Enter") document.getElementById("btn-login")?.click();
+  });
+
+  // Signup
+  document.getElementById("btn-signup")?.addEventListener("click", async()=>{
+    const name  = document.getElementById("auth-name")?.value.trim();
+    const nick  = document.getElementById("auth-nick")?.value.trim() || (name?name.split(" ")[0]:"");
+    const email = document.getElementById("auth-email")?.value.trim();
+    const pass  = document.getElementById("auth-pass")?.value;
+    if(!name||!email||!pass){ showLoginError("auth/missing-fields"); return; }
+    try{
+      const btn = document.getElementById("btn-signup");
+      if(btn){ btn.disabled=true; btn.textContent="Criando conta..."; }
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      await updateProfile(cred.user, { displayName: name+"|"+nick });
+    }catch(e){
+      showLoginError(e.code);
+      const btn = document.getElementById("btn-signup");
+      if(btn){ btn.disabled=false; btn.textContent="Criar conta"; }
+    }
+  });
+
+  // Forgot password
+  document.getElementById("btn-forgot")?.addEventListener("click", async()=>{
+    const email = document.getElementById("auth-email")?.value.trim();
+    if(!email){ showLoginError("auth/missing-email"); return; }
+    try{
+      await sendPasswordResetEmail(auth, email);
+      showLoginError("auth/reset-sent");
+    }catch(e){ showLoginError(e.code); }
+  });
+}
+
 function bindEvents(){
   // Profile button
   document.getElementById("btn-profile")?.addEventListener("click",()=>renderProfileModal());
@@ -3098,6 +3169,28 @@ function bindEvents(){
   // Export podium
   document.getElementById("btn-export-podium")?.addEventListener("click", window.exportPodium);
 
+  // Late checkbox
+  document.querySelectorAll("[data-late]").forEach(chk=>{
+    chk.addEventListener("change", async()=>{
+      const sid = chk.dataset.late;
+      const stage = DB.stages.find(s=>s.id===sid);
+      if(!stage) return;
+      const lateList = [...(stage.lateList||[])];
+      const isLate = chk.checked;
+      const newLate = isLate
+        ? [...new Set([...lateList, CURRENT_USER_UID])]
+        : lateList.filter(u=>u!==CURRENT_USER_UID);
+      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        stages: DB.stages.map(s=>s.id===sid?{...s,lateList:newLate}:s),
+        updatedAt: serverTimestamp()
+      });
+      const localStage = DB.stages.find(s=>s.id===sid);
+      if(localStage) localStage.lateList = newLate;
+      showToast(isLate?"⏳ Marcado como Late":"Late removido","green");
+      render();
+    });
+  });
+
   // HOF filter tabs
   document.querySelectorAll("[data-hof-tab]").forEach(btn=>{
     btn.addEventListener("click",()=>{ HOF_FILTER=btn.dataset.hofTab; render(); });
@@ -3186,7 +3279,9 @@ onAuthStateChanged(auth, async (user) => {
     CURRENT_USER_UID = null;
     CURRENT_PLAYER   = null;
     IS_ADMIN         = false;
-    renderLoginScreen();
+    stopListeners();
+    document.getElementById("app").innerHTML = renderLoginScreen();
+    bindLoginEvents();
   }
 });
 
