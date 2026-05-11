@@ -1634,8 +1634,10 @@ function renderStageDetail(sid){
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--muted);width:24px;text-align:center">${i+1}</div>
           ${AV(uid)}
           <div style="flex:1">
-            <div style="font-size:14px;color:#fff;font-weight:600">${pl.name}</div>
-            <div style="font-size:12px;color:var(--muted)">"${pl.nickname}"</div>
+            <div style="font-size:14px;color:#fff;font-weight:600">
+              ${(s.lateList||[]).includes(uid)?'<span style="color:var(--muted);font-size:12px;margin-right:4px">⏳</span>':""}${pl.name}
+            </div>
+            <div style="font-size:12px;color:var(--muted)">"${pl.nickname}"${(s.lateList||[]).includes(uid)?'<span style="color:var(--yellow);margin-left:6px;font-size:10px">LATE</span>':""}</div>
           </div>
           ${uid===CURRENT_USER_UID?`<span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px">INSCRITO ✓</span>`:""}
         </div>`;}).join("")}
