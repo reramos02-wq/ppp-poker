@@ -1444,14 +1444,19 @@ function renderHome(){
     </div>
   </div>
   <div style="padding:16px">
-    ${next?`<div class="card cy mb10" style="cursor:pointer" data-goto-expand="${next.id}">
-      <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:4px">📅 Próxima Etapa</div>
+    ${next?`<div class="card cy mb10" style="cursor:pointer;border-left:4px solid ${isLive(next)?'var(--red)':'var(--yellow)'}" data-goto-expand="${next.id}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700">📅 Próxima Etapa</div>
+        ${isLive(next)?'<span class="live-badge" style="font-size:9px;padding:2px 7px"><span class="live-dot" style="width:5px;height:5px"></span>LIVE</span>':""}
+      </div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff">${next.name}</div>
       <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.time?" às "+next.time:""}${next.location?" · "+next.location:""}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">${next.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}</div>
       <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:13px">${(next.inscriptions||[]).length} inscrito${(next.inscriptions||[]).length!==1?"s":""}</span>
+        <span style="font-size:13px;font-weight:600;color:${isLive(next)?'var(--red)':'#fff'}">${(next.inscriptions||[]).length} inscrito${(next.inscriptions||[]).length!==1?"s":""}</span>
         <span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</span>
       </div>
+      ${isLive(next)?`<div style="margin-top:8px;overflow-x:auto;white-space:nowrap;padding-bottom:4px">${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:'?',nickname:'?'};return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 8px 3px 3px;margin-right:4px;font-size:11px;color:#fff;white-space:nowrap">'+AV(uid)+pl.nickname+'</span>';}).join('')}</div>`:""}
     </div>`:""}
     ${geralTop.length?`<div class="mb10">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Líderes Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
