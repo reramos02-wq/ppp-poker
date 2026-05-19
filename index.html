@@ -456,7 +456,7 @@ function shouldShowMovement(){
     .sort((a,b)=>b.date.localeCompare(a.date))[0];
   if(!lastFinished) return false;
   // Hide 48h BEFORE next upcoming stage (not after)
-  const nextStage = DB.stages.find(s=>s.status==="upcoming");
+  const nextStage = [...DB.stages].filter(s=>s.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0];
   if(nextStage && nextStage.date && nextStage.time){
     const [y,m,d] = nextStage.date.split("-").map(Number);
     const [h,mi]  = nextStage.time.split(":").map(Number);
@@ -1325,7 +1325,7 @@ function renderPage(){
 
 // ── HOME DESKTOP (2 colunas) ──────────────────────────────────────────────────
 function renderHomeDesktop(){
-  const next  = DB.stages.find(s=>s.status==="upcoming");
+  const next  = [...DB.stages].filter(s=>s.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0];
   const done  = DB.stages.filter(s=>s.status==="finished");
   const geralTop = calcRankGeral().slice(0,5);
   const nlTop = calcRank("nlholdem").slice(0,5);
@@ -1516,7 +1516,7 @@ function renderRanking(){
 // ── STAGES ────────────────────────────────────────────────────────────────────
 function renderStages(){
   if(STAGE_DETAIL) return renderStageDetail(STAGE_DETAIL);
-  const upcoming = DB.stages.filter(s=>s.status==="upcoming");
+  const upcoming = [...DB.stages].filter(s=>s.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date));
   const nextId = upcoming.length>0?upcoming[0].id:null;
   return `<div class="sec">
   <div class="st">Eta<span class="ac">pas</span></div><div class="ss">Calendário da temporada</div><div class="dv"></div>
