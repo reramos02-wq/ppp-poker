@@ -446,6 +446,15 @@ function isLive(stage){
   return now >= new Date(y, m-1, d, h, mi, 0);
 }
 
+// Always returns the earliest upcoming stage by date — single source of truth
+function getNextStage(){
+  const live = getLiveStage();
+  if(live) return live;
+  return DB.stages
+    .filter(s=>s.status==="upcoming")
+    .sort((a,b)=>(a.date||"").localeCompare(b.date||""))[0] || null;
+}
+
 function shouldShowMovement(){
   const now = new Date();
   // Check if there's a live stage
@@ -1336,7 +1345,7 @@ function renderPage(){
 
 // ── HOME DESKTOP (2 colunas) ──────────────────────────────────────────────────
 function renderHomeDesktop(){
-  const next  = [...DB.stages].filter(s=>s.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const next  = getNextStage();
   const done  = DB.stages.filter(s=>s.status==="finished");
   const geralTop = calcRankGeral().slice(0,5);
   const nlTop = calcRank("nlholdem").slice(0,5);
@@ -1443,7 +1452,7 @@ function renderHomeDesktop(){
 
 // ── HOME MOBILE ───────────────────────────────────────────────────────────────
 function renderHome(){
-  const next = [...DB.stages].filter(s=>s.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const next = getNextStage();
   const done = DB.stages.filter(s=>s.status==="finished");
   const geralTop = calcRankGeral().slice(0,3);
   const nlTop = calcRank("nlholdem").slice(0,3);
@@ -1527,8 +1536,8 @@ function renderRanking(){
 // ── STAGES ────────────────────────────────────────────────────────────────────
 function renderStages(){
   if(STAGE_DETAIL) return renderStageDetail(STAGE_DETAIL);
-  const upcoming = [...DB.stages].filter(s=>s.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date));
-  const nextId = upcoming.length>0?upcoming[0].id:null;
+  const upcoming = DB.stages.filter(s=>s.status==="upcoming").sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  const nextId = getNextStage()?.id || null;
   return `<div class="sec">
   <div class="st">Eta<span class="ac">pas</span></div><div class="ss">Calendário da temporada</div><div class="dv"></div>
   ${DB.stages.length===0?'<div class="empty">Nenhuma etapa cadastrada.</div>':''}
