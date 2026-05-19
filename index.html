@@ -3449,14 +3449,13 @@ function startListeners(user){
         if(editingStageId){
           DB.stages = (data.stages||[]).map(s=>{
             if(s.id===editingStageId){
-              // Keep local draft data, update rest from server
               const local = DB.stages.find(x=>x.id===editingStageId);
               return local ? {...s, draft: local.draft} : s;
             }
             return s;
-          });
+          }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
         } else {
-          DB.stages = data.stages || [];
+          DB.stages = (data.stages || []).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
         }
         dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
         // If document exists but is empty, seed it
