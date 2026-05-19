@@ -565,7 +565,18 @@ const POINTS_TABLE = [
 const getPts = pos => POINTS_TABLE.find(r=>r.pos===pos)?.pts ?? 2;
 
 // ── APP STATE ─────────────────────────────────────────────────────────────────
-let DB = { players:[], stages:[] };
+// DB with auto-sorted stages
+const _DB = { players:[], stages:[], admins:[] };
+const DB = new Proxy(_DB, {
+  set(target, prop, value){
+    if(prop==="stages"){
+      target[prop] = (value||[]).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    } else {
+      target[prop] = value;
+    }
+    return true;
+  }
+});
 
 // Navigation state
 let TAB           = "home";
