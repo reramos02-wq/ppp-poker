@@ -422,15 +422,19 @@ const mkId = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
 // ── LIVE & RANKING MOVEMENT HELPERS ──────────────────────────────────────────
 function getLiveStage(){
   // A stage is LIVE if: status=upcoming, date=today, time has been reached
+  // Pick the EARLIEST upcoming stage that has passed its start time
   const now = new Date();
-  return DB.stages.find(s=>{
+  const candidates = [...DB.stages].filter(s=>{
     if(s.status !== "upcoming") return false;
     if(!s.date || !s.time) return false;
     const [y,m,d] = s.date.split("-").map(Number);
     const [h,mi]  = s.time.split(":").map(Number);
     const stageStart = new Date(y, m-1, d, h, mi, 0);
     return now >= stageStart;
-  }) || null;
+  });
+  // Sort by date ascending, return the first (most overdue)
+  candidates.sort((a,b)=>a.date.localeCompare(b.date));
+  return candidates[0] || null;
 }
 
 function isLive(stage){
@@ -1428,7 +1432,7 @@ function renderHomeDesktop(){
 
 // ── HOME MOBILE ───────────────────────────────────────────────────────────────
 function renderHome(){
-  const next = DB.stages.find(s=>s.status==="upcoming");
+  const next = [...DB.stages].filter(s=>s.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0];
   const done = DB.stages.filter(s=>s.status==="finished");
   const geralTop = calcRankGeral().slice(0,3);
   const nlTop = calcRank("nlholdem").slice(0,3);
