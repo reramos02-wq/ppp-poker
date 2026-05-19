@@ -1468,6 +1468,9 @@ function renderHome(){
     </div>
   </div>
   <div style="padding:16px">
+    <div style="background:#1a1a1a;border:1px solid #333;padding:6px 10px;margin-bottom:6px;font-size:10px;font-family:monospace;color:#888;border-radius:3px">
+      DEBUG: upcoming=${DB.stages.filter(s=>s.status==='upcoming').map(s=>s.name+'('+s.date+')').join(', ')} | next=${getNextStage()?.name||'null'}
+    </div>
     ${next?`<div class="card cy mb10" style="cursor:pointer;border-left:4px solid ${isLive(next)?'var(--red)':'var(--yellow)'}" data-goto-expand="${next.id}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700">📅 Próxima Etapa</div>
