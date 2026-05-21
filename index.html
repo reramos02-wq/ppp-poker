@@ -1050,70 +1050,110 @@ function renderProfileSetup(){
 }
 
 // ── IMAGE UPLOAD HELPERS ──────────────────────────────────────────────────────
-let _cropResolve = null;
-let _cropperInstance = null;
-
-// Load Cropper.js on demand
-function loadCropper(){
-  return new Promise(res=>{
-    if(window.Cropper) return res();
-    const sc = document.createElement("script");
-    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js";
-    sc.onload = res;
-    document.head.appendChild(sc);
-  });
-}
-
-// Open crop modal, returns a blob (400x400 square JPEG)
+// ── CANVAS CROP ENGINE ────────────────────────────────────────────────────────
 function openCropModal(file){
-  return new Promise(async(resolve, reject)=>{
-    await loadCropper();
-    const modal = document.getElementById("crop-modal");
-    const imgEl  = document.getElementById("crop-img");
-    modal.style.display = "flex";
+  return new Promise((resolve, reject)=>{
+    const modal  = document.getElementById("crop-modal");
+    const canvas = document.getElementById("crop-canvas");
+    const ctx    = canvas.getContext("2d");
+    const SIZE   = 300; // display canvas size
+    canvas.width = SIZE; canvas.height = SIZE;
 
-    // Revoke previous
-    if(imgEl.src) URL.revokeObjectURL(imgEl.src);
-    imgEl.src = URL.createObjectURL(file);
+    let img, imgW, imgH;
+    let scale = 1, minScale = 1;
+    let offX = 0, offY = 0;
+    let dragging = false, lastX = 0, lastY = 0;
+    let lastDist = 0; // for pinch zoom
 
-    // Destroy previous cropper
-    if(_cropperInstance){ _cropperInstance.destroy(); _cropperInstance = null; }
+    function clamp(){
+      const w = imgW*scale, h = imgH*scale;
+      if(w < SIZE){ offX = (SIZE-w)/2; }
+      else { offX = Math.min(0, Math.max(SIZE-w, offX)); }
+      if(h < SIZE){ offY = (SIZE-h)/2; }
+      else { offY = Math.min(0, Math.max(SIZE-h, offY)); }
+    }
 
-    imgEl.onload = ()=>{
-      _cropperInstance = new Cropper(imgEl, {
-        aspectRatio: 1,
-        viewMode: 1,
-        dragMode: "move",
-        autoCropArea: 0.85,
-        responsive: true,
-        guides: false,
-        center: true,
-        highlight: false,
-        cropBoxMovable: true,
-        cropBoxResizable: true,
-        toggleDragModeOnDblclick: false,
-      });
+    function draw(){
+      ctx.clearRect(0,0,SIZE,SIZE);
+      ctx.drawImage(img, offX, offY, imgW*scale, imgH*scale);
+    }
+
+    const reader = new FileReader();
+    reader.onload = e=>{
+      img = new Image();
+      img.onload = ()=>{
+        imgW = img.width; imgH = img.height;
+        // Fit so shortest side = SIZE
+        minScale = SIZE / Math.min(imgW, imgH);
+        scale = minScale;
+        offX = (SIZE - imgW*scale)/2;
+        offY = (SIZE - imgH*scale)/2;
+        clamp(); draw();
+        modal.style.display = "flex";
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    // Mouse drag
+    canvas.onmousedown  = e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; };
+    canvas.onmousemove  = e=>{ if(!dragging) return; offX+=e.clientX-lastX; offY+=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; clamp(); draw(); };
+    canvas.onmouseup    = ()=>dragging=false;
+    canvas.onmouseleave = ()=>dragging=false;
+
+    // Touch drag + pinch
+    canvas.ontouchstart = e=>{
+      e.preventDefault();
+      if(e.touches.length===1){ dragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; }
+      if(e.touches.length===2){ lastDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
+    };
+    canvas.ontouchmove = e=>{
+      e.preventDefault();
+      if(e.touches.length===1 && dragging){
+        offX+=e.touches[0].clientX-lastX; offY+=e.touches[0].clientY-lastY;
+        lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;
+        clamp(); draw();
+      }
+      if(e.touches.length===2){
+        const dist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+        const factor=dist/lastDist;
+        const cx=(SIZE/2-offX)/scale, cy=(SIZE/2-offY)/scale;
+        scale=Math.max(minScale,Math.min(scale*factor,4));
+        offX=SIZE/2-cx*scale; offY=SIZE/2-cy*scale;
+        lastDist=dist; clamp(); draw();
+      }
+    };
+    canvas.ontouchend = ()=>dragging=false;
+
+    // Scroll to zoom
+    canvas.onwheel = e=>{
+      e.preventDefault();
+      const factor = e.deltaY<0?1.1:0.9;
+      const cx=(SIZE/2-offX)/scale, cy=(SIZE/2-offY)/scale;
+      scale=Math.max(minScale,Math.min(scale*factor,4));
+      offX=SIZE/2-cx*scale; offY=SIZE/2-cy*scale;
+      clamp(); draw();
     };
 
-    _cropResolve = resolve;
-
-    const doCancel = ()=>{
-      modal.style.display = "none";
-      if(_cropperInstance){ _cropperInstance.destroy(); _cropperInstance=null; }
-      reject(new Error("Cancelado"));
-    };
-
-    document.getElementById("crop-confirm").onclick = ()=>{
-      if(!_cropperInstance) return;
-      const canvas = _cropperInstance.getCroppedCanvas({width:400,height:400,imageSmoothingQuality:"high"});
-      canvas.toBlob(blob=>{
-        modal.style.display = "none";
-        _cropperInstance.destroy(); _cropperInstance = null;
-        resolve(blob);
-      }, "image/jpeg", 0.82);
-    };
+    const doCancel = ()=>{ modal.style.display="none"; reject(new Error("Cancelado")); };
     document.getElementById("crop-cancel").onclick  = doCancel;
     document.getElementById("crop-cancel2").onclick = doCancel;
+
+    document.getElementById("crop-confirm").onclick = ()=>{
+      // Export 400x400
+      const out = document.createElement("canvas");
+      out.width=400; out.height=400;
+      const ratio = 400/SIZE;
+      out.getContext("2d").drawImage(img,
+        -offX*ratio/scale*scale, -offY*ratio/scale*scale,
+        imgW*scale*ratio, imgH*scale*ratio
+      );
+      // Simpler: just scale the visible canvas area
+      const out2 = document.createElement("canvas");
+      out2.width=400; out2.height=400;
+      out2.getContext("2d").drawImage(canvas,0,0,400,400);
+      out2.toBlob(blob=>{ modal.style.display="none"; resolve(blob); },"image/jpeg",0.85);
+    };
   });
 }
 
@@ -3773,20 +3813,35 @@ window.closeProfile      = closeProfile;
 
 </script>
 <!-- Crop Modal -->
-<div id="crop-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
-  <div style="background:#1a1a1a;border-radius:8px;width:100%;max-width:420px;overflow:hidden">
-    <div style="padding:14px 16px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between">
+<div id="crop-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
+  <div style="background:#1a1a1a;border-radius:8px;width:100%;max-width:400px">
+    <div style="padding:12px 16px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between">
       <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff;letter-spacing:1px">✂️ RECORTAR FOTO</span>
-      <button id="crop-cancel" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">✕</button>
+      <button id="crop-cancel" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;line-height:1">✕</button>
     </div>
-    <div style="padding:16px;display:flex;justify-content:center;background:#111">
-      <div style="width:100%;max-width:360px;max-height:360px;overflow:hidden">
-        <img id="crop-img" style="max-width:100%;display:block"/>
+    <div style="padding:16px;background:#111;display:flex;flex-direction:column;align-items:center;gap:10px">
+      <!-- Canvas crop area -->
+      <div style="position:relative;width:300px;height:300px;overflow:hidden;border-radius:4px;touch-action:none" id="crop-area">
+        <canvas id="crop-canvas" width="300" height="300" style="display:block;cursor:move"></canvas>
+        <!-- Circle overlay -->
+        <div style="position:absolute;inset:0;pointer-events:none">
+          <svg width="300" height="300" style="position:absolute;inset:0">
+            <defs>
+              <mask id="hole">
+                <rect width="300" height="300" fill="white"/>
+                <circle cx="150" cy="150" r="140" fill="black"/>
+              </mask>
+            </defs>
+            <rect width="300" height="300" fill="rgba(0,0,0,0.55)" mask="url(#hole)"/>
+            <circle cx="150" cy="150" r="140" fill="none" stroke="#F5A800" stroke-width="2"/>
+          </svg>
+        </div>
       </div>
+      <div style="font-size:11px;color:#666;text-align:center">Arraste para reposicionar · Pinça/scroll para zoom</div>
     </div>
     <div style="padding:12px 16px;display:flex;gap:8px">
-      <button id="crop-confirm" style="flex:1;background:#F5A800;color:#000;border:none;padding:12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:1px;cursor:pointer;border-radius:4px">✓ CONFIRMAR</button>
-      <button id="crop-cancel2" style="background:#2a2a2a;color:#888;border:1px solid #333;padding:12px 20px;font-size:13px;cursor:pointer;border-radius:4px">Cancelar</button>
+      <button id="crop-confirm" style="flex:1;background:#F5A800;color:#000;border:none;padding:13px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:1px;cursor:pointer;border-radius:4px">✓ CONFIRMAR</button>
+      <button id="crop-cancel2" style="background:#2a2a2a;color:#888;border:1px solid #333;padding:13px 18px;font-size:13px;cursor:pointer;border-radius:4px">Cancelar</button>
     </div>
   </div>
 </div>
