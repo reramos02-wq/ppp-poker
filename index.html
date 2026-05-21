@@ -648,7 +648,6 @@ async function saveStages(){
 // SAFE: reads current Firestore data first to avoid overwriting other players
 async function savePlayers(){
   try {
-    const { getDoc: _getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
     const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
     if(snap.exists()){
       const current = snap.data();
@@ -987,7 +986,7 @@ function openShareModal(stage){
               });
               return;
             }
-          }catch(e){ console.log("Share API failed, fallback"); }
+          }catch(e){ /* share fallback */ }
         }
         // Fallback: download image + open WhatsApp
         const a=document.createElement("a");
@@ -1193,9 +1192,11 @@ async function uploadPhoto(file, path, crop=true){
 function openLightbox(url){
   if(!url) return;
   const lb = document.getElementById("lightbox");
+  if(!lb) return;
   document.getElementById("lightbox-img").src = url;
   lb.style.display = "flex";
 }
+window.openLightbox = openLightbox;
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function render(){
@@ -3373,7 +3374,7 @@ function bindEvents(){
           if(mod){stFixed++;return{...s,results,inscriptions:ins};}
           return s;
         });
-        console.log("Stages updated:", stFixed);
+        /* stages updated */
       }
 
       // Dedup
@@ -3500,12 +3501,18 @@ function bindEvents(){
       const newLate = isLate
         ? [...new Set([...lateList, CURRENT_USER_UID])]
         : lateList.filter(u=>u!==CURRENT_USER_UID);
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        stages: DB.stages.map(s=>s.id===sid?{...s,lateList:newLate}:s),
-        updatedAt: serverTimestamp()
-      });
-      const localStage = DB.stages.find(s=>s.id===sid);
-      if(localStage) localStage.lateList = newLate;
+      try {
+        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          stages: DB.stages.map(s=>s.id===sid?{...s,lateList:newLate}:s),
+          updatedAt: serverTimestamp()
+        });
+        const localStage = DB.stages.find(s=>s.id===sid);
+        if(localStage) localStage.lateList = newLate;
+      } catch(err){
+        chk.checked = !isLate; // revert checkbox on failure
+        showToast("Erro ao salvar Late. Tente novamente.","red");
+        return;
+      }
       // Keep current stage detail view after late toggle
       STAGE_DETAIL = sid;
       TAB = "stages";
