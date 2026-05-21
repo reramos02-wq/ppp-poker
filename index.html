@@ -378,6 +378,7 @@ var _authTimeout = setTimeout(function(){
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA-VcO_q6mvXIUh4Vbt1hStmQnnar2kKM4",
@@ -564,7 +565,11 @@ const LOGO_80  = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACO
 const LOGO = (sz=38) => `<img src="${sz>=80?LOGO_80:LOGO_48}" width="${sz}" height="${sz}" alt="PPP Poker" style="display:block;object-fit:contain"/>`;
 const AV = (uid,sz="") => {
   const p = getPlayer(uid)||{name:"?"};
-  return `<div class="av${sz==="lg"?" avlg":sz==="xl"?" avxl":""}">` + ini(p.name) + `</div>`;
+  const szClass = sz==="lg"?" avlg":sz==="xl"?" avxl":"";
+  if(p.photoURL){
+    return `<div class="av${szClass}" style="background-image:url('${p.photoURL}');background-size:cover;background-position:center;font-size:0">&nbsp;</div>`;
+  }
+  return `<div class="av${szClass}">` + ini(p.name) + `</div>`;
 };
 
 const POINTS_TABLE = [
@@ -1039,6 +1044,41 @@ function renderProfileSetup(){
       </div>
     </div>
   </div>`;
+}
+
+// ── IMAGE UPLOAD HELPERS ──────────────────────────────────────────────────────
+// Compress image to max ~250KB using Canvas before uploading
+function compressImage(file, maxW=800, quality=0.75){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = e=>{
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = ()=>{
+        const scale = Math.min(1, maxW/Math.max(img.width,img.height));
+        const w = Math.round(img.width*scale);
+        const h = Math.round(img.height*scale);
+        const canvas = document.createElement("canvas");
+        canvas.width=w; canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        canvas.toBlob(blob=>{
+          if(!blob) return reject(new Error("Compressão falhou"));
+          resolve(blob);
+        },"image/jpeg",quality);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Upload photo to Firebase Storage, return download URL
+async function uploadPhoto(file, path){
+  const blob = await compressImage(file);
+  const sRef = storageRef(storage, path);
+  await uploadBytes(sRef, blob, {contentType:"image/jpeg"});
+  return await getDownloadURL(sRef);
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
@@ -1673,6 +1713,34 @@ function renderStageDetail(sid){
         </div>`;}).join("")}
     </div>`:""}
 
+    ${s.status==="finished" ? `
+    <div style="margin-bottom:16px">
+      <div class="lbl" style="margin-bottom:10px">📸 Fotos da Etapa</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <!-- Campeão -->
+        <div>
+          <div style="position:relative">
+            ${s.photoChampion
+              ?`<img src="${s.photoChampion}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--yellow)" />`
+              :`<div style="width:100%;aspect-ratio:1;background:var(--surface2);border-radius:6px;border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font-size:28px">🏆</span><span style="font-size:10px;color:var(--muted)">Sem foto</span></div>`}
+            ${IS_ADMIN?`<label style="position:absolute;bottom:4px;right:4px;background:var(--yellow);color:#000;padding:3px 8px;border-radius:3px;font-size:10px;font-weight:700;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,.4)">📷 ${s.photoChampion?"Trocar":"Adicionar"}<input type="file" accept="image/*" data-photo-type="photoChampion" data-stage-id="${s.id}" style="display:none"/></label>`:""}
+          </div>
+          <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:4px">🏆 Campeão</div>
+        </div>
+        <!-- Mesa Final -->
+        <div>
+          <div style="position:relative">
+            ${s.photoFinalTable
+              ?`<img src="${s.photoFinalTable}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--border)" />`
+              :`<div style="width:100%;aspect-ratio:1;background:var(--surface2);border-radius:6px;border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font-size:28px">🃏</span><span style="font-size:10px;color:var(--muted)">Sem foto</span></div>`}
+            ${IS_ADMIN?`<label style="position:absolute;bottom:4px;right:4px;background:var(--surface2);color:var(--yellow);border:1px solid var(--yellow);padding:3px 8px;border-radius:3px;font-size:10px;font-weight:700;cursor:pointer">📷 ${s.photoFinalTable?"Trocar":"Adicionar"}<input type="file" accept="image/*" data-photo-type="photoFinalTable" data-stage-id="${s.id}" style="display:none"/></label>`:""}
+          </div>
+          <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:4px">🃏 Mesa Final</div>
+        </div>
+      </div>
+      <div id="stage-photo-status-${s.id}" style="font-size:12px;color:var(--muted);text-align:center;margin-top:6px;min-height:18px"></div>
+    </div>` : ""}
+
     ${(()=>{
       const res = (s.results||[]).sort((a,b)=>a.position-b.position);
       if(!res.length || s.status!=="finished") return "";
@@ -1877,10 +1945,17 @@ function showProfile(uid, filter){
 
       <!-- Avatar + nome -->
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:3px">
-        ${AV(uid,"xl")}
-        <div>
+        <div style="position:relative;flex-shrink:0">
+          ${AV(uid,"xl")}
+          ${uid===CURRENT_USER_UID?`
+          <label for="avatar-upload" style="position:absolute;bottom:-2px;right:-2px;background:var(--yellow);color:#000;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,.6)" title="Trocar foto">
+            📷<input type="file" id="avatar-upload" accept="image/*" style="display:none"/>
+          </label>`:""}
+        </div>
+        <div style="flex:1;min-width:0">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff">${p.name}</div>
           <div style="color:var(--muted);font-size:14px">"${p.nickname}"</div>
+          ${uid===CURRENT_USER_UID?`<div id="avatar-status" style="font-size:11px;color:var(--muted);margin-top:4px"></div>`:""}
         </div>
       </div>
 
@@ -3224,6 +3299,38 @@ function bindEvents(){
 
   // Export podium
   document.getElementById("btn-export-podium")?.addEventListener("click", window.exportPodium);
+
+  // Stage photo upload (admin only)
+  document.querySelectorAll("input[data-photo-type]").forEach(inp=>{
+    inp.addEventListener("change", async(e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      const photoType = inp.dataset.photoType; // photoChampion or photoFinalTable
+      const sid = inp.dataset.stageId;
+      const statusEl = document.getElementById(`stage-photo-status-${sid}`);
+      if(statusEl) statusEl.textContent = "⏳ Enviando foto...";
+      try {
+        const path = `stages/${sid}/${photoType}.jpg`;
+        const url = await uploadPhoto(file, path);
+        const newStages = DB.stages.map(s=>{
+          if(s.id===sid) return {...s, [photoType]:url};
+          return s;
+        });
+        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          stages: newStages,
+          updatedAt: serverTimestamp()
+        });
+        DB.stages = newStages;
+        if(statusEl) statusEl.textContent = "✅ Foto salva!";
+        STAGE_DETAIL = sid;
+        TAB = "stages";
+        setTimeout(()=>render(), 500);
+      } catch(err) {
+        if(statusEl) statusEl.textContent = "❌ Erro: "+err.message;
+        console.error(err);
+      }
+    });
+  });
 
   // Late checkbox
   document.querySelectorAll("[data-late]").forEach(chk=>{
