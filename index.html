@@ -740,7 +740,7 @@ function calcRank(type){
   fin.forEach(s=>(s.results||[]).forEach(r=>{
     if(!sc[r.playerId]) return;
     const pts = getPts(r.position);
-    sc[r.playerId].total  += pts + (type==="knockout"?(r.knockouts||0)*10:0);
+    sc[r.playerId].total  += pts; // KOs are stats only, not added to ranking points
     sc[r.playerId].stages++;
     sc[r.playerId].ko     += r.knockouts||0;
   }));
@@ -771,7 +771,7 @@ function calcRankGeral(){
   finStages.forEach(s=>{
     (s.results||[]).forEach(r=>{
       if(!sc[r.playerId]) return;
-      const pts = getPts(r.position) + (s.type==="knockout"?(r.knockouts||0)*10:0);
+      const pts = getPts(r.position); // KOs are stats only, not added to points
       sc[r.playerId].total  += pts;
       sc[r.playerId].stages++;
       sc[r.playerId].ko     += r.knockouts||0;
