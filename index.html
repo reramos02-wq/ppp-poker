@@ -569,7 +569,8 @@ const AV = (uid,sz="") => {
   const p = getPlayer(uid)||{name:"?"};
   const szClass = sz==="lg"?" avlg":sz==="xl"?" avxl":"";
   if(p.photoURL){
-    return `<div class="av${szClass}" style="background-image:url('${p.photoURL}');background-size:cover;background-position:center;font-size:0">&nbsp;</div>`;
+    const click = `onclick="event.stopPropagation();openLightbox('${p.photoURL}')"`;
+    return `<div class="av${szClass}" style="background-image:url('${p.photoURL}');background-size:cover;background-position:center;font-size:0;cursor:zoom-in" ${click} title="Ver foto">&nbsp;</div>`;
   }
   return `<div class="av${szClass}">` + ini(p.name) + `</div>`;
 };
@@ -1049,38 +1050,111 @@ function renderProfileSetup(){
 }
 
 // ── IMAGE UPLOAD HELPERS ──────────────────────────────────────────────────────
-// Compress image to max ~250KB using Canvas before uploading
-function compressImage(file, maxW=800, quality=0.75){
-  return new Promise((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = e=>{
-      const img = new Image();
-      img.onerror = reject;
-      img.onload = ()=>{
-        const scale = Math.min(1, maxW/Math.max(img.width,img.height));
-        const w = Math.round(img.width*scale);
-        const h = Math.round(img.height*scale);
-        const canvas = document.createElement("canvas");
-        canvas.width=w; canvas.height=h;
-        canvas.getContext("2d").drawImage(img,0,0,w,h);
-        canvas.toBlob(blob=>{
-          if(!blob) return reject(new Error("Compressão falhou"));
-          resolve(blob);
-        },"image/jpeg",quality);
-      };
-      img.src = e.target.result;
+let _cropResolve = null;
+let _cropperInstance = null;
+
+// Load Cropper.js on demand
+function loadCropper(){
+  return new Promise(res=>{
+    if(window.Cropper) return res();
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js";
+    sc.onload = res;
+    document.head.appendChild(sc);
+  });
+}
+
+// Open crop modal, returns a blob (400x400 square JPEG)
+function openCropModal(file){
+  return new Promise(async(resolve, reject)=>{
+    await loadCropper();
+    const modal = document.getElementById("crop-modal");
+    const imgEl  = document.getElementById("crop-img");
+    modal.style.display = "flex";
+
+    // Revoke previous
+    if(imgEl.src) URL.revokeObjectURL(imgEl.src);
+    imgEl.src = URL.createObjectURL(file);
+
+    // Destroy previous cropper
+    if(_cropperInstance){ _cropperInstance.destroy(); _cropperInstance = null; }
+
+    imgEl.onload = ()=>{
+      _cropperInstance = new Cropper(imgEl, {
+        aspectRatio: 1,
+        viewMode: 1,
+        dragMode: "move",
+        autoCropArea: 0.85,
+        responsive: true,
+        guides: false,
+        center: true,
+        highlight: false,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+        toggleDragModeOnDblclick: false,
+      });
     };
-    reader.readAsDataURL(file);
+
+    _cropResolve = resolve;
+
+    const doCancel = ()=>{
+      modal.style.display = "none";
+      if(_cropperInstance){ _cropperInstance.destroy(); _cropperInstance=null; }
+      reject(new Error("Cancelado"));
+    };
+
+    document.getElementById("crop-confirm").onclick = ()=>{
+      if(!_cropperInstance) return;
+      const canvas = _cropperInstance.getCroppedCanvas({width:400,height:400,imageSmoothingQuality:"high"});
+      canvas.toBlob(blob=>{
+        modal.style.display = "none";
+        _cropperInstance.destroy(); _cropperInstance = null;
+        resolve(blob);
+      }, "image/jpeg", 0.82);
+    };
+    document.getElementById("crop-cancel").onclick  = doCancel;
+    document.getElementById("crop-cancel2").onclick = doCancel;
   });
 }
 
 // Upload photo to Firebase Storage, return download URL
-async function uploadPhoto(file, path){
-  const blob = await compressImage(file);
+async function uploadPhoto(file, path, crop=true){
+  let blob;
+  if(crop){
+    blob = await openCropModal(file);
+  } else {
+    // For stage photos: just compress without crop
+    blob = await new Promise((res,rej)=>{
+      const reader = new FileReader();
+      reader.onerror = rej;
+      reader.onload = e=>{
+        const img = new Image();
+        img.onerror = rej;
+        img.onload = ()=>{
+          const maxW = 1200;
+          const scale = Math.min(1, maxW/Math.max(img.width,img.height));
+          const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+          const cv = document.createElement("canvas");
+          cv.width=w; cv.height=h;
+          cv.getContext("2d").drawImage(img,0,0,w,h);
+          cv.toBlob(b=>b?res(b):rej(new Error("Falhou")), "image/jpeg", 0.80);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
   const sRef = storageRef(storage, path);
   await uploadBytes(sRef, blob, {contentType:"image/jpeg"});
   return await getDownloadURL(sRef);
+}
+
+// Open lightbox
+function openLightbox(url){
+  if(!url) return;
+  const lb = document.getElementById("lightbox");
+  document.getElementById("lightbox-img").src = url;
+  lb.style.display = "flex";
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
@@ -1763,7 +1837,7 @@ function renderStageDetail(sid){
         <div>
           <div style="position:relative">
             ${s.photoChampion
-              ?`<img src="${s.photoChampion}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--yellow)" />`
+              ?`<img src="${s.photoChampion}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--yellow);cursor:zoom-in" onclick="openLightbox('${s.photoChampion}')" />`
               :`<div style="width:100%;aspect-ratio:1;background:var(--surface2);border-radius:6px;border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font-size:28px">🏆</span><span style="font-size:10px;color:var(--muted)">Sem foto</span></div>`}
             ${IS_ADMIN?`<label style="position:absolute;bottom:4px;right:4px;background:var(--yellow);color:#000;padding:3px 8px;border-radius:3px;font-size:10px;font-weight:700;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,.4)">📷 ${s.photoChampion?"Trocar":"Adicionar"}<input type="file" accept="image/*" data-photo-type="photoChampion" data-stage-id="${s.id}" style="display:none"/></label>`:""}
           </div>
@@ -1773,7 +1847,7 @@ function renderStageDetail(sid){
         <div>
           <div style="position:relative">
             ${s.photoFinalTable
-              ?`<img src="${s.photoFinalTable}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--border)" />`
+              ?`<img src="${s.photoFinalTable}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--border);cursor:zoom-in" onclick="openLightbox('${s.photoFinalTable}')" />`
               :`<div style="width:100%;aspect-ratio:1;background:var(--surface2);border-radius:6px;border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font-size:28px">🃏</span><span style="font-size:10px;color:var(--muted)">Sem foto</span></div>`}
             ${IS_ADMIN?`<label style="position:absolute;bottom:4px;right:4px;background:var(--surface2);color:var(--yellow);border:1px solid var(--yellow);padding:3px 8px;border-radius:3px;font-size:10px;font-weight:700;cursor:pointer">📷 ${s.photoFinalTable?"Trocar":"Adicionar"}<input type="file" accept="image/*" data-photo-type="photoFinalTable" data-stage-id="${s.id}" style="display:none"/></label>`:""}
           </div>
@@ -3354,7 +3428,7 @@ function bindEvents(){
       if(statusEl) statusEl.textContent = "⏳ Enviando foto...";
       try {
         const path = `stages/${sid}/${photoType}.jpg`;
-        const url = await uploadPhoto(file, path);
+        const url = await uploadPhoto(file, path, false);
         const newStages = DB.stages.map(s=>{
           if(s.id===sid) return {...s, [photoType]:url};
           return s;
@@ -3698,5 +3772,30 @@ window.showProfile       = showProfile;
 window.closeProfile      = closeProfile;
 
 </script>
+<!-- Crop Modal -->
+<div id="crop-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
+  <div style="background:#1a1a1a;border-radius:8px;width:100%;max-width:420px;overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff;letter-spacing:1px">✂️ RECORTAR FOTO</span>
+      <button id="crop-cancel" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="padding:16px;display:flex;justify-content:center;background:#111">
+      <div style="width:100%;max-width:360px;max-height:360px;overflow:hidden">
+        <img id="crop-img" style="max-width:100%;display:block"/>
+      </div>
+    </div>
+    <div style="padding:12px 16px;display:flex;gap:8px">
+      <button id="crop-confirm" style="flex:1;background:#F5A800;color:#000;border:none;padding:12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:1px;cursor:pointer;border-radius:4px">✓ CONFIRMAR</button>
+      <button id="crop-cancel2" style="background:#2a2a2a;color:#888;border:1px solid #333;padding:12px 20px;font-size:13px;cursor:pointer;border-radius:4px">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.96);z-index:9998;align-items:center;justify-content:center;cursor:zoom-out" onclick="document.getElementById('lightbox').style.display='none'">
+  <img id="lightbox-img" style="max-width:95vw;max-height:95vh;object-fit:contain;border-radius:4px;box-shadow:0 8px 40px rgba(0,0,0,.8)"/>
+  <button style="position:absolute;top:16px;right:16px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;line-height:1" onclick="document.getElementById('lightbox').style.display='none'">✕</button>
+</div>
+
 </body>
 </html>
