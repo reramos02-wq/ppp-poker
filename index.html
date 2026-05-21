@@ -1135,7 +1135,7 @@ function renderProfileModal(){
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">👤 Meu Perfil</div>
     <div style="background:var(--surface2);border-radius:4px;padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
       <div style="position:relative;flex-shrink:0">
-        <div class="av avlg" id="meu-av-circle">${p.photoURL?'':'${ini(p.name||u.displayName||"?")}'}${p.photoURL?`<img src="${p.photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0"/>`:''}</div>
+        <div class="av avlg" id="meu-av-circle" style="${p.photoURL?'background-image:url('+JSON.stringify(p.photoURL)+');background-size:cover;background-position:center;font-size:0':''}">${p.photoURL?'':ini(p.name||u.displayName||'?')}</div>
         <label for="meu-avatar-upload" style="position:absolute;bottom:0;right:0;width:18px;height:18px;background:var(--yellow);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid var(--surface2)" title="Trocar foto">
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           <input type="file" id="meu-avatar-upload" accept="image/*" style="display:none"/>
@@ -1990,8 +1990,8 @@ function showProfile(uid, filter){
         <div style="position:relative;flex-shrink:0">
           ${AV(uid,"xl")}
           ${uid===CURRENT_USER_UID?`
-          <label for="avatar-upload" style="position:absolute;inset:0;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Trocar foto">
-            <span style="background:rgba(0,0,0,.55);border-radius:50%;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px">✏️</span>
+          <label for="avatar-upload" style="position:absolute;bottom:0;right:0;width:20px;height:20px;background:var(--yellow);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid var(--bg-dark)" title="Trocar foto">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             <input type="file" id="avatar-upload" accept="image/*" style="display:none"/>
           </label>`:""}
         </div>
