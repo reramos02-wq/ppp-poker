@@ -1720,25 +1720,20 @@ function renderRanking(){
   </div>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
   <div class="rl">${list.map((r,i)=>{
-    const inFTZone = i < 9;
-    const isNinth = i === 8;
-    const rowStyle = inFTZone
-      ? `cursor:pointer;background:rgba(245,168,0,.04);border-left:3px solid rgba(245,168,0,.35);`
-      : `cursor:pointer;`;
-    const cutLine = isNinth
-      ? `<div style="height:2px;background:linear-gradient(90deg,rgba(245,168,0,.6),rgba(245,168,0,.15),transparent);margin:0 -1px;"></div>`
-      : "";
-    return `<div class="rr" data-profile="${r.p.uid}" style="${rowStyle}">
+    const inFT = isGeral && i < 9;
+    const rowBg = inFT ? `cursor:pointer;background:rgba(245,168,0,.04);border-left:3px solid rgba(245,168,0,.3);` : `cursor:pointer;`;
+    const ftBadge = inFT ? ` <span style="font-size:9px;color:rgba(245,168,0,.55);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.5px">FT</span>` : "";
+    const cutLine = (isGeral && i === 8) ? `<div style="height:2px;background:linear-gradient(90deg,rgba(245,168,0,.5),rgba(245,168,0,.1),transparent);margin:0 -1px;"></div>` : "";
+    return `<div class="rr" data-profile="${r.p.uid}" style="${rowBg}">
     <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
     <div class="ri">
-      <div class="rn">${r.p.nickname}${movementBadge(r.p.uid,RANK_TAB)}${inFTZone?` <span style="font-size:9px;color:rgba(245,168,0,.6);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.5px">FT</span>`:""}
-      </div>
+      <div class="rn">${r.p.nickname}${movementBadge(r.p.uid,RANK_TAB)}${ftBadge}</div>
       <div class="rm">${r.stages} etapa${r.stages!==1?"s":""}${isKO?` · 🥊 ${r.ko}`:""}${isGeral&&r.ko>0?` · 🥊 ${r.ko}`:""}${isGeral?` <span style="font-size:10px;color:var(--muted)">(🃏${r.nlPts} + 🥊${r.koPts})</span>`:""}</div>
     </div>
     <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
   </div>${cutLine}`;
   }).join("")}</div>
-  ${list.length>=9?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(245,168,0,.06);border:1px solid rgba(245,168,0,.15);border-radius:0 0 3px 3px;margin-top:-1px"><span style="font-size:12px">🏆</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;color:rgba(245,168,0,.7);text-transform:uppercase">Zona de classificação — Mesa Final</span></div>`:""}
+  ${isGeral&&list.length>=9?`<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:rgba(245,168,0,.05);border:1px solid rgba(245,168,0,.12);border-top:none;border-radius:0 0 3px 3px"><span style="font-size:11px">🏆</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;color:rgba(245,168,0,.6);text-transform:uppercase">Zona de classificação — Mesa Final</span></div>`:""}
   </div>`;
 }
 
