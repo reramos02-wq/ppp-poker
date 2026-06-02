@@ -1821,6 +1821,18 @@ function renderStageDetail(sid){
       </div>`:""}
     </div>`:""}
 
+    <!-- Admin Bar (inline, no admin panel needed) -->
+    ${IS_ADMIN?`
+    <div style="background:rgba(245,168,0,.07);border:1px solid rgba(245,168,0,.2);border-radius:4px;padding:10px 12px;margin-bottom:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;color:var(--yellow);letter-spacing:2px;font-weight:700;margin-bottom:8px">⚙️ ADMIN</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <button class="btn bo sm" data-admin-edit-stage="${s.id}" style="font-size:12px">✏️ Editar Etapa</button>
+        <button class="btn bo sm" data-launch="${s.id}" style="font-size:12px">${s.status==="finished"?"✏️ Editar Resultado":"▶ Lançar Resultado"}</button>
+        <button class="btn bo sm" data-admin-manage-ins="${s.id}" style="font-size:12px">👥 Gerir Inscrições</button>
+        ${s.status==="upcoming"?`<button class="btn bo sm" data-toggle-ins="${s.id}" style="font-size:12px">${s.allowInscriptions===false?"🔓 Abrir Inscrições":"🔒 Fechar Inscrições"}</button>`:""}
+      </div>
+    </div>`:""}
+
     <!-- Action buttons -->
     ${s.status==="upcoming"?`
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
@@ -2053,6 +2065,11 @@ function renderPlayers(){
   <div class="st">Joga<span class="ac">dores</span></div>
   <div class="ss">${sorted.length} membros</div>
   <div class="dv"></div>
+  ${IS_ADMIN?`
+  <div style="background:rgba(245,168,0,.07);border:1px solid rgba(245,168,0,.2);border-radius:4px;padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;color:var(--yellow);letter-spacing:2px;font-weight:700;flex:1">⚙️ ADMIN</span>
+    <button class="btn by sm" id="btn-add-player" style="font-size:12px">+ Adicionar Jogador</button>
+  </div>`:""}
   <div class="pgrid">${sorted.map(p=>{
     const s=calcStats(p.uid);
     return `<div class="pcrd" data-profile="${p.uid}">
@@ -2268,19 +2285,10 @@ let resultStage=null, resultRows=[];
 function renderAdmin(){
   return `<div class="sec">
   <div class="btw mb10">
-    <div><div class="st">Painel de <span class="ac">Admin</span></div><div class="ss">Gerenciar etapas, resultados e jogadores</div></div>
+    <div><div class="st">Painel de <span class="ac">Admin</span></div><div class="ss">Ferramentas e configurações avançadas</div></div>
     <span class="atag">MASTER</span>
   </div><div class="dv"></div>
-  <div class="tabs">
-    <button class="tb${ADMIN_TAB==="stages"?" on":""}" data-atab="stages">📅 Etapas</button>
-    <button class="tb${ADMIN_TAB==="results"?" on":""}" data-atab="results">🏁 Resultados</button>
-    <button class="tb${ADMIN_TAB==="players"?" on":""}" data-atab="players">👥 Jogadores</button>
-    <button class="tb${ADMIN_TAB==="tools"?" on":""}" data-atab="tools">🔧 Ferramentas</button>
-  </div>
-  ${ADMIN_TAB==="stages"?renderAdminStages():""}
-  ${ADMIN_TAB==="results"?renderAdminResults():""}
-  ${ADMIN_TAB==="players"?renderAdminPlayers():""}
-  ${ADMIN_TAB==="tools"?renderAdminTools():""}
+  ${renderAdminTools()}
   </div>`;
 }
 
@@ -2318,6 +2326,172 @@ function renderAdminStages(){
       </div>
     </div>
   `).join("")}`;
+}
+
+// ── MANAGE INSCRIPTIONS MODAL ────────────────────────────────────────────────
+let MANAGE_INS_SID = null;
+let PENDING_REMOVALS = new Set();
+
+function renderManageInscriptions(sid){
+  const s = DB.stages.find(x=>x.id===sid);
+  if(!s) return "";
+  const ins = s.inscriptions||[];
+  return `<div style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9000;display:flex;align-items:flex-end;justify-content:center" id="manage-ins-overlay">
+  <div style="background:var(--surface);border-radius:8px 8px 0 0;width:100%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;color:#fff;letter-spacing:1px">👥 GERIR INSCRIÇÕES</div>
+        <div style="font-size:12px;color:var(--muted)">${s.name} · ${ins.length} inscritos</div>
+      </div>
+      <button id="manage-ins-close" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:12px 16px" id="manage-ins-list">
+      ${ins.map(uid=>{
+        const pl = getP(uid)||{name:uid,nickname:"?"};
+        return `<div id="manage-row-${uid}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border2)">
+          ${AV(uid)}
+          <div style="flex:1">
+            <div style="font-size:14px;color:#fff;font-weight:600" id="manage-name-${uid}">${pl.name}</div>
+            <div style="font-size:12px;color:var(--muted)">"${pl.nickname}"</div>
+          </div>
+          <button class="btn bd sm" data-remove-ins="${uid}" style="font-size:11px;padding:5px 10px">✕ Remover</button>
+        </div>`;
+      }).join("")}
+      ${ins.length===0?'<div style="color:var(--muted);text-align:center;padding:24px">Nenhum inscrito</div>':""}
+    </div>
+    <!-- Add player section -->
+    <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--surface2);flex-shrink:0">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">ADICIONAR À ETAPA</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="manage-ins-add-list">
+        ${DB.players.filter(p=>!ins.includes(p.uid)).sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`
+          <button class="btn bo sm" data-add-ins="${p.uid}" style="font-size:11px;padding:4px 10px">${p.nickname||p.name}</button>
+        `).join("")}
+      </div>
+    </div>
+    <!-- Pending removals bar -->
+    <div id="manage-ins-pending" style="display:none;padding:12px 16px;background:rgba(231,76,60,.15);border-top:2px solid var(--red);flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;font-size:13px;color:#e74c3c" id="manage-pending-txt"></div>
+        <button id="manage-ins-undo" class="btn bo sm" style="font-size:12px;border-color:#e74c3c;color:#e74c3c">↺ Desfazer</button>
+        <button id="manage-ins-save" class="btn sm" style="font-size:12px;background:#e74c3c;color:#fff;border:none">💾 Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+window.openManageIns = function(sid){
+  MANAGE_INS_SID = sid;
+  PENDING_REMOVALS = new Set();
+  const el = document.createElement("div");
+  el.id = "manage-ins-wrap";
+  el.innerHTML = renderManageInscriptions(sid);
+  document.body.appendChild(el);
+  bindManageInsEvents(sid);
+};
+
+function bindManageInsEvents(sid){
+  const overlay = document.getElementById("manage-ins-overlay");
+  const el = document.getElementById("manage-ins-wrap");
+
+  document.getElementById("manage-ins-close")?.addEventListener("click",()=>{
+    el?.remove(); PENDING_REMOVALS=new Set();
+  });
+
+  // Mark for removal (strikethrough)
+  document.querySelectorAll("[data-remove-ins]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const uid = btn.dataset.removeIns;
+      const row = document.getElementById(`manage-row-${uid}`);
+      const nameEl = document.getElementById(`manage-name-${uid}`);
+      if(PENDING_REMOVALS.has(uid)){
+        PENDING_REMOVALS.delete(uid);
+        row.style.opacity="1";
+        if(nameEl) nameEl.style.textDecoration="none";
+        btn.textContent="✕ Remover";
+        btn.style.background="";
+      } else {
+        PENDING_REMOVALS.add(uid);
+        row.style.opacity="0.45";
+        if(nameEl) nameEl.style.textDecoration="line-through";
+        btn.textContent="↺ Desfazer";
+        btn.style.background="rgba(231,76,60,.2)";
+      }
+      updatePendingBar();
+    });
+  });
+
+  // Add player
+  document.querySelectorAll("[data-add-ins]").forEach(btn=>{
+    btn.addEventListener("click", async()=>{
+      const uid = btn.dataset.addIns;
+      const s = DB.stages.find(x=>x.id===sid);
+      if(!s) return;
+      const newIns = [...new Set([...(s.inscriptions||[]), uid])];
+      btn.disabled=true; btn.textContent="...";
+      try {
+        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
+          updatedAt: serverTimestamp()
+        });
+        const ls = DB.stages.find(x=>x.id===sid);
+        if(ls) ls.inscriptions=newIns;
+        showToast("Inscrito adicionado ✓","green");
+        el?.remove();
+        STAGE_DETAIL=sid; TAB="stages"; render();
+        setTimeout(()=>window.openManageIns(sid),200);
+      } catch(err){ showToast("Erro: "+err.message,"red"); btn.disabled=false; btn.textContent=getP(uid)?.nickname||uid; }
+    });
+  });
+
+  // Undo all
+  document.getElementById("manage-ins-undo")?.addEventListener("click",()=>{
+    PENDING_REMOVALS=new Set();
+    document.querySelectorAll("[data-remove-ins]").forEach(btn=>{
+      const uid=btn.dataset.removeIns;
+      const row=document.getElementById(`manage-row-${uid}`);
+      const nameEl=document.getElementById(`manage-name-${uid}`);
+      row.style.opacity="1";
+      if(nameEl) nameEl.style.textDecoration="none";
+      btn.textContent="✕ Remover"; btn.style.background="";
+    });
+    updatePendingBar();
+  });
+
+  // Confirm removals
+  document.getElementById("manage-ins-save")?.addEventListener("click", async()=>{
+    if(PENDING_REMOVALS.size===0) return;
+    const s = DB.stages.find(x=>x.id===sid);
+    if(!s) return;
+    const saveBtn = document.getElementById("manage-ins-save");
+    saveBtn.disabled=true; saveBtn.textContent="Salvando...";
+    const newIns = (s.inscriptions||[]).filter(uid=>!PENDING_REMOVALS.has(uid));
+    try {
+      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
+        updatedAt: serverTimestamp()
+      });
+      const ls=DB.stages.find(x=>x.id===sid);
+      if(ls) ls.inscriptions=newIns;
+      showToast(`${PENDING_REMOVALS.size} inscrito(s) removido(s) ✓`,"green");
+      PENDING_REMOVALS=new Set();
+      el?.remove();
+      STAGE_DETAIL=sid; TAB="stages"; render();
+    } catch(err){ showToast("Erro: "+err.message,"red"); saveBtn.disabled=false; saveBtn.textContent="💾 Confirmar"; }
+  });
+}
+
+function updatePendingBar(){
+  const bar=document.getElementById("manage-ins-pending");
+  const txt=document.getElementById("manage-pending-txt");
+  if(!bar) return;
+  if(PENDING_REMOVALS.size>0){
+    bar.style.display="block";
+    const names=[...PENDING_REMOVALS].map(uid=>getP(uid)?.nickname||uid).join(", ");
+    txt.textContent=`Marcado para remover: ${names}`;
+  } else {
+    bar.style.display="none";
+  }
 }
 
 function renderAdminStageDetail(s){
@@ -3457,6 +3631,61 @@ function bindEvents(){
 
   // Export podium
   document.getElementById("btn-export-podium")?.addEventListener("click", window.exportPodium);
+
+  // Admin edit stage button (inline in stage detail)
+  document.querySelectorAll("[data-admin-edit-stage]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const sid = btn.dataset.adminEditStage;
+      ADMIN_STAGE_DETAIL = sid;
+      TAB = "admin";
+      ADMIN_TAB = "stages";
+      render();
+    });
+  });
+
+  // Admin manage inscriptions (inline in stage detail)
+  document.querySelectorAll("[data-admin-manage-ins]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const sid = btn.dataset.adminManageIns;
+      window.openManageIns(sid);
+    });
+  });
+
+  // Toggle inscriptions open/close (inline in stage detail)
+  document.querySelectorAll("[data-toggle-ins]").forEach(btn=>{
+    btn.addEventListener("click", async()=>{
+      const sid = btn.dataset.toggleIns;
+      const s = DB.stages.find(x=>x.id===sid);
+      if(!s) return;
+      const newVal = s.allowInscriptions !== false ? false : true;
+      try {
+        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          stages: DB.stages.map(x=>x.id===sid?{...x,allowInscriptions:newVal}:x),
+          updatedAt: serverTimestamp()
+        });
+        const ls = DB.stages.find(x=>x.id===sid);
+        if(ls) ls.allowInscriptions = newVal;
+        showToast(newVal?"🔓 Inscrições abertas":"🔒 Inscrições fechadas","green");
+        STAGE_DETAIL=sid; TAB="stages"; render();
+      } catch(err){ showToast("Erro: "+err.message,"red"); }
+    });
+  });
+
+  // Admin add player button in players page
+  // There are two: one in renderAdminPlayers (admin tab) and one in renderPlayers
+  document.getElementById("btn-add-player")?.addEventListener("click",()=>{
+    // If we're in the players page (not admin), open add player modal via admin tab
+    if(TAB === "players"){
+      TAB="admin"; ADMIN_TAB="players"; render();
+      // After render, trigger the actual add player modal
+      setTimeout(()=>{
+        const adminBtn = document.getElementById("btn-add-player");
+        if(adminBtn && TAB==="admin") adminBtn.click();
+      }, 150);
+    } else {
+      // Already in admin players tab — handled below by existing listener
+    }
+  });
 
   // Stage photo upload (admin only)
   document.querySelectorAll("input[data-photo-type]").forEach(inp=>{
