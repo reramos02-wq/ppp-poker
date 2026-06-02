@@ -1826,7 +1826,7 @@ function renderStageDetail(sid){
     <div style="background:rgba(245,168,0,.07);border:1px solid rgba(245,168,0,.2);border-radius:4px;padding:10px 12px;margin-bottom:12px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;color:var(--yellow);letter-spacing:2px;font-weight:700;margin-bottom:8px">⚙️ ADMIN</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        <button class="btn bo sm" data-admin-edit-stage="${s.id}" style="font-size:12px">✏️ Editar Etapa</button>
+        <button class="btn bo sm" data-admin-edit-stage="${s.id}" style="font-size:12px">🏗️ Editar Estrutura</button>
         <button class="btn bo sm" data-launch="${s.id}" style="font-size:12px">${s.status==="finished"?"✏️ Editar Resultado":"▶ Lançar Resultado"}</button>
         <button class="btn bo sm" data-admin-manage-ins="${s.id}" style="font-size:12px">👥 Gerir Inscrições</button>
         ${s.status==="upcoming"?`<button class="btn bo sm" data-toggle-ins="${s.id}" style="font-size:12px">${s.allowInscriptions===false?"🔓 Abrir Inscrições":"🔒 Fechar Inscrições"}</button>`:""}
@@ -2361,12 +2361,12 @@ function renderManageInscriptions(sid){
     </div>
     <!-- Add player section -->
     <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--surface2);flex-shrink:0">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">ADICIONAR À ETAPA</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap" id="manage-ins-add-list">
-        ${DB.players.filter(p=>!ins.includes(p.uid)).sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`
-          <button class="btn bo sm" data-add-ins="${p.uid}" style="font-size:11px;padding:4px 10px">${p.nickname||p.name}</button>
-        `).join("")}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600;letter-spacing:1px;text-transform:uppercase">Adicionar à Etapa</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <input id="manage-ins-search" class="inp" placeholder="🔍 Buscar jogador..." style="margin:0;flex:1;font-size:13px;padding:9px 12px"/>
+        <button id="manage-ins-create" class="btn by sm" style="font-size:12px;white-space:nowrap;flex-shrink:0">+ Criar</button>
       </div>
+      <div id="manage-ins-results" style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto"></div>
     </div>
     <!-- Pending removals bar -->
     <div id="manage-ins-pending" style="display:none;padding:12px 16px;background:rgba(231,76,60,.15);border-top:2px solid var(--red);flex-shrink:0">
@@ -2421,26 +2421,103 @@ function bindManageInsEvents(sid){
     });
   });
 
-  // Add player
-  document.querySelectorAll("[data-add-ins]").forEach(btn=>{
-    btn.addEventListener("click", async()=>{
-      const uid = btn.dataset.addIns;
-      const s = DB.stages.find(x=>x.id===sid);
-      if(!s) return;
-      const newIns = [...new Set([...(s.inscriptions||[]), uid])];
-      btn.disabled=true; btn.textContent="...";
+  // Search to add player
+  const searchInput = document.getElementById("manage-ins-search");
+  const resultsDiv  = document.getElementById("manage-ins-results");
+
+  function renderSearchResults(query){
+    const s = DB.stages.find(x=>x.id===sid);
+    const ins = s?.inscriptions||[];
+    const q = (query||"").toLowerCase().trim();
+    resultsDiv.innerHTML = "";
+    if(!q) return;
+    const matches = DB.players
+      .filter(p=>!ins.includes(p.uid))
+      .filter(p=>{
+        const name = (p.name||"").toLowerCase();
+        const nick = (p.nickname||"").toLowerCase();
+        return name.includes(q) || nick.includes(q);
+      })
+      .slice(0, 8);
+    if(matches.length===0){
+      resultsDiv.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px 2px">Nenhum jogador encontrado. Use "+ Criar" para adicionar.</div>`;
+      return;
+    }
+    matches.forEach(p=>{
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:3px;cursor:pointer;transition:background .15s";
+      row.innerHTML = `${AV(p.uid)}<div style="flex:1"><div style="font-size:13px;color:#fff;font-weight:600">${p.name}</div><div style="font-size:11px;color:var(--muted)">"${p.nickname}"</div></div><button class="btn by sm" style="font-size:11px;padding:4px 10px;flex-shrink:0">+ Adicionar</button>`;
+      row.querySelector("button").addEventListener("click", async()=>{
+        const s2 = DB.stages.find(x=>x.id===sid);
+        if(!s2) return;
+        const newIns = [...new Set([...(s2.inscriptions||[]), p.uid])];
+        row.querySelector("button").disabled=true; row.querySelector("button").textContent="...";
+        try {
+          await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+            stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
+            updatedAt: serverTimestamp()
+          });
+          const ls = DB.stages.find(x=>x.id===sid);
+          if(ls) ls.inscriptions=newIns;
+          showToast(p.name+" inscrito ✓","green");
+          el?.remove();
+          STAGE_DETAIL=sid; TAB="stages"; render();
+          setTimeout(()=>window.openManageIns(sid),200);
+        } catch(err){ showToast("Erro: "+err.message,"red"); }
+      });
+      resultsDiv.appendChild(row);
+    });
+  }
+
+  searchInput?.addEventListener("input", e=>renderSearchResults(e.target.value));
+
+  // Create player without UID
+  document.getElementById("manage-ins-create")?.addEventListener("click",()=>{
+    const q = searchInput?.value.trim()||"";
+    // Show inline create form
+    const existing = document.getElementById("manage-ins-create-form");
+    if(existing){ existing.remove(); return; }
+    const form = document.createElement("div");
+    form.id = "manage-ins-create-form";
+    form.style.cssText = "margin-top:8px;padding:12px;background:var(--surface);border:1px solid var(--yellow);border-radius:4px;display:flex;flex-direction:column;gap:8px";
+    form.innerHTML = `
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase">Novo Jogador (sem login)</div>
+      <input class="inp" id="new-player-name" placeholder="Nome completo *" style="margin:0;font-size:13px" value="${q}"/>
+      <input class="inp" id="new-player-nick" placeholder="Apelido *" style="margin:0;font-size:13px"/>
+      <div id="new-player-err" style="font-size:12px;color:var(--red);display:none"></div>
+      <div style="display:flex;gap:6px">
+        <button id="new-player-save" class="btn by fw sm" style="font-size:13px">✓ Criar e Inscrever</button>
+        <button id="new-player-cancel" class="btn bo sm" style="font-size:13px">Cancelar</button>
+      </div>`;
+    document.getElementById("manage-ins-results").parentNode.appendChild(form);
+    document.getElementById("new-player-cancel")?.addEventListener("click",()=>form.remove());
+    document.getElementById("new-player-save")?.addEventListener("click", async()=>{
+      const name = document.getElementById("new-player-name")?.value.trim();
+      const nick = document.getElementById("new-player-nick")?.value.trim();
+      const errEl = document.getElementById("new-player-err");
+      if(!name||!nick){ errEl.textContent="Nome e apelido são obrigatórios."; errEl.style.display="block"; return; }
+      // Generate mock UID
+      const uid = "p_"+name.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"")+"_"+Date.now().toString(36);
+      const newPlayer = {uid, name, nickname:nick, email:"", season:ACTIVE_SEASON, needsSetup:false};
+      const s2 = DB.stages.find(x=>x.id===sid);
+      if(!s2) return;
+      const newIns = [...new Set([...(s2.inscriptions||[]), uid])];
+      const saveBtn = document.getElementById("new-player-save");
+      saveBtn.disabled=true; saveBtn.textContent="Salvando...";
       try {
+        DB.players = [...DB.players, newPlayer];
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          players: DB.players,
           stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
           updatedAt: serverTimestamp()
         });
         const ls = DB.stages.find(x=>x.id===sid);
         if(ls) ls.inscriptions=newIns;
-        showToast("Inscrito adicionado ✓","green");
+        showToast(name+" criado e inscrito ✓","green");
         el?.remove();
         STAGE_DETAIL=sid; TAB="stages"; render();
         setTimeout(()=>window.openManageIns(sid),200);
-      } catch(err){ showToast("Erro: "+err.message,"red"); btn.disabled=false; btn.textContent=getP(uid)?.nickname||uid; }
+      } catch(err){ showToast("Erro: "+err.message,"red"); saveBtn.disabled=false; saveBtn.textContent="✓ Criar e Inscrever"; }
     });
   });
 
@@ -3632,14 +3709,12 @@ function bindEvents(){
   // Export podium
   document.getElementById("btn-export-podium")?.addEventListener("click", window.exportPodium);
 
-  // Admin edit stage button (inline in stage detail)
+  // Admin edit stage button (inline in stage detail) — opens modal directly
   document.querySelectorAll("[data-admin-edit-stage]").forEach(btn=>{
     btn.addEventListener("click",()=>{
       const sid = btn.dataset.adminEditStage;
-      ADMIN_STAGE_DETAIL = sid;
-      TAB = "admin";
-      ADMIN_TAB = "stages";
-      render();
+      const stage = DB.stages.find(s=>s.id===sid);
+      if(stage) openStageModal(stage);
     });
   });
 
