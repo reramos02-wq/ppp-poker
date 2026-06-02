@@ -1798,6 +1798,7 @@ function renderStages(){
   const nextId = getNextStage()?.id || null;
   return `<div class="sec">
   <div class="st">Eta<span class="ac">pas</span></div><div class="ss">Calendário da temporada</div><div class="dv"></div>
+  ${IS_ADMIN?`<button class="btn by fw mb10" id="btn-new-stage-list">＋ Nova Etapa</button>`:""}
   ${DB.stages.length===0?'<div class="empty">Nenhuma etapa cadastrada.</div>':''}
   ${DB.stages.map(s=>{
     const ins  = s.inscriptions||[];
@@ -3524,6 +3525,7 @@ function bindEvents(){
   document.querySelectorAll("[data-atab]").forEach(btn=>{btn.addEventListener("click",()=>{ADMIN_TAB=btn.dataset.atab;render();});});
   document.querySelectorAll("[data-profile]").forEach(el=>{el.addEventListener("click",()=>showProfile(el.dataset.profile));});
   document.getElementById("btn-new-stage")?.addEventListener("click",()=>openStageModal());
+  document.getElementById("btn-new-stage-list")?.addEventListener("click",()=>openStageModal());
   // Admin stage list: click card to expand
   document.querySelectorAll("[data-admin-stage]").forEach(card=>{
     card.addEventListener("click", e=>{
