@@ -914,9 +914,28 @@ function openShareModal(stage){
       listWrap.style.cssText = `padding:0 16px 20px;${use2col?"display:grid;grid-template-columns:1fr 1fr;gap:2px":""}`;
       el.appendChild(listWrap);
 
+      // Pre-fetch all player photos as base64 data URIs (bypasses CORS in canvas)
+      const photoCache = {};
+      await Promise.allSettled(ins.map(async uid => {
+        const pl = getP(uid);
+        if(!pl || !pl.photoURL) return;
+        try {
+          const resp = await fetch(pl.photoURL);
+          if(!resp.ok) return;
+          const blob = await resp.blob();
+          photoCache[uid] = await new Promise(res => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result);
+            reader.onerror = () => res(null);
+            reader.readAsDataURL(blob);
+          });
+        } catch(e){ /* no photo, use initials */ }
+      }));
+
       ins.forEach((uid,i)=>{
         const pl = getP(uid)||{name:uid,nickname:uid};
         const isLatePlayer = (stage.lateList||[]).includes(uid);
+        const dataUri = photoCache[uid] || null;
 
         // Row
         const row = document.createElement("div");
@@ -928,27 +947,17 @@ function openShareModal(stage){
         numEl.textContent = i+1;
         row.appendChild(numEl);
 
-        // Avatar — photo if available, else initials
+        // Avatar — data URI photo if available, else initials
         const AVS = "width:28px;height:28px;border-radius:50%;border:1px solid #333;flex-shrink:0;";
         const avatarEl = document.createElement("div");
-        avatarEl.style.cssText = AVS + "background:#2a2a2a;display:flex;align-items:center;justify-content:center;";
-        if(pl.photoURL){
+        if(dataUri){
+          avatarEl.style.cssText = "width:28px;height:28px;border-radius:50%;flex-shrink:0;overflow:hidden;border:1.5px solid #F5A800;";
           const imgEl = document.createElement("img");
-          imgEl.src = pl.photoURL;
-          imgEl.crossOrigin = "anonymous";
-          imgEl.width = 28;
-          imgEl.height = 28;
-          imgEl.style.cssText = "border-radius:50%;object-fit:cover;display:block;width:28px;height:28px;border:1.5px solid #F5A800;";
-          imgEl.onerror = function(){
-            const fb = document.createElement("div");
-            fb.style.cssText = AVS + "background:#2a2a2a;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;";
-            fb.textContent = ini(pl.name);
-            imgEl.parentNode && imgEl.parentNode.replaceChild(fb, imgEl);
-          };
-          avatarEl.style.cssText = "width:28px;height:28px;border-radius:50%;flex-shrink:0;overflow:hidden;";
+          imgEl.src = dataUri;
+          imgEl.style.cssText = "width:28px;height:28px;object-fit:cover;display:block;";
           avatarEl.appendChild(imgEl);
         } else {
-          avatarEl.style.cssText += "font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;";
+          avatarEl.style.cssText = AVS + "background:#2a2a2a;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;";
           avatarEl.textContent = ini(pl.name);
         }
         row.appendChild(avatarEl);
@@ -981,22 +990,13 @@ function openShareModal(stage){
       footer.textContent = "ppp-poker.vercel.app";
       el.appendChild(footer);
 
-      // Pre-load player photos so html2canvas can render them
-      const imgEls = el.querySelectorAll("img");
-      await Promise.allSettled(Array.from(imgEls).map(img =>
-        new Promise(res => {
-          if(img.complete && img.naturalWidth > 0) return res();
-          img.onload = res; img.onerror = res;
-        })
-      ));
-
       // Generate canvas
       const canvas = await html2canvas(el,{
         backgroundColor:"#111",
         scale:2,
         logging:false,
-        allowTaint:false,
-        useCORS:true,
+        allowTaint:true,
+        useCORS:false,
         windowWidth:imgW,
         width:imgW
       });
