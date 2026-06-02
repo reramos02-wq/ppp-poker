@@ -378,7 +378,7 @@ var _authTimeout = setTimeout(function(){
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject, getBytes } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA-VcO_q6mvXIUh4Vbt1hStmQnnar2kKM4",
@@ -914,22 +914,23 @@ function openShareModal(stage){
       listWrap.style.cssText = `padding:0 16px 20px;${use2col?"display:grid;grid-template-columns:1fr 1fr;gap:2px":""}`;
       el.appendChild(listWrap);
 
-      // Pre-fetch all player photos as base64 data URIs (bypasses CORS in canvas)
+      // Pre-fetch player photos via Firebase SDK (authenticated, no CORS issues)
       const photoCache = {};
       await Promise.allSettled(ins.map(async uid => {
         const pl = getP(uid);
         if(!pl || !pl.photoURL) return;
         try {
-          const resp = await fetch(pl.photoURL);
-          if(!resp.ok) return;
-          const blob = await resp.blob();
+          // Use getBytes via Firebase Storage SDK — bypasses CORS completely
+          const sRef = storageRef(storage, "avatars/" + uid);
+          const bytes = await getBytes(sRef);
+          const blob = new Blob([bytes], {type:"image/jpeg"});
           photoCache[uid] = await new Promise(res => {
             const reader = new FileReader();
             reader.onload = () => res(reader.result);
             reader.onerror = () => res(null);
             reader.readAsDataURL(blob);
           });
-        } catch(e){ /* no photo, use initials */ }
+        } catch(e){ /* no photo or not found, use initials */ }
       }));
 
       ins.forEach((uid,i)=>{
