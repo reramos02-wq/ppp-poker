@@ -917,18 +917,61 @@ function openShareModal(stage){
       ins.forEach((uid,i)=>{
         const pl = getP(uid)||{name:uid,nickname:uid};
         const isLatePlayer = (stage.lateList||[]).includes(uid);
+
+        // Row
         const row = document.createElement("div");
         row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 6px;border-bottom:1px solid #1e1e1e;";
-        row.innerHTML = `
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:#555;width:20px;text-align:right;flex-shrink:0">${i+1}</div>
-          ${pl.photoURL
-            ? `<img src="${pl.photoURL}" crossorigin="anonymous" width="28" height="28" style="border-radius:50%;object-fit:cover;border:1px solid #F5A800;flex-shrink:0;display:block" onerror="this.outerHTML='<div style=\"width:28px;height:28px;border-radius:50%;background:#2a2a2a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:10px;color:#F5A800;flex-shrink:0\">${ini(pl.name)}</div>'"/>`
-            : `<div style="width:28px;height:28px;border-radius:50%;background:#2a2a2a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;flex-shrink:0">${ini(pl.name)}</div>`
-          }
-          <div style="min-width:0;flex:1">
-            <div style="font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${isLatePlayer?"⏳ ":""}${pl.nickname}</div>
-            <div style="font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name!==pl.nickname?pl.name:""}${isLatePlayer?' · <span style="color:#F5A800">LATE</span>':""}</div>
-          </div>`;
+
+        // Number
+        const numEl = document.createElement("div");
+        numEl.style.cssText = "font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:#555;width:20px;text-align:right;flex-shrink:0";
+        numEl.textContent = i+1;
+        row.appendChild(numEl);
+
+        // Avatar — photo if available, else initials
+        const AVS = "width:28px;height:28px;border-radius:50%;border:1px solid #333;flex-shrink:0;";
+        const avatarEl = document.createElement("div");
+        avatarEl.style.cssText = AVS + "background:#2a2a2a;display:flex;align-items:center;justify-content:center;";
+        if(pl.photoURL){
+          const imgEl = document.createElement("img");
+          imgEl.src = pl.photoURL;
+          imgEl.crossOrigin = "anonymous";
+          imgEl.width = 28;
+          imgEl.height = 28;
+          imgEl.style.cssText = "border-radius:50%;object-fit:cover;display:block;width:28px;height:28px;border:1.5px solid #F5A800;";
+          imgEl.onerror = function(){
+            const fb = document.createElement("div");
+            fb.style.cssText = AVS + "background:#2a2a2a;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;";
+            fb.textContent = ini(pl.name);
+            imgEl.parentNode && imgEl.parentNode.replaceChild(fb, imgEl);
+          };
+          avatarEl.style.cssText = "width:28px;height:28px;border-radius:50%;flex-shrink:0;overflow:hidden;";
+          avatarEl.appendChild(imgEl);
+        } else {
+          avatarEl.style.cssText += "font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;color:#F5A800;";
+          avatarEl.textContent = ini(pl.name);
+        }
+        row.appendChild(avatarEl);
+
+        // Info (nickname + name + late)
+        const infoEl = document.createElement("div");
+        infoEl.style.cssText = "min-width:0;flex:1";
+        const nicknameEl = document.createElement("div");
+        nicknameEl.style.cssText = "font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+        nicknameEl.textContent = (isLatePlayer?"⏳ ":"")+pl.nickname;
+        const nameEl = document.createElement("div");
+        nameEl.style.cssText = "font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+        if(pl.name!==pl.nickname) nameEl.textContent = pl.name;
+        if(isLatePlayer){
+          const lateSpan = document.createElement("span");
+          lateSpan.style.color = "#F5A800";
+          lateSpan.textContent = (nameEl.textContent?" · ":"")+"LATE";
+          nameEl.appendChild(lateSpan);
+        }
+        infoEl.appendChild(nicknameEl);
+        infoEl.appendChild(nameEl);
+        row.appendChild(infoEl);
+
         listWrap.appendChild(row);
       });
 
@@ -939,10 +982,10 @@ function openShareModal(stage){
       el.appendChild(footer);
 
       // Pre-load player photos so html2canvas can render them
-      const imgEls = el.querySelectorAll("img[crossorigin]");
+      const imgEls = el.querySelectorAll("img");
       await Promise.allSettled(Array.from(imgEls).map(img =>
         new Promise(res => {
-          if(img.complete) return res();
+          if(img.complete && img.naturalWidth > 0) return res();
           img.onload = res; img.onerror = res;
         })
       ));
