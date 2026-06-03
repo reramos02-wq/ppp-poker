@@ -617,17 +617,30 @@ const SEED = { players: [], stages: [] }; // Data lives in Firestore
 // To migrate: implement saveDB(), loadDB(), listenDB() with Firestore
 // All app logic already uses these functions exclusively
 
+function sanitizePlayers(players){
+  return (players||[]).map(p=>{
+    const clean = {};
+    for(const [k,v] of Object.entries(p)){
+      if(v === undefined) continue; // Firestore rejeita undefined
+      // photoURL deve ser URL curta — se for base64 (data:...), descarta
+      if(k==="photoURL" && typeof v==="string" && v.startsWith("data:")) continue;
+      clean[k] = v;
+    }
+    return clean;
+  });
+}
+
 async function save(){
   try {
     await setDoc(doc(db,"seasons",ACTIVE_SEASON), {
-      players: DB.players,
+      players: sanitizePlayers(DB.players),
       stages:  DB.stages,
       admins:  DB.admins || [],
       updatedAt: serverTimestamp()
     });
   } catch(e){
-    console.error("Save error:", e);
-    showToast("Erro ao salvar. Verifique a conexão.","red");
+    console.error("Save error:", e.code, e.message);
+    showToast("Erro ao salvar: "+e.message,"red");
   }
 }
 
@@ -639,8 +652,8 @@ async function saveStages(){
       updatedAt: serverTimestamp()
     });
   } catch(e){
-    console.error("saveStages error:", e);
-    showToast("Erro ao salvar inscrição.","red");
+    console.error("saveStages error:", e.code, e.message);
+    showToast("Erro ao salvar inscrição: "+e.message,"red");
   }
 }
 
@@ -1990,10 +2003,13 @@ function renderStageDetail(sid){
         if(!r) return `<div class="podium-slot"></div>`;
         const pl = getP(r.playerId)||{nickname:"?",name:"?"};
         const medal = cls==="p1"?"🥇":cls==="p2"?"🥈":"🥉";
+        const photoInner = pl.photoURL
+          ? `<img src="${pl.photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" onerror="this.parentNode.innerHTML='${ini(pl.name)}'"/>`
+          : ini(pl.name);
         return `<div class="podium-slot">
           <div class="podium-pts ${cls}">${r.points}<span style="font-size:10px">pts</span></div>
           ${isKO&&r.knockouts>0?`<div style="font-size:10px;color:var(--muted);margin-bottom:4px">🥊${r.knockouts}</div>`:""}
-          <div class="podium-photo ${cls}" data-profile="${r.playerId}" style="cursor:pointer">${ini(pl.name)}</div>
+          <div class="podium-photo ${cls}" data-profile="${r.playerId}" style="cursor:pointer;overflow:hidden;padding:0;">${photoInner}</div>
           <div class="podium-name">${pl.name}</div>
           <div class="podium-nick">"${pl.nickname}"</div>
           <div class="podium-base ${cls}">${medal}</div>
@@ -2569,7 +2585,7 @@ function bindManageInsEvents(sid){
       try {
         DB.players = [...DB.players, newPlayer];
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-          players: DB.players,
+          players: sanitizePlayers(DB.players),
           stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
           updatedAt: serverTimestamp()
         });
