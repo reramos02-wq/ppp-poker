@@ -305,7 +305,7 @@ select.inp{appearance:none;}
 .login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:var(--bg-dark);}
 .login-box{width:100%;max-width:420px;}
 @media(min-width:768px){
-  .login-wrap{background:var(--bg-dark);background-image:radial-gradient(ellipse at 50% 40%, rgba(245,168,0,.06) 0%, transparent 70%);}
+  .login-wrap{background:var(--bg-dark);background-image:radial-gradient(ellipse at 50% 40%, rgba(245,168,0,.06) 0%, transparent 70%);position:fixed;inset:0;z-index:100;width:100vw;min-height:100vh;}
   .login-box{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:40px;max-width:440px;box-shadow:0 24px 60px rgba(0,0,0,.5);}
   .login-box .login-logo{margin-bottom:28px;}
   .login-box .login-title{font-size:32px;}
@@ -348,7 +348,7 @@ select.inp{appearance:none;}
 </head>
 <body>
 <div id="app">
-  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0e0e0e;gap:16px">
+  <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0e0e0e;gap:16px;z-index:9999">
     <div style="width:48px;height:48px;border:3px solid #333;border-top-color:#F5A800;border-radius:50%;animation:spin .8s linear infinite"></div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;color:#666;letter-spacing:2px;text-transform:uppercase">Carregando...</div>
   </div>
@@ -2004,7 +2004,7 @@ function renderStageDetail(sid){
         const pl = getP(r.playerId)||{nickname:"?",name:"?"};
         const medal = cls==="p1"?"🥇":cls==="p2"?"🥈":"🥉";
         const photoInner = pl.photoURL
-          ? `<img src="${pl.photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" onerror="this.parentNode.innerHTML='${ini(pl.name)}'"/>`
+          ? `<img src="${pl.photoURL}" data-podium-photo="1" data-src="${pl.photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" onerror="this.style.display='none';this.parentNode.innerHTML+='${ini(pl.name)}'"/>`
           : ini(pl.name);
         return `<div class="podium-slot">
           <div class="podium-pts ${cls}">${r.points}<span style="font-size:10px">pts</span></div>
@@ -3363,7 +3363,6 @@ window.exportPodium = async function(){
   const el = document.getElementById("podium-export");
   if(!el){ showToast("Pódio não encontrado","red"); return; }
   try {
-    // Load html2canvas if not loaded
     if(!window.html2canvas){
       await new Promise((res,rej)=>{
         const s=document.createElement("script");
@@ -3373,10 +3372,36 @@ window.exportPodium = async function(){
       });
     }
     showToast("Gerando imagem...","green");
+
+    // Pre-convert player photos to data URIs so html2canvas renders them without CORS issues
+    const podiumImgs = el.querySelectorAll("img[data-podium-photo]");
+    await Promise.race([
+      Promise.allSettled(Array.from(podiumImgs).map(img => new Promise(resolve => {
+        const src = img.getAttribute("data-src");
+        if(!src){ return resolve(); }
+        const tmp = new Image();
+        const t = setTimeout(()=>resolve(), 4000);
+        tmp.onload = ()=>{
+          clearTimeout(t);
+          try {
+            const cv = document.createElement("canvas");
+            cv.width = tmp.naturalWidth; cv.height = tmp.naturalHeight;
+            cv.getContext("2d").drawImage(tmp,0,0);
+            img.src = cv.toDataURL("image/jpeg",0.9);
+          } catch(e){ /* keep original src */ }
+          resolve();
+        };
+        tmp.onerror = ()=>{ clearTimeout(t); resolve(); };
+        tmp.src = src;
+      }))),
+      new Promise(res=>setTimeout(res,6000))
+    ]);
+
     const canvas = await html2canvas(el, {
       backgroundColor:"#1a1a1a",
       scale:2,
-      useCORS:true,
+      allowTaint:true,
+      useCORS:false,
       logging:false
     });
     const link = document.createElement("a");
