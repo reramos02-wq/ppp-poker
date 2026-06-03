@@ -3373,36 +3373,70 @@ window.exportPodium = async function(){
     }
     showToast("Gerando imagem...","green");
 
-    // Pre-convert player photos to data URIs via fetch (avoids canvas taint)
-    const podiumImgs = el.querySelectorAll("img[data-podium-photo]");
+    // Collect all external photo URLs from the podium element (img + background-image)
+    const _urlToDataUri = (url) => new Promise(resolve => {
+      if(!url || url.startsWith("data:")) return resolve(url);
+      const ctrl = new AbortController();
+      const t = setTimeout(() => { ctrl.abort(); resolve(null); }, 5000);
+      fetch(url, {signal: ctrl.signal})
+        .then(r => r.ok ? r.blob() : null)
+        .then(blob => {
+          clearTimeout(t);
+          if(!blob) return resolve(null);
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => { clearTimeout(t); resolve(null); });
+    });
+
+    // Clone the element so we can mutate without affecting the live DOM
+    const clone = el.cloneNode(true);
+    clone.style.position = "fixed";
+    clone.style.left = "-9999px";
+    clone.style.top = "0";
+    clone.style.width = el.offsetWidth + "px";
+    document.body.appendChild(clone);
+
+    // Replace all <img src> with data URIs
+    const cloneImgs = Array.from(clone.querySelectorAll("img"));
     await Promise.race([
-      Promise.allSettled(Array.from(podiumImgs).map(img => new Promise(resolve => {
-        const src = img.getAttribute("data-src");
-        if(!src) return resolve();
-        const ctrl = new AbortController();
-        const t = setTimeout(()=>{ ctrl.abort(); resolve(); }, 5000);
-        fetch(src, {signal: ctrl.signal})
-          .then(r => r.ok ? r.blob() : null)
-          .then(blob => {
-            clearTimeout(t);
-            if(!blob) return resolve();
-            const reader = new FileReader();
-            reader.onload = () => { img.src = reader.result; resolve(); };
-            reader.onerror = () => resolve();
-            reader.readAsDataURL(blob);
-          })
-          .catch(() => { clearTimeout(t); resolve(); });
-      }))),
-      new Promise(res=>setTimeout(res,8000))
+      Promise.allSettled(cloneImgs.map(async img => {
+        const src = img.src;
+        if(!src || src.startsWith("data:")) return;
+        const dataUri = await _urlToDataUri(src);
+        if(dataUri) img.src = dataUri;
+        else img.style.display = "none";
+      })),
+      new Promise(res => setTimeout(res, 8000))
     ]);
 
-    const canvas = await html2canvas(el, {
+    // Replace all background-image: url(...) with data URIs
+    const allEls = Array.from(clone.querySelectorAll("*"));
+    await Promise.race([
+      Promise.allSettled(allEls.map(async node => {
+        const bg = node.style.backgroundImage || getComputedStyle(node).backgroundImage;
+        const match = bg && bg.match(/url\(["']?([^"')]+)["']?\)/);
+        if(!match) return;
+        const url = match[1];
+        if(!url || url.startsWith("data:")) return;
+        const dataUri = await _urlToDataUri(url);
+        if(dataUri) node.style.backgroundImage = "url('" + dataUri + "')";
+        else node.style.backgroundImage = "none";
+      })),
+      new Promise(res => setTimeout(res, 8000))
+    ]);
+
+    const canvas = await html2canvas(clone, {
       backgroundColor:"#1a1a1a",
       scale:2,
-      allowTaint:true,
+      allowTaint:false,
       useCORS:false,
       logging:false
     });
+
+    document.body.removeChild(clone);
     const link = document.createElement("a");
     link.download = "podium-ppp-poker.png";
     link.href = canvas.toDataURL("image/png");
