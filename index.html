@@ -723,15 +723,19 @@ function buildPositionCounts(uid, stageFilter){
 }
 
 function tiebreak(a, b, stageFilter){
-  // Compare position by position: 1st, 2nd, 3rd, ...
-  const maxPos = 20;
+  // 1) Compare position by position: 1st, 2nd, 3rd, ... (up to 100)
   const ca = buildPositionCounts(a.p.uid, stageFilter);
   const cb = buildPositionCounts(b.p.uid, stageFilter);
+  const maxPos = 100;
   for(let pos=1; pos<=maxPos; pos++){
     const diff = (cb[pos]||0) - (ca[pos]||0);
-    if(diff !== 0) return diff; // more of this position wins
+    if(diff !== 0) return diff;
   }
-  return 0; // truly equal
+  // 2) Final fallback: best single finish (lowest position number wins)
+  const bestA = Math.min(...Object.keys(ca).map(Number));
+  const bestB = Math.min(...Object.keys(cb).map(Number));
+  if(isFinite(bestA) && isFinite(bestB) && bestA !== bestB) return bestA - bestB;
+  return 0;
 }
 
 function calcRank(type){
