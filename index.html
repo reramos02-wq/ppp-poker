@@ -630,11 +630,31 @@ function sanitizePlayers(players){
   });
 }
 
+// Recursively strip undefined values — Firestore rejects any undefined field,
+// including inside nested arrays/objects like stage.draft or stage.results
+function deepSanitize(value){
+  if(value === undefined) return null; // arrays can't have holes — use null instead of dropping
+  if(Array.isArray(value)) return value.map(deepSanitize);
+  if(value !== null && typeof value === "object" && !(value instanceof Date)){
+    const clean = {};
+    for(const [k,v] of Object.entries(value)){
+      if(v === undefined) continue; // drop undefined keys entirely on objects
+      clean[k] = deepSanitize(v);
+    }
+    return clean;
+  }
+  return value;
+}
+
+function sanitizeStages(stages){
+  return (stages||[]).map(s => deepSanitize(s));
+}
+
 async function save(){
   try {
     await setDoc(doc(db,"seasons",ACTIVE_SEASON), {
       players: sanitizePlayers(DB.players),
-      stages:  DB.stages,
+      stages:  sanitizeStages(DB.stages),
       admins:  DB.admins || [],
       updatedAt: serverTimestamp()
     });
@@ -648,7 +668,7 @@ async function save(){
 async function saveStages(){
   try {
     await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
-      stages: DB.stages,
+      stages: sanitizeStages(DB.stages),
       updatedAt: serverTimestamp()
     });
   } catch(e){
@@ -2536,7 +2556,7 @@ function bindManageInsEvents(sid){
         row.querySelector("button").disabled=true; row.querySelector("button").textContent="...";
         try {
           await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-            stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
+            stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x)),
             updatedAt: serverTimestamp()
           });
           const ls = DB.stages.find(x=>x.id===sid);
@@ -2590,7 +2610,7 @@ function bindManageInsEvents(sid){
         DB.players = [...DB.players, newPlayer];
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
           players: sanitizePlayers(DB.players),
-          stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
+          stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x)),
           updatedAt: serverTimestamp()
         });
         const ls = DB.stages.find(x=>x.id===sid);
@@ -2627,7 +2647,7 @@ function bindManageInsEvents(sid){
     const newIns = (s.inscriptions||[]).filter(uid=>!PENDING_REMOVALS.has(uid));
     try {
       await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        stages: DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x),
+        stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x)),
         updatedAt: serverTimestamp()
       });
       const ls=DB.stages.find(x=>x.id===sid);
@@ -3678,10 +3698,10 @@ function bindEvents(){
           ? ins.filter(i=>i!==CURRENT_USER_UID)
           : [...ins, CURRENT_USER_UID];
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
-          stages: DB.stages.map(s=>{
+          stages: sanitizeStages(DB.stages.map(s=>{
             if(s.id!==sid) return s;
             return {...s, inscriptions: newIns};
-          }),
+          })),
           updatedAt: serverTimestamp()
         });
         // Update local DB immediately
@@ -3876,7 +3896,7 @@ function bindEvents(){
       const newVal = s.allowInscriptions !== false ? false : true;
       try {
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-          stages: DB.stages.map(x=>x.id===sid?{...x,allowInscriptions:newVal}:x),
+          stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,allowInscriptions:newVal}:x)),
           updatedAt: serverTimestamp()
         });
         const ls = DB.stages.find(x=>x.id===sid);
@@ -3948,7 +3968,7 @@ function bindEvents(){
         : lateList.filter(u=>u!==CURRENT_USER_UID);
       try {
         await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-          stages: DB.stages.map(s=>s.id===sid?{...s,lateList:newLate}:s),
+          stages: sanitizeStages(DB.stages.map(s=>s.id===sid?{...s,lateList:newLate}:s)),
           updatedAt: serverTimestamp()
         });
         const localStage = DB.stages.find(s=>s.id===sid);
