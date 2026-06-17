@@ -3532,6 +3532,28 @@ function bindProfileSetup(){
   });
 }
 
+function showLoginError(code){
+  const el = document.getElementById("login-err");
+  if(!el) return;
+  const messages = {
+    "auth/missing-name": "Por favor, informe seu nome completo.",
+    "auth/missing-nick": "Por favor, informe seu apelido.",
+    "auth/missing-fields": "Preencha email e senha.",
+    "auth/missing-email": "Informe seu email.",
+    "auth/reset-sent": "Email de redefinição enviado! Verifique sua caixa de entrada.",
+    "auth/invalid-email": "Email inválido.",
+    "auth/email-already-in-use": "Este email já está cadastrado.",
+    "auth/weak-password": "Senha muito curta. Use ao menos 6 caracteres.",
+    "auth/wrong-password": "Senha incorreta.",
+    "auth/user-not-found": "Usuário não encontrado.",
+    "auth/invalid-credential": "Email ou senha incorretos.",
+    "auth/too-many-requests": "Muitas tentativas. Aguarde um momento e tente novamente."
+  };
+  const msg = messages[code] || "Erro: "+code;
+  const isSuccess = code==="auth/reset-sent";
+  el.innerHTML = `<div style="background:${isSuccess?'rgba(46,204,113,.12)':'rgba(231,76,60,.12)'};border:1px solid ${isSuccess?'#2ecc71':'#e74c3c'};color:${isSuccess?'#2ecc71':'#e74c3c'};padding:10px 12px;border-radius:6px;font-size:13px;margin-bottom:12px">${msg}</div>`;
+}
+
 function bindLoginEvents(){
   // Google login
   document.getElementById("btn-google-login")?.addEventListener("click", async()=>{
@@ -3563,10 +3585,12 @@ function bindLoginEvents(){
   // Signup
   document.getElementById("btn-signup")?.addEventListener("click", async()=>{
     const name  = document.getElementById("auth-name")?.value.trim();
-    const nick  = document.getElementById("auth-nick")?.value.trim() || (name?name.split(" ")[0]:"");
+    const nick  = document.getElementById("auth-nick")?.value.trim();
     const email = document.getElementById("auth-email")?.value.trim();
     const pass  = document.getElementById("auth-pass")?.value;
-    if(!name||!email||!pass){ showLoginError("auth/missing-fields"); return; }
+    if(!name){ showLoginError("auth/missing-name"); return; }
+    if(!nick){ showLoginError("auth/missing-nick"); return; }
+    if(!email||!pass){ showLoginError("auth/missing-fields"); return; }
     try{
       const btn = document.getElementById("btn-signup");
       if(btn){ btn.disabled=true; btn.textContent="Criando conta..."; }
@@ -4157,7 +4181,7 @@ async function ensurePlayerProfile(user){
     if(rawName.includes("|")){
       const parts = rawName.split("|");
       realName = parts[0].trim();
-      nick     = parts[1].trim() || parts[0].split(" ")[0];
+      nick     = parts[1].trim(); // no fallback — must come from signup form
       try{ await updateProfile(user, { displayName: realName }); }catch(e){}
     }
     // Only create if truly new
