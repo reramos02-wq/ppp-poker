@@ -413,17 +413,26 @@ try {
 
 // ── PUSH NOTIFICATIONS (Web Push via FCM) ───────────────────────────────────
 const VAPID_KEY = "BJ9zq9zjusMXS52NULc_2foaiZx_WTqyPkAHyhXNbJ9QoCpLa9Y2XmVkvhx64ztVSUoGp4l3ppUXem5jVH46l9w";
-let NOTIF_STATE = "unsupported"; // "unsupported" | "default" | "granted" | "denied"
+// NOTIF_BROWSER_PERM mirrors the browser's actual Notification.permission and
+// CANNOT be revoked from JavaScript once granted — only the user can do that
+// via the browser's own site settings. We never rely on it for the button state.
+let NOTIF_BROWSER_PERM = "unsupported"; // "unsupported" | "default" | "granted" | "denied"
+// NOTIF_OPT_IN is OUR app-level toggle: true only while we hold a valid, saved
+// FCM token for this device. This is what the bell button actually reflects,
+// and it's fully controllable — enabling/disabling it is just adding/removing
+// the token from Firestore (deleteToken() also invalidates it on Google's side).
+let NOTIF_OPT_IN = false;
 let swRegistration = null;
+let _lastFcmToken = null;
 
 async function initNotifState(){
   try{
     const supported = await fcmIsSupported();
     if(!supported || !("Notification" in window) || !("serviceWorker" in navigator)){
-      NOTIF_STATE = "unsupported";
+      NOTIF_BROWSER_PERM = "unsupported";
       return;
     }
-    NOTIF_STATE = Notification.permission; // "default" | "granted" | "denied"
+    NOTIF_BROWSER_PERM = Notification.permission; // "default" | "granted" | "denied"
     messaging = getMessaging(fbApp);
     swRegistration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
 
@@ -435,9 +444,18 @@ async function initNotifState(){
       const body  = data.body  || (payload.notification && payload.notification.body)  || "";
       showToast(title + (body?": "+body:""), "green");
     });
+
+    // If permission is already granted (from a previous session) and we still
+    // have a valid token saved for this player, treat the toggle as ON.
+    if(NOTIF_BROWSER_PERM==="granted"){
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration }).catch(()=>null);
+      _lastFcmToken = token;
+      const myPlayer = DB.players.find(p=>p.uid===CURRENT_USER_UID);
+      NOTIF_OPT_IN = !!(token && myPlayer && (myPlayer.fcmTokens||[]).includes(token));
+    }
   } catch(e){
     console.warn("Notif init error:", e.message);
-    NOTIF_STATE = "unsupported";
+    NOTIF_BROWSER_PERM = "unsupported";
   }
 }
 
@@ -466,23 +484,28 @@ async function removeNotifToken(token){
   } catch(e){ console.warn("removeNotifToken error:", e.message); }
 }
 
-// User taps "Ativar notificações"
+// User taps the bell when it's OFF — turns our opt-in ON.
 window.enableNotifications = async function(){
-  if(NOTIF_STATE==="unsupported"){
+  if(NOTIF_BROWSER_PERM==="unsupported"){
     showToast("Seu navegador não suporta notificações.","red");
     return;
   }
   try{
+    // Browser permission can only go from "default" → granted/denied once;
+    // if already granted or denied, requestPermission() just returns that
+    // same value immediately without prompting again.
     const perm = await Notification.requestPermission();
-    NOTIF_STATE = perm;
+    NOTIF_BROWSER_PERM = perm;
     if(perm!=="granted"){
-      showToast(perm==="denied" ? "Permissão negada. Ative nas configurações do navegador." : "Notificações não ativadas.","red");
+      showToast(perm==="denied" ? "Permissão bloqueada. Ative manualmente nas configurações do navegador para este site." : "Notificações não ativadas.","red");
       render();
       return;
     }
     const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration });
     if(token){
+      _lastFcmToken = token;
       await saveNotifToken(token);
+      NOTIF_OPT_IN = true;
       showToast("Notificações ativadas!","green");
     }
   } catch(e){
@@ -492,19 +515,25 @@ window.enableNotifications = async function(){
   render();
 };
 
-// User taps "Desativar notificações"
+// User taps the bell when it's ON — turns our opt-in OFF.
+// Note: this can't and doesn't need to revoke the browser's permission popup
+// state (that's not something JS is allowed to do) — it simply stops this
+// device from receiving pushes, by deleting/removing the FCM token.
 window.disableNotifications = async function(){
   try{
-    if(messaging){
-      const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration }).catch(()=>null);
-      if(token){
-        await deleteToken(messaging).catch(()=>{});
-        await removeNotifToken(token);
-      }
+    const token = _lastFcmToken || (messaging
+      ? await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration }).catch(()=>null)
+      : null);
+    if(token){
+      await removeNotifToken(token);
+      await deleteToken(messaging).catch(()=>{});
     }
+    _lastFcmToken = null;
+    NOTIF_OPT_IN = false;
     showToast("Notificações desativadas.","green");
   } catch(e){
     console.warn("disableNotifications error:", e.message);
+    NOTIF_OPT_IN = false; // still reflect intent locally even if cleanup partially failed
   }
   render();
 };
@@ -1631,6 +1660,7 @@ function renderTopbar(){
     <div class="tb-title">${TAB==="home"?"INÍCIO":TAB==="ranking"?"RANKING":TAB==="stages"?"ETAPAS":TAB==="hof"?"HALL OF FAME":TAB==="players"?"JOGADORES":TAB==="rules"?"REGRAS":TAB==="admin"?"ADMIN":""}</div>
     <div style="display:flex;align-items:center;gap:10px">
       ${IS_ADMIN?`<button id="btn-admin-shortcut" data-goto="admin" class="btn by sm" style="font-size:11px;padding:5px 12px">⚙ ADMIN</button>`:""}
+      ${NOTIF_BROWSER_PERM!=="unsupported"?`<button id="btn-notif-toggle" title="${NOTIF_OPT_IN?"Desativar notificações":"Ativar notificações"}" style="background:none;border:1px solid var(--border);border-radius:50%;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px">${NOTIF_OPT_IN?"🔔":"🔕"}</button>`:""}
       <button id="btn-profile" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 0">
         <div style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:2px solid var(--yellow);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:var(--yellow)">
           ${ini(avName)||"?"}
@@ -1690,7 +1720,7 @@ function renderHeader(){
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
-      ${NOTIF_STATE!=="unsupported"?`<button id="btn-notif-toggle" title="${NOTIF_STATE==="granted"?"Desativar notificações":"Ativar notificações"}" style="background:none;border:1px solid var(--border);border-radius:50%;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px">${NOTIF_STATE==="granted"?"🔔":"🔕"}</button>`:""}
+      ${NOTIF_BROWSER_PERM!=="unsupported"?`<button id="btn-notif-toggle" title="${NOTIF_OPT_IN?"Desativar notificações":"Ativar notificações"}" style="background:none;border:1px solid var(--border);border-radius:50%;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px">${NOTIF_OPT_IN?"🔔":"🔕"}</button>`:""}
       <button id="btn-profile" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 0">
         ${IS_ADMIN?'<span class="hbdg" style="font-size:10px">⚙</span>':""}
         <div style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:2px solid var(--yellow);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:var(--yellow);flex-shrink:0;line-height:1">
@@ -3749,7 +3779,7 @@ function bindEvents(){
   // Profile button
   document.getElementById("btn-profile")?.addEventListener("click",()=>renderProfileModal());
   document.getElementById("btn-notif-toggle")?.addEventListener("click",()=>{
-    if(NOTIF_STATE==="granted") window.disableNotifications();
+    if(NOTIF_OPT_IN) window.disableNotifications();
     else window.enableNotifications();
   });
   document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();window.scrollTo(0,0);});});
