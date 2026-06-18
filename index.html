@@ -450,13 +450,33 @@ async function initNotifState(){
     if(NOTIF_BROWSER_PERM==="granted"){
       const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration }).catch(()=>null);
       _lastFcmToken = token;
-      const myPlayer = DB.players.find(p=>p.uid===CURRENT_USER_UID);
+      // DB.players is populated asynchronously by the Firestore onSnapshot
+      // listener started in parallel — it may still be empty at this exact
+      // moment on a fresh page load. Wait (with a timeout) until either the
+      // player shows up or we give up, instead of reading an empty array.
+      const myPlayer = await waitForPlayer(CURRENT_USER_UID, 6000);
       NOTIF_OPT_IN = !!(token && myPlayer && (myPlayer.fcmTokens||[]).includes(token));
+      render(); // reflect the resolved opt-in state once data has arrived
     }
   } catch(e){
     console.warn("Notif init error:", e.message);
     NOTIF_BROWSER_PERM = "unsupported";
   }
+}
+
+// Polls DB.players until the given uid shows up or the timeout elapses.
+// Needed because Firestore's onSnapshot resolves asynchronously, often
+// after initNotifState() has already started running on page load.
+function waitForPlayer(uid, timeoutMs){
+  return new Promise(resolve => {
+    const start = Date.now();
+    const tick = () => {
+      const p = DB.players.find(pl=>pl.uid===uid);
+      if(p || Date.now()-start > timeoutMs) return resolve(p||null);
+      setTimeout(tick, 150);
+    };
+    tick();
+  });
 }
 
 // Save the device token under the player's Firestore doc so the server
