@@ -379,6 +379,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+import { getMessaging, getToken, deleteToken, onMessage, isSupported as fcmIsSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA-VcO_q6mvXIUh4Vbt1hStmQnnar2kKM4",
@@ -390,7 +391,7 @@ const firebaseConfig = {
 };
 
 function dbg(msg){ /* debug disabled */ }
-let fbApp, auth, db, storage, googleProvider;
+let fbApp, auth, db, storage, googleProvider, messaging;
 try {
   dbg("1. Iniciando Firebase...");
   fbApp = initializeApp(firebaseConfig);
@@ -409,6 +410,104 @@ try {
     '<b>ERRO Firebase Init:</b><br/>' + e.message + '</div>';
 }
 // ── FIREBASE SDK (ESM) ───────────────────────────────────────────────────────
+
+// ── PUSH NOTIFICATIONS (Web Push via FCM) ───────────────────────────────────
+const VAPID_KEY = "BJ9zq9zjusMXS52NULc_2foaiZx_WTqyPkAHyhXNbJ9QoCpLa9Y2XmVkvhx64ztVSUoGp4l3ppUXem5jVH46l9w";
+let NOTIF_STATE = "unsupported"; // "unsupported" | "default" | "granted" | "denied"
+let swRegistration = null;
+
+async function initNotifState(){
+  try{
+    const supported = await fcmIsSupported();
+    if(!supported || !("Notification" in window) || !("serviceWorker" in navigator)){
+      NOTIF_STATE = "unsupported";
+      return;
+    }
+    NOTIF_STATE = Notification.permission; // "default" | "granted" | "denied"
+    messaging = getMessaging(fbApp);
+    swRegistration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+
+    // Foreground messages: browser doesn't show these as OS notifications automatically,
+    // so we surface them as an in-app toast while the tab is open and focused.
+    onMessage(messaging, (payload) => {
+      const data = payload.data || {};
+      const title = data.title || (payload.notification && payload.notification.title) || "PPP Poker";
+      const body  = data.body  || (payload.notification && payload.notification.body)  || "";
+      showToast(title + (body?": "+body:""), "green");
+    });
+  } catch(e){
+    console.warn("Notif init error:", e.message);
+    NOTIF_STATE = "unsupported";
+  }
+}
+
+// Save the device token under the player's Firestore doc so the server
+// (Cloud Function) knows where to deliver pushes for this user.
+async function saveNotifToken(token){
+  if(!CURRENT_USER_UID || !token) return;
+  try{
+    const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
+    if(idx<0) return;
+    const tokens = new Set(DB.players[idx].fcmTokens||[]);
+    tokens.add(token);
+    DB.players[idx] = {...DB.players[idx], fcmTokens: Array.from(tokens)};
+    await savePlayers();
+  } catch(e){ console.warn("saveNotifToken error:", e.message); }
+}
+
+async function removeNotifToken(token){
+  if(!CURRENT_USER_UID) return;
+  try{
+    const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
+    if(idx<0) return;
+    const tokens = (DB.players[idx].fcmTokens||[]).filter(t=>t!==token);
+    DB.players[idx] = {...DB.players[idx], fcmTokens: tokens};
+    await savePlayers();
+  } catch(e){ console.warn("removeNotifToken error:", e.message); }
+}
+
+// User taps "Ativar notificações"
+window.enableNotifications = async function(){
+  if(NOTIF_STATE==="unsupported"){
+    showToast("Seu navegador não suporta notificações.","red");
+    return;
+  }
+  try{
+    const perm = await Notification.requestPermission();
+    NOTIF_STATE = perm;
+    if(perm!=="granted"){
+      showToast(perm==="denied" ? "Permissão negada. Ative nas configurações do navegador." : "Notificações não ativadas.","red");
+      render();
+      return;
+    }
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration });
+    if(token){
+      await saveNotifToken(token);
+      showToast("Notificações ativadas!","green");
+    }
+  } catch(e){
+    console.error("enableNotifications error:", e);
+    showToast("Erro ao ativar notificações.","red");
+  }
+  render();
+};
+
+// User taps "Desativar notificações"
+window.disableNotifications = async function(){
+  try{
+    if(messaging){
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration }).catch(()=>null);
+      if(token){
+        await deleteToken(messaging).catch(()=>{});
+        await removeNotifToken(token);
+      }
+    }
+    showToast("Notificações desativadas.","green");
+  } catch(e){
+    console.warn("disableNotifications error:", e.message);
+  }
+  render();
+};
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const ADMIN_EMAILS = ["reramos02@gmail.com"];
@@ -1110,7 +1209,8 @@ function openShareModal(stage){
 function needsProfileSetup(){
   if(!CURRENT_PLAYER) return false;
   return !CURRENT_PLAYER.name || CURRENT_PLAYER.name.includes("@") ||
-         CURRENT_PLAYER.name.length < 2 || !CURRENT_PLAYER.nickname ||
+         CURRENT_PLAYER.name.length < 2 ||
+         !CURRENT_PLAYER.nickname || CURRENT_PLAYER.nickname.includes("@") ||
          CURRENT_PLAYER.needsSetup;
 }
 
@@ -1294,6 +1394,34 @@ function openLightbox(url){
   lb.style.display = "flex";
 }
 window.openLightbox = openLightbox;
+
+// Open route modal — lets user pick Google Maps, Waze, or Apple Maps
+function openRouteModal(address){
+  if(!address) return;
+  const encoded = encodeURIComponent(address);
+  const ua = navigator.userAgent || "";
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${encoded}`;
+  const wazeUrl = `https://waze.com/ul?q=${encoded}&navigate=yes`;
+  const appleUrl = `https://maps.apple.com/?daddr=${encoded}`;
+
+  document.getElementById("admin-modal").innerHTML = `
+  <div class="ov" id="route-ov">
+    <div class="modal" style="max-width:360px">
+      <div class="mtitle">🗺️ Traçar Rota</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">${address}</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <a href="${googleUrl}" target="_blank" rel="noopener" class="btn bo fw" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px">📍 Google Maps</a>
+        <a href="${wazeUrl}" target="_blank" rel="noopener" class="btn bo fw" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px">🚗 Waze</a>
+        ${isIOS?`<a href="${appleUrl}" target="_blank" rel="noopener" class="btn bo fw" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px">🗺️ Apple Maps</a>`:""}
+      </div>
+      <button class="btn bo fw mt16" id="route-cancel">Cancelar</button>
+    </div>
+  </div>`;
+  document.getElementById("route-ov").addEventListener("click", e=>{ if(e.target===document.getElementById("route-ov")) closeAdminModal(); });
+  document.getElementById("route-cancel").addEventListener("click", closeAdminModal);
+}
+window.openRouteModal = openRouteModal;
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function render(){
@@ -1561,12 +1689,15 @@ function renderHeader(){
         <div class="hsb">${IS_ADMIN?"Admin · "+(CURRENT_PLAYER?.nickname||""):"Olá, "+(CURRENT_PLAYER?.nickname||"")}</div>
       </div>
     </div>
-    <button id="btn-profile" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 0">
-      ${IS_ADMIN?'<span class="hbdg" style="font-size:10px">⚙</span>':""}
-      <div style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:2px solid var(--yellow);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:var(--yellow);flex-shrink:0;line-height:1">
-        ${ini(CURRENT_PLAYER?.name||CURRENT_USER?.displayName||"?")}
-      </div>
-    </button>
+    <div style="display:flex;align-items:center;gap:8px">
+      ${NOTIF_STATE!=="unsupported"?`<button id="btn-notif-toggle" title="${NOTIF_STATE==="granted"?"Desativar notificações":"Ativar notificações"}" style="background:none;border:1px solid var(--border);border-radius:50%;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px">${NOTIF_STATE==="granted"?"🔔":"🔕"}</button>`:""}
+      <button id="btn-profile" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 0">
+        ${IS_ADMIN?'<span class="hbdg" style="font-size:10px">⚙</span>':""}
+        <div style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:2px solid var(--yellow);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:var(--yellow);flex-shrink:0;line-height:1">
+          ${ini(CURRENT_PLAYER?.name||CURRENT_USER?.displayName||"?")}
+        </div>
+      </button>
+    </div>
   </div>`;
 }
 
@@ -3617,6 +3748,10 @@ function bindLoginEvents(){
 function bindEvents(){
   // Profile button
   document.getElementById("btn-profile")?.addEventListener("click",()=>renderProfileModal());
+  document.getElementById("btn-notif-toggle")?.addEventListener("click",()=>{
+    if(NOTIF_STATE==="granted") window.disableNotifications();
+    else window.enableNotifications();
+  });
   document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();window.scrollTo(0,0);});});
   document.getElementById("btn-more")?.addEventListener("click",e=>{
     e.stopPropagation();MENU_OPEN=!MENU_OPEN;
@@ -4095,6 +4230,7 @@ onAuthStateChanged(auth, async (user) => {
     } catch(e) {
       dbg("ERRO startListeners: " + e.message);
     }
+    initNotifState().catch(()=>{});
   } else {
     CURRENT_USER     = null;
     CURRENT_USER_UID = null;
