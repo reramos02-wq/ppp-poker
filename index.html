@@ -455,7 +455,19 @@ async function initNotifState(){
       // moment on a fresh page load. Wait (with a timeout) until either the
       // player shows up or we give up, instead of reading an empty array.
       const myPlayer = await waitForPlayer(CURRENT_USER_UID, 6000);
-      NOTIF_OPT_IN = !!(token && myPlayer && (myPlayer.fcmTokens||[]).includes(token));
+      const savedTokens = myPlayer ? (myPlayer.fcmTokens||[]) : [];
+      NOTIF_OPT_IN = !!(token && savedTokens.includes(token));
+
+      // Deduplicate: if the same token was saved more than once (past bug),
+      // clean it up now so the user stops getting duplicate notifications.
+      if(token && savedTokens.filter(t=>t===token).length > 1){
+        const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
+        if(idx>=0){
+          DB.players[idx] = {...DB.players[idx], fcmTokens:[...new Set(savedTokens)]};
+          savePlayers().catch(()=>{});
+        }
+      }
+
       render(); // reflect the resolved opt-in state once data has arrived
     }
   } catch(e){
@@ -486,9 +498,24 @@ async function saveNotifToken(token){
   try{
     const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
     if(idx<0) return;
-    const tokens = new Set(DB.players[idx].fcmTokens||[]);
-    tokens.add(token);
-    DB.players[idx] = {...DB.players[idx], fcmTokens: Array.from(tokens)};
+    // Keep tokens from OTHER devices (different value) but replace any previous
+    // token from THIS device. Since getToken() always returns the same token for
+    // the same browser/SW registration, we simply store [token] — one per player
+    // for now. If the same user has multiple devices, each will have called
+    // enableNotifications independently and their token will be added here via
+    // merge in savePlayers(). But within the same device, never duplicate.
+    const existing = DB.players[idx].fcmTokens || [];
+    // If the token is already there, nothing to do.
+    if(existing.includes(token)){
+      _lastFcmToken = token;
+      return;
+    }
+    // Remove the previous token we stored for this device (tracked in _lastFcmToken)
+    // then add the fresh one.
+    const filtered = _lastFcmToken
+      ? existing.filter(t => t !== _lastFcmToken)
+      : existing;
+    DB.players[idx] = {...DB.players[idx], fcmTokens: [...filtered, token]};
     await savePlayers();
   } catch(e){ console.warn("saveNotifToken error:", e.message); }
 }
