@@ -458,8 +458,14 @@ async function initNotifState(){
       const savedTokens = myPlayer ? (myPlayer.fcmTokens||[]) : [];
       NOTIF_OPT_IN = !!(token && savedTokens.includes(token));
 
-      // Deduplicate: if the same token was saved more than once (past bug),
-      // clean it up now so the user stops getting duplicate notifications.
+      // If we have a valid token for this device but there are also stale/duplicate
+      // tokens saved (from previous sessions or the old accumulation bug), clean up:
+      // keep only the current token plus any tokens we DON'T recognise as ours
+      // (they belong to other devices and must stay).
+      // Since we track _lastFcmToken across sessions via memory only, the safest
+      // cleanup is: if there are duplicate identical entries, deduplicate them.
+      // For tokens from genuinely different devices, the Cloud Function will
+      // automatically purge invalid ones when they fail to deliver.
       if(token && savedTokens.filter(t=>t===token).length > 1){
         const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
         if(idx>=0){
@@ -568,19 +574,23 @@ window.enableNotifications = async function(){
 // device from receiving pushes, by deleting/removing the FCM token.
 window.disableNotifications = async function(){
   try{
-    const token = _lastFcmToken || (messaging
-      ? await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration }).catch(()=>null)
-      : null);
-    if(token){
-      await removeNotifToken(token);
+    // Invalidate the token on FCM's side
+    if(messaging){
       await deleteToken(messaging).catch(()=>{});
+    }
+    // Wipe ALL fcmTokens for this player — ensures clean state even if
+    // duplicate tokens from old sessions were saved.
+    const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
+    if(idx>=0){
+      DB.players[idx] = {...DB.players[idx], fcmTokens:[]};
+      await savePlayers().catch(()=>{});
     }
     _lastFcmToken = null;
     NOTIF_OPT_IN = false;
     showToast("Notificações desativadas.","green");
   } catch(e){
     console.warn("disableNotifications error:", e.message);
-    NOTIF_OPT_IN = false; // still reflect intent locally even if cleanup partially failed
+    NOTIF_OPT_IN = false;
   }
   render();
 };
@@ -864,7 +874,16 @@ async function savePlayers(){
       const myUid = CURRENT_USER_UID;
       const myPlayer = DB.players.find(p=>p.uid===myUid);
       if(!myPlayer) return;
-      const merged = existingPlayers.map(p=>p.uid===myUid?{...p,...myPlayer}:p);
+      const merged = existingPlayers.map(p=>{
+        if(p.uid!==myUid) return p;
+        // Merge fcmTokens: union of Firestore tokens + local tokens, deduplicated.
+        // This preserves tokens from other devices (e.g. phone + tablet) instead
+        // of one device overwriting the other's token on every save.
+        const remoteToks = p.fcmTokens||[];
+        const localToks  = myPlayer.fcmTokens||[];
+        const mergedToks = [...new Set([...remoteToks, ...localToks])];
+        return {...p, ...myPlayer, fcmTokens: mergedToks};
+      });
       if(!merged.find(p=>p.uid===myUid)) merged.push(myPlayer);
       await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
         players: merged,
