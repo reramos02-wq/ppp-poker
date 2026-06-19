@@ -3241,15 +3241,20 @@ function renderBuyinPremiacao(s){
   const caixinhaTorneio = Number(fin.caixinhaTorneio)||0;
 
   const rows = premios.map((p,i)=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow);width:32px">${p.position}º</div>
-      <div style="width:80px">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow);width:28px;flex-shrink:0">${p.position}º</div>
+      <div style="width:75px;flex-shrink:0">
         <div style="position:relative">
           <input data-prize-pct="${i}" type="number" value="${p.pct}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 18px 6px 8px;color:#fff;font-size:13px;box-sizing:border-box"/>
           <span style="position:absolute;right:8px;top:7px;color:var(--muted);font-size:12px">%</span>
         </div>
       </div>
-      <div style="flex:1;text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:#fff">${fmtBRL(p.value)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="position:relative">
+          <span style="position:absolute;left:8px;top:7px;color:var(--muted);font-size:12px">R$</span>
+          <input data-prize-value="${i}" type="number" step="0.01" value="${p.value.toFixed(2)}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 8px 6px 28px;color:#fff;font-size:13px;font-weight:700;box-sizing:border-box;text-align:right"/>
+        </div>
+      </div>
       ${premios.length>2?`<button data-prize-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:30px;height:30px;cursor:pointer;flex-shrink:0;font-size:12px">✕</button>`:""}
     </div>`).join("");
 
@@ -3290,11 +3295,17 @@ function renderBuyinGeral(s){
     const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
     const result = results.find(r=>r.playerId===uid);
     const prize = result ? (premios.find(p=>p.position===result.position)?.value || 0) : 0;
+    const saldo = prize - total;
+    const isPaid = !!rec.paid;
     return `<tr>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px">${pl.nickname||pl.name}</td>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${result?result.position+"º":"—"}</td>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px;text-align:right">${fmtBRL(total)}</td>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:${prize>0?"var(--yellow)":"var(--muted)"};font-size:13px;text-align:right;font-weight:${prize>0?"700":"400"}">${prize>0?fmtBRL(prize):"—"}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${saldo<0?"var(--red)":saldo>0?"var(--green)":"var(--muted)"}">${saldo===0?"—":(saldo>0?"+":"")+fmtBRL(saldo)}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:center">
+        <input type="checkbox" data-paid-uid="${uid}" ${isPaid?"checked":""} style="width:18px;height:18px;cursor:pointer;accent-color:var(--yellow)"/>
+      </td>
     </tr>`;
   }).join("");
 
@@ -3324,6 +3335,8 @@ function renderBuyinGeral(s){
             <th style="padding:6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Pos.</th>
             <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Entrada</th>
             <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Prêmio</th>
+            <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Saldo Final</th>
+            <th style="padding:6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Pago</th>
           </tr></thead>
           <tbody>${playerRows}</tbody>
         </table>
@@ -4651,7 +4664,7 @@ function bindEvents(){
   document.getElementById("bi-floor-cost")?.addEventListener("change", async function(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     getFinanceData(s).floorCost = parseFloat(this.value)||0;
-    await saveFinanceData(); render();
+    await saveFinanceData(); requestAnimationFrame(render);
   });
 
   document.querySelectorAll("[data-dealer-name]").forEach(el=>{
@@ -4667,7 +4680,7 @@ function bindEvents(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.dealerCost);
       getFinanceData(s).dealers[i].cost = parseFloat(this.value)||0;
-      await saveFinanceData(); render();
+      await saveFinanceData(); requestAnimationFrame(render);
     });
   });
   document.querySelectorAll("[data-dealer-remove]").forEach(el=>{
@@ -4675,13 +4688,13 @@ function bindEvents(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.dealerRemove);
       getFinanceData(s).dealers.splice(i,1);
-      await saveFinanceData(); render();
+      await saveFinanceData(); requestAnimationFrame(render);
     });
   });
   document.getElementById("bi-add-dealer")?.addEventListener("click", async()=>{
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     getFinanceData(s).dealers.push({name:"", cost:350});
-    await saveFinanceData(); render();
+    await saveFinanceData(); requestAnimationFrame(render);
   });
 
   document.querySelectorAll("[data-extra-label]").forEach(el=>{
@@ -4697,7 +4710,7 @@ function bindEvents(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.extraValue);
       getFinanceData(s).extraCosts[i].value = parseFloat(this.value)||0;
-      await saveFinanceData(); render();
+      await saveFinanceData(); requestAnimationFrame(render);
     });
   });
   document.querySelectorAll("[data-extra-remove]").forEach(el=>{
@@ -4705,24 +4718,24 @@ function bindEvents(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.extraRemove);
       getFinanceData(s).extraCosts.splice(i,1);
-      await saveFinanceData(); render();
+      await saveFinanceData(); requestAnimationFrame(render);
     });
   });
   document.getElementById("bi-add-extra")?.addEventListener("click", async()=>{
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     getFinanceData(s).extraCosts.push({label:"", value:0});
-    await saveFinanceData(); render();
+    await saveFinanceData(); requestAnimationFrame(render);
   });
 
   document.getElementById("bi-caixinha-cash")?.addEventListener("change", async function(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     getFinanceData(s).caixinhaCash = parseFloat(this.value)||0;
-    await saveFinanceData(); render();
+    await saveFinanceData(); requestAnimationFrame(render);
   });
   document.getElementById("bi-caixinha-torneio")?.addEventListener("change", async function(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
-    await saveFinanceData(); render();
+    await saveFinanceData(); requestAnimationFrame(render);
   });
 
   // ── PREMIAÇÃO TAB EVENTS ─────────────────────────────────────────────────────
@@ -4736,7 +4749,22 @@ function bindEvents(){
       const override = current.map(p=>({pct:p.pct}));
       override[i].pct = parseFloat(this.value)||0;
       fin.prizeOverrides = override;
-      await saveFinanceData(); render();
+      await saveFinanceData(); requestAnimationFrame(render);
+    });
+  });
+  // Editing the R$ value recalculates the % so both stay in sync.
+  document.querySelectorAll("[data-prize-value]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.prizeValue);
+      const potLiquido = calcPotLiquido(s);
+      const current = calcPremiacao(s);
+      const fin = getFinanceData(s);
+      const override = current.map(p=>({pct:p.pct}));
+      const newValue = parseFloat(this.value)||0;
+      override[i].pct = potLiquido>0 ? (newValue/potLiquido)*100 : 0;
+      fin.prizeOverrides = override;
+      await saveFinanceData(); requestAnimationFrame(render);
     });
   });
   document.querySelectorAll("[data-prize-remove]").forEach(el=>{
@@ -4748,7 +4776,7 @@ function bindEvents(){
       const override = current.map(p=>({pct:p.pct}));
       override.splice(i,1);
       fin.prizeOverrides = override;
-      await saveFinanceData(); render();
+      await saveFinanceData(); requestAnimationFrame(render);
     });
   });
   document.getElementById("bi-add-prize-pos")?.addEventListener("click", async()=>{
@@ -4758,16 +4786,30 @@ function bindEvents(){
     const override = current.map(p=>({pct:p.pct}));
     override.push({pct:0});
     fin.prizeOverrides = override;
-    await saveFinanceData(); render();
+    await saveFinanceData(); requestAnimationFrame(render);
   });
   document.getElementById("bi-reset-prizes")?.addEventListener("click", async()=>{
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     getFinanceData(s).prizeOverrides = null;
-    await saveFinanceData(); render();
+    await saveFinanceData(); requestAnimationFrame(render);
     showToast("Premiação recalculada automaticamente","green");
   });
 
   // ── RESUMO GERAL: export as image ────────────────────────────────────────────
+  // ── RESUMO GERAL: mark player as paid ────────────────────────────────────────
+  document.querySelectorAll("[data-paid-uid]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const uid = this.dataset.paidUid;
+      const rec = getBuyinRecord(s, uid);
+      rec.paid = this.checked;
+      setBuyinRecord(s, rec);
+      await saveFinanceData();
+      // No render() here — checkbox state is already correct visually,
+      // avoids any risk of losing scroll position on a long player list.
+    });
+  });
+
   document.getElementById("bi-export-geral")?.addEventListener("click", async()=>{
     const el = document.getElementById("bi-geral-export");
     if(!el) return;
@@ -5350,11 +5392,18 @@ function startListeners(user){
         DB.admins  = data.admins  || [];
         // If admin is editing a result, preserve local draft to avoid overwrite
         const editingStageId = resultStage ? resultStage.id : null;
-        if(editingStageId){
+        // If admin has the financial management screen open for a stage,
+        // preserve local finance/buyinData so in-progress edits (inputs being
+        // typed) aren't wiped out by the snapshot echo of our own save.
+        const editingFinanceId = BUYIN_MGMT;
+        if(editingStageId || editingFinanceId){
           DB.stages = (data.stages||[]).map(s=>{
-            if(s.id===editingStageId){
-              const local = DB.stages.find(x=>x.id===editingStageId);
-              return local ? {...s, draft: local.draft} : s;
+            const local = DB.stages.find(x=>x.id===s.id);
+            if(s.id===editingStageId && local){
+              return {...s, draft: local.draft};
+            }
+            if(s.id===editingFinanceId && local){
+              return {...s, finance: local.finance, buyinData: local.buyinData};
             }
             return s;
           }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
