@@ -2091,6 +2091,12 @@ function renderRanking(){
 
 // ── STAGES ────────────────────────────────────────────────────────────────────
 function renderStages(){
+  // Buy-in management takes priority over stage detail
+  if(BUYIN_MGMT){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    if(s) return renderBuyinMgmt();
+    BUYIN_MGMT = null; BUYIN_PLAYER = null;
+  }
   if(STAGE_DETAIL) return renderStageDetail(STAGE_DETAIL);
   const upcoming = DB.stages.filter(s=>s.status==="upcoming").sort((a,b)=>(a.date||"").localeCompare(b.date||""));
   const nextId = getNextStage()?.id || null;
@@ -2190,6 +2196,7 @@ function renderStageDetail(sid){
         <button class="btn bo sm" data-launch="${s.id}" style="font-size:12px">${s.status==="finished"?"✏️ Editar Resultado":"▶ Lançar Resultado"}</button>
         <button class="btn bo sm" data-admin-manage-ins="${s.id}" style="font-size:12px">👥 Gerir Inscrições</button>
         ${s.status==="upcoming"?`<button class="btn bo sm" data-toggle-ins="${s.id}" style="font-size:12px">${s.allowInscriptions===false?"🔓 Abrir Inscrições":"🔒 Fechar Inscrições"}</button>`:""}
+        <button class="btn bo sm" data-buyin-mgmt="${s.id}" style="font-size:12px;border-color:var(--yellow);color:var(--yellow)">💰 Gestão Buy-ins</button>
       </div>
     </div>`:""}
 
@@ -4181,7 +4188,11 @@ function bindEvents(){
 
   // Back from buy-in management to stage detail
   document.getElementById("btn-bi-back")?.addEventListener("click",()=>{
+    const sid = BUYIN_MGMT;
     BUYIN_MGMT = null; BUYIN_PLAYER = null;
+    // Return to wherever we came from — if in admin panel keep ADMIN_STAGE_DETAIL,
+    // otherwise restore STAGE_DETAIL so user lands back on the stage page
+    if(!ADMIN_STAGE_DETAIL && sid){ STAGE_DETAIL = sid; TAB = "stages"; }
     render();
   });
 
