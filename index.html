@@ -747,6 +747,37 @@ const ini  = name => (name||"").trim().split(" ").filter(Boolean).map(w=>w[0]).j
 const fmtD = d => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"});}catch{return d;} };
 const pcls = i => i===0?"rp1":i===1?"rp2":i===2?"rp3":"rpx";
 
+// ── BUY-IN MANAGEMENT HELPERS ────────────────────────────────────────────────
+// Extract first R$ amount from strings like "R$ 150 (20k fichas)"
+const parseBRL = str => {
+  if(!str) return 0;
+  const m = String(str).match(/R\$\s*([\d.,]+)/);
+  return m ? parseFloat(m[1].replace(",",".")) : 0;
+};
+// Returns {buyin, rs, rd, addon} numeric values from a stage's structure strings.
+// rebuy field: "R$ 100 (20k) / R$ 180 (40k)" — first = RS, second = RD
+function getBuyinValues(s){
+  const buyin = parseBRL(s.buyin);
+  const addon = parseBRL(s.addon);
+  const rebuyParts = (s.rebuy||"").split("/").map(p=>p.trim());
+  const rs = parseBRL(rebuyParts[0]);
+  const rd = parseBRL(rebuyParts[1]||rebuyParts[0]);
+  return {buyin, rs, rd, addon};
+}
+// Get or init a player's buy-in record for a stage
+function getBuyinRecord(s, uid){
+  const records = s.buyinData || [];
+  return records.find(r=>r.uid===uid) || {uid, rs:0, rd:0, addon:false};
+}
+// Set a player's buy-in record in a stage (mutates DB locally, then saves)
+function setBuyinRecord(s, record){
+  if(!s.buyinData) s.buyinData = [];
+  const idx = s.buyinData.findIndex(r=>r.uid===record.uid);
+  if(idx>=0) s.buyinData[idx] = record;
+  else s.buyinData.push(record);
+}
+const fmtBRL = v => "R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:2});
+
 const LOGO_48  = 'data:image/png;base64,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';
 const LOGO_80  = 'data:image/png;base64,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';
 const LOGO = (sz=38) => `<img src="${sz>=80?LOGO_80:LOGO_48}" width="${sz}" height="${sz}" alt="PPP Poker" style="display:block;object-fit:contain"/>`;
@@ -790,6 +821,9 @@ let ADMIN_STAGE_DETAIL = null; // stage id expanded in admin
 let ADMIN_INS_OPEN    = false; // add inscription panel open
 let RULES_TAB     = "nlholdem";
 let RULES_VIEW    = "rules";
+let BUYIN_MGMT    = null;  // stage id open in buy-in management
+let BUYIN_PLAYER  = null;  // uid open in buy-in player detail
+let BUYIN_TAB     = "list"; // "list" | "summary"
 let RANK_TAB      = "geral";
 let LOGIN_TAB     = "login";
 
@@ -2622,6 +2656,13 @@ function renderAdmin(){
 }
 
 function renderAdminStages(){
+  // If buy-in management is open, show that screen
+  if(BUYIN_MGMT){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    if(s) return renderBuyinMgmt();
+    BUYIN_MGMT = null; BUYIN_PLAYER = null;
+  }
+
   // If a stage is expanded, show detail view
   if(ADMIN_STAGE_DETAIL){
     const s = DB.stages.find(x=>x.id===ADMIN_STAGE_DETAIL);
@@ -2900,6 +2941,186 @@ function updatePendingBar(){
   }
 }
 
+// ── BUY-IN MANAGEMENT SCREENS ────────────────────────────────────────────────
+
+function renderBuyinMgmt(){
+  const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+  if(!s) return "<div class='sec'>Etapa não encontrada.</div>";
+
+  if(BUYIN_PLAYER) return renderBuyinPlayer(s);
+
+  const vals = getBuyinValues(s);
+  const ins  = s.inscriptions||[];
+  const notIn = DB.players.filter(p=>!ins.includes(p.uid)).sort((a,b)=>a.name.localeCompare(b.name));
+
+  const tabs = `
+  <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">
+    ${["list","summary"].map(t=>`
+    <button data-bi-tab="${t}" style="background:none;border:none;border-bottom:${BUYIN_TAB===t?"2px solid var(--yellow)":"2px solid transparent"};color:${BUYIN_TAB===t?"var(--yellow)":"var(--muted)"};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:8px 16px;cursor:pointer;margin-bottom:-2px">
+      ${t==="list"?"👥 Jogadores":"📊 Resumo Entradas"}
+    </button>`).join("")}
+  </div>`;
+
+  if(BUYIN_TAB==="summary") return `<div class="sec">${renderBuyinSummary(s, vals)}</div>`;
+
+  // ── LIST TAB ──
+  const playerRows = ins.map((uid,i)=>{
+    const pl = getP(uid)||{name:uid,nickname:"?"};
+    const rec = getBuyinRecord(s, uid);
+    const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+    return `<div data-bi-player="${uid}" style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;active-transform:scale(.98)">
+      <div style="color:var(--muted);font-size:12px;width:22px;text-align:center;flex-shrink:0">${i+1}</div>
+      ${AV(uid)}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:#fff;font-size:14px">${pl.nickname||pl.name}</div>
+        <div style="font-size:11px;color:var(--muted)">
+          Buy-in ✓${rec.rs>0?` · RS×${rec.rs}`:""}${rec.rd>0?` · RD×${rec.rd}`:""}${rec.addon?" · Add-on ✓":""}
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:var(--yellow)">${fmtBRL(total)}</div>
+        <div style="font-size:10px;color:var(--muted)">total</div>
+      </div>
+      <div style="color:var(--muted);font-size:18px;flex-shrink:0">›</div>
+    </div>`;
+  }).join("");
+
+  // Add player panel (same logic as gerir inscricoes)
+  const addPanel = `
+  <div style="margin-top:16px;border-top:2px solid var(--yellow);padding-top:14px">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Adicionar jogador</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="bi-search" type="text" placeholder="Buscar jogador..." style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
+      <button id="bi-add-confirm" class="btn by sm">＋ Adicionar</button>
+    </div>
+    <div id="bi-search-results" style="max-height:180px;overflow-y:auto"></div>
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+      <button id="bi-new-player-btn" class="btn bo sm">＋ Novo jogador</button>
+    </div>
+  </div>`;
+
+  return `<div class="sec">
+    <button id="btn-bi-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à etapa</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">💰 Gestão Buy-ins</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${s.name} · Buy-in: ${s.buyin||"—"}</div>
+    ${tabs}
+    <div class="card" style="padding:0 12px">
+      ${ins.length===0?'<div style="color:var(--muted);font-size:13px;padding:16px 0">Nenhum inscrito ainda.</div>':playerRows}
+    </div>
+    ${addPanel}
+  </div>`;
+}
+
+function renderBuyinSummary(s, vals){
+  const ins = s.inscriptions||[];
+  let grandTotal = 0;
+  const tabs2 = `
+  <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">
+    ${["list","summary"].map(t=>`
+    <button data-bi-tab="${t}" style="background:none;border:none;border-bottom:${BUYIN_TAB===t?"2px solid var(--yellow)":"2px solid transparent"};color:${BUYIN_TAB===t?"var(--yellow)":"var(--muted)"};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:8px 16px;cursor:pointer;margin-bottom:-2px">
+      ${t==="list"?"👥 Jogadores":"📊 Resumo Entradas"}
+    </button>`).join("")}
+  </div>`;
+
+  const rows = ins.map(uid=>{
+    const pl = getP(uid)||{name:uid,nickname:"?"};
+    const rec = getBuyinRecord(s, uid);
+    const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+    grandTotal += total;
+    return `<tr>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px">${pl.nickname||pl.name}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${rec.rs}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${rec.rd}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${rec.addon?"✅":"—"}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--yellow);font-size:13px;font-weight:700;text-align:right">${fmtBRL(total)}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+    <button id="btn-bi-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à etapa</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">💰 Gestão Buy-ins</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${s.name}</div>
+    ${tabs2}
+    <div style="background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:14px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Total Arrecadado</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--yellow)">${fmtBRL(grandTotal)}</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:2px solid var(--yellow)">
+            <th style="padding:8px 6px;text-align:left;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Jogador</th>
+            <th style="padding:8px 6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">RS</th>
+            <th style="padding:8px 6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">RD</th>
+            <th style="padding:8px 6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Add-on</th>
+            <th style="padding:8px 6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Total</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function renderBuyinPlayer(s){
+  const vals = getBuyinValues(s);
+  const uid  = BUYIN_PLAYER;
+  const pl   = getP(uid)||{name:uid,nickname:"?"};
+  const rec  = getBuyinRecord(s, uid);
+  const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+
+  return `<div class="sec">
+    <button id="btn-bi-player-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à lista</button>
+
+    <!-- Player header -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+      ${AV(uid,"lg")}
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff">${pl.name}</div>
+        <div style="font-size:13px;color:var(--muted)">"${pl.nickname}"</div>
+      </div>
+    </div>
+
+    <!-- Add-on toggle -->
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-weight:700;color:#fff;font-size:15px">Add-on</div>
+        <div style="font-size:12px;color:var(--muted)">${vals.addon>0?fmtBRL(vals.addon):"Sem valor cadastrado"}</div>
+      </div>
+      <button id="btn-bi-addon" style="background:${rec.addon?"var(--yellow)":"var(--surface2)"};border:2px solid var(--yellow);border-radius:6px;padding:10px 20px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;cursor:pointer;color:${rec.addon?"#000":"var(--muted)"};transition:.2s">
+        ${rec.addon?"✅ SIM":"☐ NÃO"}
+      </button>
+    </div>
+
+    <!-- RS and RD counters -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+
+      <!-- RS -->
+      <div class="card" style="text-align:center">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Rebuy Simples</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${vals.rs>0?fmtBRL(vals.rs):"—"} cada</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:48px;color:var(--yellow);line-height:1;margin-bottom:14px">${rec.rs}</div>
+        <button id="btn-bi-add-rs" class="btn by fw" style="margin-bottom:8px">＋ RS</button>
+        ${rec.rs>0?`<button id="btn-bi-rm-rs" style="background:none;border:1px solid var(--border);color:var(--red);cursor:pointer;padding:5px 10px;border-radius:3px;font-size:11px;width:100%">− Remover RS</button>`:""}
+      </div>
+
+      <!-- RD -->
+      <div class="card" style="text-align:center">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Rebuy Duplo</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${vals.rd>0?fmtBRL(vals.rd):"—"} cada</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:48px;color:var(--yellow);line-height:1;margin-bottom:14px">${rec.rd}</div>
+        <button id="btn-bi-add-rd" class="btn by fw" style="margin-bottom:8px">＋ RD</button>
+        ${rec.rd>0?`<button id="btn-bi-rm-rd" style="background:none;border:1px solid var(--border);color:var(--red);cursor:pointer;padding:5px 10px;border-radius:3px;font-size:11px;width:100%">− Remover RD</button>`:""}
+      </div>
+    </div>
+
+    <!-- Running total -->
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--yellow)">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Total do jogador</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--yellow)">${fmtBRL(total)}</div>
+    </div>
+  </div>`;
+}
+
 function renderAdminStageDetail(s){
   const ins = s.inscriptions||[];
   const notIn = DB.players
@@ -2936,6 +3157,9 @@ function renderAdminStageDetail(s){
         <button class="btn bo sm" data-edit-stage="${s.id}">✏ Editar</button>
         <button class="btn by sm" data-launch="${s.id}">${s.status==="finished"?"✏ Resultado":"▶ Lançar"}</button>
         <button class="btn bd sm" data-del-stage="${s.id}">🗑 Excluir</button>
+      </div>
+      <div class="row g8 mt8">
+        <button class="btn by fw" data-buyin-mgmt="${s.id}" style="background:var(--surface2);border:1px solid var(--yellow);color:var(--yellow)">💰 Gestão Buy-ins</button>
       </div>
       ${s.status==="upcoming" ? `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 0;border-top:1px solid var(--border)">
@@ -3408,6 +3632,48 @@ function openStageModal(stage=null){
 }
 
 function closeAdminModal(){ const el=document.getElementById("admin-modal"); if(el)el.innerHTML=""; }
+
+// Full-screen confirmation for adding RS/RD (big button, hard to miss)
+function openBuyinConfirm(type, value, onConfirm){
+  const el = document.getElementById("admin-modal");
+  if(!el) return;
+  el.innerHTML = `
+  <div class="ov" id="bi-confirm-ov" style="z-index:1200">
+    <div class="modal" style="max-width:340px;text-align:center;padding:32px 24px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:32px;color:var(--yellow);margin-bottom:8px">+ ${type}</div>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:28px">
+        ${value>0?`Valor: ${fmtBRL(value)}`:""}
+      </div>
+      <button id="bi-confirm-yes" class="btn by fw" style="font-size:20px;padding:18px;margin-bottom:12px">✅ CONFIRMAR ${type}</button>
+      <button id="bi-confirm-no"  class="btn bo fw" style="font-size:14px">Cancelar</button>
+    </div>
+  </div>`;
+  document.getElementById("bi-confirm-yes").addEventListener("click",()=>{ closeAdminModal(); onConfirm(); });
+  document.getElementById("bi-confirm-no").addEventListener("click", closeAdminModal);
+}
+
+// Double-confirmation for removing RS/RD
+function openBuyinRemoveConfirm(type, onConfirm){
+  const el = document.getElementById("admin-modal");
+  if(!el) return;
+  el.innerHTML = `
+  <div class="ov" id="bi-rm-ov" style="z-index:1200">
+    <div class="modal" style="max-width:340px;text-align:center;padding:28px 24px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--red);margin-bottom:8px">Remover ${type}?</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Tem certeza? Esta ação subtrai 1 ${type} do jogador.</div>
+      <div style="font-size:12px;color:var(--red);margin-bottom:24px;font-weight:600">⚠ Confirme duas vezes para evitar erros</div>
+      <button id="bi-rm-yes1" class="btn bd fw" style="font-size:15px;padding:14px;margin-bottom:10px">Sim, remover 1 ${type}</button>
+      <button id="bi-rm-no"   class="btn bo fw" style="font-size:13px">Cancelar</button>
+    </div>
+  </div>`;
+  document.getElementById("bi-rm-no").addEventListener("click", closeAdminModal);
+  document.getElementById("bi-rm-yes1").addEventListener("click",()=>{
+    // Second confirmation
+    document.getElementById("bi-rm-yes1").outerHTML = `<button id="bi-rm-yes2" class="btn bd fw" style="font-size:15px;padding:14px;margin-bottom:10px;border:2px solid var(--red)">⚠ CONFIRMAR REMOÇÃO</button>`;
+    document.getElementById("bi-rm-yes2").addEventListener("click",()=>{ closeAdminModal(); onConfirm(); });
+  });
+}
+
 
 // ── RESULT MODAL ──────────────────────────────────────────────────────────────
 let autoSaveTimer = null;
@@ -3895,12 +4161,202 @@ function bindEvents(){
     render();
   });
 
-  // Admin stage detail: toggle add panel (state-based, no dropdown)
-  document.getElementById("btn-add-ins-toggle")?.addEventListener("click", ()=>{
-    ADMIN_INS_OPEN = !ADMIN_INS_OPEN;
+  document.getElementById("btn-admin-stage-back")?.addEventListener("click",()=>{
+    ADMIN_STAGE_DETAIL = null;
+    ADMIN_INS_OPEN = false;
     render();
-    if(ADMIN_INS_OPEN) setTimeout(()=>document.getElementById("ins-search")?.focus(), 50);
   });
+
+  // ── BUY-IN MANAGEMENT EVENTS ───────────────────────────────────────────────
+
+  // Open buy-in management from admin stage detail button
+  document.querySelectorAll("[data-buyin-mgmt]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      BUYIN_MGMT = btn.dataset.buyinMgmt;
+      BUYIN_PLAYER = null;
+      BUYIN_TAB = "list";
+      render();
+    });
+  });
+
+  // Back from buy-in management to stage detail
+  document.getElementById("btn-bi-back")?.addEventListener("click",()=>{
+    BUYIN_MGMT = null; BUYIN_PLAYER = null;
+    render();
+  });
+
+  // Back from player detail to buy-in list
+  document.getElementById("btn-bi-player-back")?.addEventListener("click",()=>{
+    BUYIN_PLAYER = null;
+    render();
+  });
+
+  // Tab switch
+  document.querySelectorAll("[data-bi-tab]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      BUYIN_TAB = btn.dataset.biTab;
+      render();
+    });
+  });
+
+  // Click player row → open player detail
+  document.querySelectorAll("[data-bi-player]").forEach(el=>{
+    el.addEventListener("click",()=>{
+      BUYIN_PLAYER = el.dataset.biPlayer;
+      render();
+    });
+  });
+
+  // Helper: save buyinData for current stage
+  async function saveBuyinData(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    if(!s) return;
+    try{
+      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        stages: sanitizeStages(DB.stages),
+        updatedAt: serverTimestamp()
+      });
+    } catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
+  }
+
+  // Add-on toggle
+  document.getElementById("btn-bi-addon")?.addEventListener("click",async()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    if(!s) return;
+    const rec = getBuyinRecord(s, BUYIN_PLAYER);
+    rec.addon = !rec.addon;
+    setBuyinRecord(s, rec);
+    render();
+    await saveBuyinData();
+  });
+
+  // Add RS — opens confirmation overlay
+  document.getElementById("btn-bi-add-rs")?.addEventListener("click",()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    const vals = getBuyinValues(s);
+    openBuyinConfirm("RS", vals.rs, async()=>{
+      const rec = getBuyinRecord(s, BUYIN_PLAYER);
+      rec.rs = (rec.rs||0)+1;
+      setBuyinRecord(s, rec);
+      render();
+      await saveBuyinData();
+    });
+  });
+
+  // Add RD
+  document.getElementById("btn-bi-add-rd")?.addEventListener("click",()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    const vals = getBuyinValues(s);
+    openBuyinConfirm("RD", vals.rd, async()=>{
+      const rec = getBuyinRecord(s, BUYIN_PLAYER);
+      rec.rd = (rec.rd||0)+1;
+      setBuyinRecord(s, rec);
+      render();
+      await saveBuyinData();
+    });
+  });
+
+  // Remove RS — double confirm
+  document.getElementById("btn-bi-rm-rs")?.addEventListener("click",()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    openBuyinRemoveConfirm("RS", async()=>{
+      const rec = getBuyinRecord(s, BUYIN_PLAYER);
+      rec.rs = Math.max(0,(rec.rs||0)-1);
+      setBuyinRecord(s, rec);
+      render();
+      await saveBuyinData();
+    });
+  });
+
+  // Remove RD
+  document.getElementById("btn-bi-rm-rd")?.addEventListener("click",()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    openBuyinRemoveConfirm("RD", async()=>{
+      const rec = getBuyinRecord(s, BUYIN_PLAYER);
+      rec.rd = Math.max(0,(rec.rd||0)-1);
+      setBuyinRecord(s, rec);
+      render();
+      await saveBuyinData();
+    });
+  });
+
+  // Buy-in player search
+  document.getElementById("bi-search")?.addEventListener("input", e=>{
+    const q = e.target.value.trim().toLowerCase();
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
+    const ins = s ? s.inscriptions||[] : [];
+    const notIn = DB.players.filter(p=>!ins.includes(p.uid));
+    const res = document.getElementById("bi-search-results");
+    if(!res) return;
+    if(!q){ res.innerHTML=""; return; }
+    const matches = notIn.filter(p=>(p.name+p.nickname).toLowerCase().includes(q)).slice(0,8);
+    res.innerHTML = matches.map(p=>`<div data-bi-add-uid="${p.uid}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      ${AV(p.uid)}<div><div style="color:#fff;font-size:13px">${p.name}</div><div style="color:var(--muted);font-size:11px">"${p.nickname}"</div></div></div>`).join("")
+      || '<div style="color:var(--muted);font-size:12px;padding:8px">Nenhum resultado.</div>';
+    res.querySelectorAll("[data-bi-add-uid]").forEach(el=>{
+      el.addEventListener("click",async()=>{
+        const uid = el.dataset.biAddUid;
+        const stageFull = DB.stages.find(x=>x.id===BUYIN_MGMT);
+        if(!stageFull) return;
+        const newIns = [...(stageFull.inscriptions||[]), uid];
+        stageFull.inscriptions = newIns;
+        try{
+          await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+            stages: sanitizeStages(DB.stages), updatedAt: serverTimestamp()
+          });
+          render();
+        } catch(err){ showToast("Erro: "+err.message,"red"); }
+      });
+    });
+  });
+
+  // New player button (opens creation form in overlay)
+  document.getElementById("bi-new-player-btn")?.addEventListener("click",()=>{
+    const sid = BUYIN_MGMT;
+    const el = document.getElementById("admin-modal");
+    if(!el) return;
+    el.innerHTML = `
+    <div class="ov" id="bi-new-pl-ov" style="z-index:1200">
+      <div class="modal" style="max-width:360px">
+        <div class="mtitle">＋ Novo Jogador</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <input class="inp" id="bi-np-name" placeholder="Nome completo *" style="margin:0;font-size:14px"/>
+          <input class="inp" id="bi-np-nick" placeholder="Apelido *" style="margin:0;font-size:14px"/>
+          <div id="bi-np-err" style="font-size:12px;color:var(--red);display:none"></div>
+          <button id="bi-np-save" class="btn by fw" style="font-size:15px;padding:14px;margin-top:4px">✓ Criar e Inscrever</button>
+          <button id="bi-np-cancel" class="btn bo fw" style="font-size:13px">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+    document.getElementById("bi-np-cancel").addEventListener("click", closeAdminModal);
+    document.getElementById("bi-np-save").addEventListener("click", async()=>{
+      const name = document.getElementById("bi-np-name")?.value.trim();
+      const nick = document.getElementById("bi-np-nick")?.value.trim();
+      const errEl = document.getElementById("bi-np-err");
+      if(!name||!nick){ errEl.textContent="Nome e apelido são obrigatórios."; errEl.style.display="block"; return; }
+      const uid = "p_"+name.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"")+"_"+Date.now().toString(36);
+      const newPlayer = {uid, name, nickname:nick, email:"", season:ACTIVE_SEASON, needsSetup:false};
+      const s2 = DB.stages.find(x=>x.id===sid);
+      if(!s2){ closeAdminModal(); return; }
+      const newIns = [...new Set([...(s2.inscriptions||[]), uid])];
+      const saveBtn = document.getElementById("bi-np-save");
+      saveBtn.disabled=true; saveBtn.textContent="Salvando...";
+      try{
+        DB.players = [...DB.players, newPlayer];
+        s2.inscriptions = newIns;
+        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          players: sanitizePlayers(DB.players),
+          stages: sanitizeStages(DB.stages),
+          updatedAt: serverTimestamp()
+        });
+        closeAdminModal();
+        showToast(name+" criado e inscrito ✓","green");
+        render();
+      } catch(err){ showToast("Erro: "+err.message,"red"); saveBtn.disabled=false; saveBtn.textContent="✓ Criar e Inscrever"; }
+    });
+  });
+
+  // Admin stage detail: toggle add panel (state-based, no dropdown)
 
   // Search filter in inline panel
   document.getElementById("ins-search")?.addEventListener("input", function(){
