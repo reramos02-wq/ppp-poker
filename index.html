@@ -778,6 +778,120 @@ function setBuyinRecord(s, record){
 }
 const fmtBRL = v => "R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:2});
 
+// ── FINANCEIRO — Custos, Pot, Premiação (ITM) ───────────────────────────────
+
+// Default costs structure for a stage's financial data
+function getFinanceData(s){
+  if(!s.finance){
+    s.finance = {
+      floorName: "",
+      floorCost: 550,
+      dealers: [{name:"", cost:350}],
+      extraCosts: [], // [{label, value}]
+      caixinhaCash: 0,
+      caixinhaTorneio: 0,
+      prizeOverrides: null // null = auto-calculated; array = manually edited
+    };
+  }
+  // backfill in case of partial/old data
+  if(s.finance.floorCost===undefined) s.finance.floorCost = 550;
+  if(!s.finance.dealers) s.finance.dealers = [{name:"", cost:350}];
+  if(!s.finance.extraCosts) s.finance.extraCosts = [];
+  if(s.finance.caixinhaCash===undefined) s.finance.caixinhaCash = 0;
+  if(s.finance.caixinhaTorneio===undefined) s.finance.caixinhaTorneio = 0;
+  return s.finance;
+}
+
+// Sum of the "Total" column from Entradas tab (buy-in + RS + RD + addon for all inscribed players)
+function calcArrecadado(s){
+  const vals = getBuyinValues(s);
+  const ins = s.inscriptions||[];
+  return ins.reduce((sum,uid)=>{
+    const rec = getBuyinRecord(s, uid);
+    return sum + vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+  }, 0);
+}
+
+// Total of fixed costs (Floor + Dealers + Extras) — does NOT include caixinhas
+function calcCustosFixos(fin){
+  const dealersTotal = (fin.dealers||[]).reduce((sum,d)=>sum+(Number(d.cost)||0),0);
+  const extrasTotal  = (fin.extraCosts||[]).reduce((sum,e)=>sum+(Number(e.value)||0),0);
+  return (Number(fin.floorCost)||0) + dealersTotal + extrasTotal;
+}
+
+// POT FINAL = Arrecadado − Custos fixos (floor+dealers+extras)
+function calcPotFinal(s){
+  const fin = getFinanceData(s);
+  return calcArrecadado(s) - calcCustosFixos(fin);
+}
+
+// Taxa FT = 15% do POT FINAL
+function calcTaxaFT(s){
+  return calcPotFinal(s) * 0.15;
+}
+
+// POT LÍQUIDO = POT FINAL − Taxa FT (used as base for ITM prize %)
+function calcPotLiquido(s){
+  return calcPotFinal(s) - calcTaxaFT(s);
+}
+
+// ITM distribution table based on number of inscribed players.
+// Returns an array of percentages indexed by position (index 0 = 1st place).
+const ITM_TABLE = [
+  { max:12, pcts:[65,35] },
+  { max:17, pcts:[50,30,20] },
+  { max:22, pcts:[45,28,18,9] },
+  { max:27, pcts:[42,27,17,9,5] },
+  { max:32, pcts:[40,26,16,9,5,4] },
+  { max:40, pcts:[39,25,15,9,5,4,3] }, // 33–40 (max)
+];
+function getITMPercents(numPlayers){
+  const tier = ITM_TABLE.find(t=>numPlayers<=t.max) || ITM_TABLE[ITM_TABLE.length-1];
+  return tier.pcts;
+}
+
+// Calculate prize per position for a stage (NLH only).
+// Returns array: [{position, pct, value}], respecting any manual overrides.
+function calcPremiacao(s){
+  const fin = getFinanceData(s);
+  const potLiquido = calcPotLiquido(s);
+  const numPlayers = (s.inscriptions||[]).length;
+  const autoPcts = getITMPercents(numPlayers);
+
+  if(fin.prizeOverrides && fin.prizeOverrides.length){
+    return fin.prizeOverrides.map((o,i)=>({
+      position: i+1,
+      pct: o.pct,
+      value: potLiquido * (o.pct/100)
+    }));
+  }
+  return autoPcts.map((pct,i)=>({
+    position: i+1,
+    pct,
+    value: potLiquido * (pct/100)
+  }));
+}
+
+// Per-staff (floor/dealer) payout: base cost + share of caixinhas (cash+torneio)
+// divided equally among floor + all dealers.
+function calcStaffPayouts(s){
+  const fin = getFinanceData(s);
+  const staffCount = 1 + (fin.dealers||[]).length; // 1 floor + N dealers
+  const caixinhasTotal = (Number(fin.caixinhaCash)||0) + (Number(fin.caixinhaTorneio)||0);
+  const share = staffCount>0 ? caixinhasTotal/staffCount : 0;
+
+  const floor = { role:"Floor", name: fin.floorName||"—", base: Number(fin.floorCost)||0, share, total: (Number(fin.floorCost)||0)+share };
+  const dealers = (fin.dealers||[]).map((d,i)=>({
+    role: "Dealer "+(i+1),
+    name: d.name||"—",
+    base: Number(d.cost)||0,
+    share,
+    total: (Number(d.cost)||0)+share
+  }));
+  return [floor, ...dealers];
+}
+
+
 const LOGO_48  = 'data:image/png;base64,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';
 const LOGO_80  = 'data:image/png;base64,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';
 const LOGO = (sz=38) => `<img src="${sz>=80?LOGO_80:LOGO_48}" width="${sz}" height="${sz}" alt="PPP Poker" style="display:block;object-fit:contain"/>`;
@@ -821,9 +935,9 @@ let ADMIN_STAGE_DETAIL = null; // stage id expanded in admin
 let ADMIN_INS_OPEN    = false; // add inscription panel open
 let RULES_TAB     = "nlholdem";
 let RULES_VIEW    = "rules";
-let BUYIN_MGMT    = null;  // stage id open in buy-in management
+let BUYIN_MGMT    = null;  // stage id open in financial management
 let BUYIN_PLAYER  = null;  // uid open in buy-in player detail
-let BUYIN_TAB     = "list"; // "list" | "summary"
+let BUYIN_TAB     = "entradas"; // "entradas" | "custos" | "premiacao" | "geral"
 let RANK_TAB      = "geral";
 let LOGIN_TAB     = "login";
 
@@ -2196,7 +2310,7 @@ function renderStageDetail(sid){
         <button class="btn bo sm" data-launch="${s.id}" style="font-size:12px">${s.status==="finished"?"✏️ Editar Resultado":"▶ Lançar Resultado"}</button>
         <button class="btn bo sm" data-admin-manage-ins="${s.id}" style="font-size:12px">👥 Gerir Inscrições</button>
         ${s.status==="upcoming"?`<button class="btn bo sm" data-toggle-ins="${s.id}" style="font-size:12px">${s.allowInscriptions===false?"🔓 Abrir Inscrições":"🔒 Fechar Inscrições"}</button>`:""}
-        <button class="btn bo sm" data-buyin-mgmt="${s.id}" style="font-size:12px;border-color:var(--yellow);color:var(--yellow)">💰 Gestão Buy-ins</button>
+        <button class="btn bo sm" data-buyin-mgmt="${s.id}" style="font-size:12px;border-color:var(--yellow);color:var(--yellow)">💰 Financeiro</button>
       </div>
     </div>`:""}
 
@@ -2956,26 +3070,45 @@ function renderBuyinMgmt(){
 
   if(BUYIN_PLAYER) return renderBuyinPlayer(s);
 
-  const vals = getBuyinValues(s);
-  const ins  = s.inscriptions||[];
-  const notIn = DB.players.filter(p=>!ins.includes(p.uid)).sort((a,b)=>a.name.localeCompare(b.name));
-
-  const tabs = `
-  <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">
-    ${["list","summary"].map(t=>`
-    <button data-bi-tab="${t}" style="background:none;border:none;border-bottom:${BUYIN_TAB===t?"2px solid var(--yellow)":"2px solid transparent"};color:${BUYIN_TAB===t?"var(--yellow)":"var(--muted)"};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:8px 16px;cursor:pointer;margin-bottom:-2px">
-      ${t==="list"?"👥 Jogadores":"📊 Resumo Entradas"}
+  const tabDefs = [
+    {key:"entradas",  label:"💵 Entradas"},
+    {key:"custos",    label:"🧾 Custos"},
+    {key:"premiacao", label:"🏆 Premiação"},
+    {key:"geral",     label:"📋 Resumo Geral"},
+  ];
+  const tabsHtml = `
+  <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px;overflow-x:auto">
+    ${tabDefs.map(t=>`
+    <button data-bi-tab="${t.key}" style="background:none;border:none;border-bottom:${BUYIN_TAB===t.key?"2px solid var(--yellow)":"2px solid transparent"};color:${BUYIN_TAB===t.key?"var(--yellow)":"var(--muted)"};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;padding:8px 12px;cursor:pointer;margin-bottom:-2px;white-space:nowrap;flex-shrink:0">
+      ${t.label}
     </button>`).join("")}
   </div>`;
 
-  if(BUYIN_TAB==="summary") return `<div class="sec">${renderBuyinSummary(s, vals)}</div>`;
+  const header = `
+    <button id="btn-bi-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à etapa</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">💰 Financeiro</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${s.name} · Buy-in: ${s.buyin||"—"}</div>
+    ${tabsHtml}`;
 
-  // ── LIST TAB ──
+  let body = "";
+  if(BUYIN_TAB==="entradas")       body = renderBuyinEntradas(s);
+  else if(BUYIN_TAB==="custos")    body = renderBuyinCustos(s);
+  else if(BUYIN_TAB==="premiacao") body = renderBuyinPremiacao(s);
+  else if(BUYIN_TAB==="geral")     body = renderBuyinGeral(s);
+
+  return `<div class="sec">${header}${body}</div>`;
+}
+
+// ── ABA: ENTRADAS (lista de jogadores + add/remove) ─────────────────────────
+function renderBuyinEntradas(s){
+  const vals = getBuyinValues(s);
+  const ins  = s.inscriptions||[];
+
   const playerRows = ins.map((uid,i)=>{
     const pl = getP(uid)||{name:uid,nickname:"?"};
     const rec = getBuyinRecord(s, uid);
     const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
-    return `<div data-bi-player="${uid}" style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;active-transform:scale(.98)">
+    return `<div data-bi-player="${uid}" style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer">
       <div style="color:var(--muted);font-size:12px;width:22px;text-align:center;flex-shrink:0">${i+1}</div>
       ${AV(uid)}
       <div style="flex:1;min-width:0">
@@ -2992,13 +3125,11 @@ function renderBuyinMgmt(){
     </div>`;
   }).join("");
 
-  // Add player panel (same logic as gerir inscricoes)
   const addPanel = `
   <div style="margin-top:16px;border-top:2px solid var(--yellow);padding-top:14px">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Adicionar jogador</div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="bi-search" type="text" placeholder="Buscar jogador..." style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
-      <button id="bi-add-confirm" class="btn by sm">＋ Adicionar</button>
     </div>
     <div id="bi-search-results" style="max-height:180px;overflow-y:auto"></div>
     <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
@@ -3006,66 +3137,203 @@ function renderBuyinMgmt(){
     </div>
   </div>`;
 
-  return `<div class="sec">
-    <button id="btn-bi-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à etapa</button>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">💰 Gestão Buy-ins</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${s.name} · Buy-in: ${s.buyin||"—"}</div>
-    ${tabs}
+  return `
     <div class="card" style="padding:0 12px">
       ${ins.length===0?'<div style="color:var(--muted);font-size:13px;padding:16px 0">Nenhum inscrito ainda.</div>':playerRows}
     </div>
-    ${addPanel}
-  </div>`;
+    ${addPanel}`;
 }
 
-function renderBuyinSummary(s, vals){
-  const ins = s.inscriptions||[];
-  let grandTotal = 0;
-  const tabs2 = `
-  <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">
-    ${["list","summary"].map(t=>`
-    <button data-bi-tab="${t}" style="background:none;border:none;border-bottom:${BUYIN_TAB===t?"2px solid var(--yellow)":"2px solid transparent"};color:${BUYIN_TAB===t?"var(--yellow)":"var(--muted)"};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:8px 16px;cursor:pointer;margin-bottom:-2px">
-      ${t==="list"?"👥 Jogadores":"📊 Resumo Entradas"}
-    </button>`).join("")}
-  </div>`;
+// ── ABA: CUSTOS ───────────────────────────────────────────────────────────────
+function renderBuyinCustos(s){
+  const fin = getFinanceData(s);
+  const arrecadado = calcArrecadado(s);
+  const custosFixos = calcCustosFixos(fin);
+  const potFinal = calcPotFinal(s);
+  const taxaFT = calcTaxaFT(s);
+  const potLiquido = calcPotLiquido(s);
 
-  const rows = ins.map(uid=>{
+  const dealersHtml = (fin.dealers||[]).map((d,i)=>`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" data-dealer-row="${i}">
+      <input data-dealer-name="${i}" value="${d.name||""}" placeholder="Nome do Dealer" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
+      <div style="position:relative;width:110px">
+        <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
+        <input data-dealer-cost="${i}" type="number" value="${d.cost}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px"/>
+      </div>
+      ${(fin.dealers||[]).length>1?`<button data-dealer-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:34px;height:34px;cursor:pointer;flex-shrink:0">✕</button>`:""}
+    </div>`).join("");
+
+  const extrasHtml = (fin.extraCosts||[]).map((e,i)=>`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" data-extra-row="${i}">
+      <input data-extra-label="${i}" value="${e.label||""}" placeholder="Descrição do custo" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
+      <div style="position:relative;width:110px">
+        <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
+        <input data-extra-value="${i}" type="number" value="${e.value}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px"/>
+      </div>
+      <button data-extra-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:34px;height:34px;cursor:pointer;flex-shrink:0">✕</button>
+    </div>`).join("");
+
+  return `
+    <!-- Floor -->
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Floor</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="bi-floor-name" value="${fin.floorName||""}" placeholder="Nome do Floor" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
+        <div style="position:relative;width:110px">
+          <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
+          <input id="bi-floor-cost" type="number" value="${fin.floorCost}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dealers -->
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Dealers</div>
+      <div id="bi-dealers-list">${dealersHtml}</div>
+      <button id="bi-add-dealer" class="btn bo sm" style="margin-top:6px">＋ Adicionar Dealer</button>
+    </div>
+
+    <!-- Extra costs -->
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Custos Extras</div>
+      <div id="bi-extras-list">${extrasHtml || '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Nenhum custo extra.</div>'}</div>
+      <button id="bi-add-extra" class="btn bo sm" style="margin-top:6px">＋ Adicionar Custo Extra</button>
+    </div>
+
+    <!-- Caixinhas -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Caixinhas</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Caixinha Cash</div>
+          <div style="position:relative">
+            <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
+            <input id="bi-caixinha-cash" type="number" value="${fin.caixinhaCash}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px;box-sizing:border-box"/>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Caixinha Torneio</div>
+          <div style="position:relative">
+            <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
+            <input id="bi-caixinha-torneio" type="number" value="${fin.caixinhaTorneio}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px;box-sizing:border-box"/>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">As caixinhas não afetam o Pot Final — são divididas entre Floor e Dealers separadamente (ver Resumo Geral). A Caixinha Torneio é descontada da premiação.</div>
+    </div>
+
+    <!-- Summary -->
+    <div class="card" style="border:1px solid var(--yellow)">
+      <div class="row" style="justify-content:space-between;padding:4px 0"><span style="color:var(--muted);font-size:13px">Arrecadado</span><span style="color:#fff;font-weight:600">${fmtBRL(arrecadado)}</span></div>
+      <div class="row" style="justify-content:space-between;padding:4px 0"><span style="color:var(--muted);font-size:13px">Custos Fixos</span><span style="color:var(--red);font-weight:600">− ${fmtBRL(custosFixos)}</span></div>
+      <div class="row" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span style="color:#fff;font-weight:700">POT FINAL</span><span style="color:var(--yellow);font-weight:900;font-size:16px">${fmtBRL(potFinal)}</span></div>
+      <div class="row" style="justify-content:space-between;padding:4px 0"><span style="color:var(--muted);font-size:13px">Taxa FT (15%)</span><span style="color:var(--red);font-weight:600">− ${fmtBRL(taxaFT)}</span></div>
+      <div class="row" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span style="color:#fff;font-weight:700">POT LÍQUIDO</span><span style="color:var(--yellow);font-weight:900;font-size:18px">${fmtBRL(potLiquido)}</span></div>
+    </div>`;
+}
+
+// ── ABA: PREMIAÇÃO (ITM) ──────────────────────────────────────────────────────
+function renderBuyinPremiacao(s){
+  const fin = getFinanceData(s);
+  const numPlayers = (s.inscriptions||[]).length;
+  const potLiquido = calcPotLiquido(s);
+  const premios = calcPremiacao(s);
+  const caixinhaTorneio = Number(fin.caixinhaTorneio)||0;
+
+  const rows = premios.map((p,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow);width:32px">${p.position}º</div>
+      <div style="width:80px">
+        <div style="position:relative">
+          <input data-prize-pct="${i}" type="number" value="${p.pct}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 18px 6px 8px;color:#fff;font-size:13px;box-sizing:border-box"/>
+          <span style="position:absolute;right:8px;top:7px;color:var(--muted);font-size:12px">%</span>
+        </div>
+      </div>
+      <div style="flex:1;text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:#fff">${fmtBRL(p.value)}</div>
+      ${premios.length>2?`<button data-prize-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:30px;height:30px;cursor:pointer;flex-shrink:0;font-size:12px">✕</button>`:""}
+    </div>`).join("");
+
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:12px 16px;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--muted)">Pot Líquido (base do cálculo)</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow)">${fmtBRL(potLiquido)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">${numPlayers} inscritos · Faixa ITM aplicada automaticamente</div>
+      ${caixinhaTorneio>0?`<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ Caixinha Torneio de ${fmtBRL(caixinhaTorneio)} será descontada do total premiado</div>`:""}
+    </div>
+
+    <div class="card" style="padding:0 12px">${rows}</div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="bi-add-prize-pos" class="btn bo sm">＋ Adicionar Posição</button>
+      <button id="bi-reset-prizes" class="btn bo sm" style="color:var(--muted)">↺ Recalcular Automático</button>
+    </div>`;
+}
+
+// ── ABA: RESUMO GERAL ─────────────────────────────────────────────────────────
+function renderBuyinGeral(s){
+  const vals = getBuyinValues(s);
+  const fin = getFinanceData(s);
+  const ins = s.inscriptions||[];
+  const premios = calcPremiacao(s);
+  const arrecadado = calcArrecadado(s);
+  const custosFixos = calcCustosFixos(fin);
+  const potFinal = calcPotFinal(s);
+  const potLiquido = calcPotLiquido(s);
+  const staffPayouts = calcStaffPayouts(s);
+
+  // Match results (positions) to players, if the stage has results published
+  const results = s.results || [];
+
+  const playerRows = ins.map(uid=>{
     const pl = getP(uid)||{name:uid,nickname:"?"};
     const rec = getBuyinRecord(s, uid);
     const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
-    grandTotal += total;
+    const result = results.find(r=>r.playerId===uid);
+    const prize = result ? (premios.find(p=>p.position===result.position)?.value || 0) : 0;
     return `<tr>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px">${pl.nickname||pl.name}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${rec.rs}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${rec.rd}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${rec.addon?"✅":"—"}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--yellow);font-size:13px;font-weight:700;text-align:right">${fmtBRL(total)}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${result?result.position+"º":"—"}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px;text-align:right">${fmtBRL(total)}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:${prize>0?"var(--yellow)":"var(--muted)"};font-size:13px;text-align:right;font-weight:${prize>0?"700":"400"}">${prize>0?fmtBRL(prize):"—"}</td>
     </tr>`;
   }).join("");
 
+  const staffRows = staffPayouts.map(st=>`
+    <div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="color:#fff;font-size:13px;font-weight:600">${st.role}${st.name!=="—"?" — "+st.name:""}</div>
+        <div style="font-size:11px;color:var(--muted)">Base ${fmtBRL(st.base)}${st.share>0?` + Caixinha ${fmtBRL(st.share)}`:""}</div>
+      </div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${fmtBRL(st.total)}</div>
+    </div>`).join("");
+
   return `
-    <button id="btn-bi-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à etapa</button>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">💰 Gestão Buy-ins</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${s.name}</div>
-    ${tabs2}
-    <div style="background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:14px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Total Arrecadado</div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--yellow)">${fmtBRL(grandTotal)}</div>
+    <div id="bi-geral-export">
+      <div style="background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:14px 16px;margin-bottom:16px">
+        <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:var(--muted);font-size:12px">Arrecadado</span><span style="color:#fff;font-size:13px">${fmtBRL(arrecadado)}</span></div>
+        <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:var(--muted);font-size:12px">Custos Fixos</span><span style="color:var(--red);font-size:13px">− ${fmtBRL(custosFixos)}</span></div>
+        <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:#fff;font-size:13px;font-weight:700">Pot Final</span><span style="color:var(--yellow);font-size:15px;font-weight:900">${fmtBRL(potFinal)}</span></div>
+        <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:#fff;font-size:13px;font-weight:700">Pot Líquido</span><span style="color:var(--yellow);font-size:15px;font-weight:900">${fmtBRL(potLiquido)}</span></div>
+      </div>
+
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Jogadores</div>
+      <div style="overflow-x:auto;margin-bottom:18px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="border-bottom:2px solid var(--yellow)">
+            <th style="padding:6px;text-align:left;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Jogador</th>
+            <th style="padding:6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Pos.</th>
+            <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Entrada</th>
+            <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Prêmio</th>
+          </tr></thead>
+          <tbody>${playerRows}</tbody>
+        </table>
+      </div>
+
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Custos (Floor / Dealers)</div>
+      <div class="card">${staffRows}</div>
     </div>
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="border-bottom:2px solid var(--yellow)">
-            <th style="padding:8px 6px;text-align:left;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Jogador</th>
-            <th style="padding:8px 6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">RS</th>
-            <th style="padding:8px 6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">RD</th>
-            <th style="padding:8px 6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Add-on</th>
-            <th style="padding:8px 6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">Total</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+
+    <button id="bi-export-geral" class="btn by fw" style="margin-top:16px">📸 Exportar Resumo (WhatsApp)</button>`;
 }
 
 function renderBuyinPlayer(s){
@@ -3166,7 +3434,7 @@ function renderAdminStageDetail(s){
         <button class="btn bd sm" data-del-stage="${s.id}">🗑 Excluir</button>
       </div>
       <div class="row g8 mt8">
-        <button class="btn by fw" data-buyin-mgmt="${s.id}" style="background:var(--surface2);border:1px solid var(--yellow);color:var(--yellow)">💰 Gestão Buy-ins</button>
+        <button class="btn by fw" data-buyin-mgmt="${s.id}" style="background:var(--surface2);border:1px solid var(--yellow);color:var(--yellow)">💰 Financeiro</button>
       </div>
       ${s.status==="upcoming" ? `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 0;border-top:1px solid var(--border)">
@@ -4363,6 +4631,165 @@ function bindEvents(){
         render();
       } catch(err){ showToast("Erro: "+err.message,"red"); saveBtn.disabled=false; saveBtn.textContent="✓ Criar e Inscrever"; }
     });
+  });
+
+  // ── CUSTOS TAB EVENTS ───────────────────────────────────────────────────────
+  async function saveFinanceData(){
+    try{
+      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        stages: sanitizeStages(DB.stages),
+        updatedAt: serverTimestamp()
+      });
+    } catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
+  }
+
+  document.getElementById("bi-floor-name")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).floorName = this.value.trim();
+    await saveFinanceData();
+  });
+  document.getElementById("bi-floor-cost")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).floorCost = parseFloat(this.value)||0;
+    await saveFinanceData(); render();
+  });
+
+  document.querySelectorAll("[data-dealer-name]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.dealerName);
+      getFinanceData(s).dealers[i].name = this.value.trim();
+      await saveFinanceData();
+    });
+  });
+  document.querySelectorAll("[data-dealer-cost]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.dealerCost);
+      getFinanceData(s).dealers[i].cost = parseFloat(this.value)||0;
+      await saveFinanceData(); render();
+    });
+  });
+  document.querySelectorAll("[data-dealer-remove]").forEach(el=>{
+    el.addEventListener("click", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.dealerRemove);
+      getFinanceData(s).dealers.splice(i,1);
+      await saveFinanceData(); render();
+    });
+  });
+  document.getElementById("bi-add-dealer")?.addEventListener("click", async()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).dealers.push({name:"", cost:350});
+    await saveFinanceData(); render();
+  });
+
+  document.querySelectorAll("[data-extra-label]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.extraLabel);
+      getFinanceData(s).extraCosts[i].label = this.value.trim();
+      await saveFinanceData();
+    });
+  });
+  document.querySelectorAll("[data-extra-value]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.extraValue);
+      getFinanceData(s).extraCosts[i].value = parseFloat(this.value)||0;
+      await saveFinanceData(); render();
+    });
+  });
+  document.querySelectorAll("[data-extra-remove]").forEach(el=>{
+    el.addEventListener("click", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.extraRemove);
+      getFinanceData(s).extraCosts.splice(i,1);
+      await saveFinanceData(); render();
+    });
+  });
+  document.getElementById("bi-add-extra")?.addEventListener("click", async()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).extraCosts.push({label:"", value:0});
+    await saveFinanceData(); render();
+  });
+
+  document.getElementById("bi-caixinha-cash")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).caixinhaCash = parseFloat(this.value)||0;
+    await saveFinanceData(); render();
+  });
+  document.getElementById("bi-caixinha-torneio")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
+    await saveFinanceData(); render();
+  });
+
+  // ── PREMIAÇÃO TAB EVENTS ─────────────────────────────────────────────────────
+  document.querySelectorAll("[data-prize-pct]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.prizePct);
+      const current = calcPremiacao(s); // current array (auto or override)
+      const fin = getFinanceData(s);
+      // Build override array from current state, then apply the edit
+      const override = current.map(p=>({pct:p.pct}));
+      override[i].pct = parseFloat(this.value)||0;
+      fin.prizeOverrides = override;
+      await saveFinanceData(); render();
+    });
+  });
+  document.querySelectorAll("[data-prize-remove]").forEach(el=>{
+    el.addEventListener("click", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.prizeRemove);
+      const current = calcPremiacao(s);
+      const fin = getFinanceData(s);
+      const override = current.map(p=>({pct:p.pct}));
+      override.splice(i,1);
+      fin.prizeOverrides = override;
+      await saveFinanceData(); render();
+    });
+  });
+  document.getElementById("bi-add-prize-pos")?.addEventListener("click", async()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    const current = calcPremiacao(s);
+    const fin = getFinanceData(s);
+    const override = current.map(p=>({pct:p.pct}));
+    override.push({pct:0});
+    fin.prizeOverrides = override;
+    await saveFinanceData(); render();
+  });
+  document.getElementById("bi-reset-prizes")?.addEventListener("click", async()=>{
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).prizeOverrides = null;
+    await saveFinanceData(); render();
+    showToast("Premiação recalculada automaticamente","green");
+  });
+
+  // ── RESUMO GERAL: export as image ────────────────────────────────────────────
+  document.getElementById("bi-export-geral")?.addEventListener("click", async()=>{
+    const el = document.getElementById("bi-geral-export");
+    if(!el) return;
+    try{
+      if(!window.html2canvas){
+        await new Promise((res,rej)=>{
+          const sc=document.createElement("script");
+          sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+          sc.onload=res; sc.onerror=rej;
+          document.head.appendChild(sc);
+        });
+      }
+      showToast("Gerando imagem...","green");
+      const canvas = await html2canvas(el, {
+        backgroundColor:"#1a1a1a", scale:2, allowTaint:true, useCORS:false, logging:false
+      });
+      const link = document.createElement("a");
+      link.download = "resumo-financeiro-ppp-poker.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      showToast("Imagem salva! Compartilhe no WhatsApp.","green");
+    } catch(e){ showToast("Erro ao exportar: "+e.message,"red"); }
   });
 
   // Admin stage detail: toggle add panel (state-based, no dropdown)
