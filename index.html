@@ -3646,13 +3646,11 @@ function openBuyinConfirm(type, value, onConfirm){
   if(!el) return;
   el.innerHTML = `
   <div class="ov" id="bi-confirm-ov" style="z-index:1200">
-    <div class="modal" style="max-width:340px;text-align:center;padding:32px 24px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:32px;color:var(--yellow);margin-bottom:8px">+ ${type}</div>
-      <div style="font-size:14px;color:var(--muted);margin-bottom:28px">
-        ${value>0?`Valor: ${fmtBRL(value)}`:""}
-      </div>
-      <button id="bi-confirm-yes" class="btn by fw" style="font-size:20px;padding:18px;margin-bottom:12px">✅ CONFIRMAR ${type}</button>
-      <button id="bi-confirm-no"  class="btn bo fw" style="font-size:14px">Cancelar</button>
+    <div class="modal" style="max-width:380px;text-align:center;padding:28px 20px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;color:var(--yellow);margin-bottom:4px">+ ${type}</div>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:24px">${value>0?`Valor: ${fmtBRL(value)}`:"&nbsp;"}</div>
+      <button id="bi-confirm-yes" class="btn by fw" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;padding:32px 20px;margin-bottom:14px;letter-spacing:2px">✅ CONFIRMAR ${type}</button>
+      <button id="bi-confirm-no" class="btn bo fw" style="font-size:14px;padding:14px">Cancelar</button>
     </div>
   </div>`;
   document.getElementById("bi-confirm-yes").addEventListener("click",()=>{ closeAdminModal(); onConfirm(); });
