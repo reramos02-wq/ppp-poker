@@ -4826,11 +4826,33 @@ function bindEvents(){
       const canvas = await html2canvas(el, {
         backgroundColor:"#1a1a1a", scale:2, allowTaint:true, useCORS:false, logging:false
       });
+      const dataUrl = canvas.toDataURL("image/png");
+      const fileName = "resumo-financeiro-ppp-poker.png";
+      const caption = `Resumo financeiro — PPP Poker`;
+
+      // Try native share sheet first (works on mobile and most tablets) —
+      // lets the user pick WhatsApp directly instead of just saving the file.
+      if(navigator.share && navigator.canShare){
+        try{
+          const blob = await (await fetch(dataUrl)).blob();
+          const file = new File([blob], fileName, {type:"image/png"});
+          if(navigator.canShare({files:[file]})){
+            await navigator.share({ files:[file], text: caption });
+            return;
+          }
+        } catch(e){ /* user cancelled or share failed — fall through to download */ }
+      }
+
+      // Fallback (desktop / unsupported browsers): download the image and
+      // open WhatsApp Web so the user can attach it manually.
       const link = document.createElement("a");
-      link.download = "resumo-financeiro-ppp-poker.png";
-      link.href = canvas.toDataURL("image/png");
+      link.download = fileName;
+      link.href = dataUrl;
       link.click();
-      showToast("Imagem salva! Compartilhe no WhatsApp.","green");
+      showToast("Imagem salva! Anexe no WhatsApp.","green");
+      setTimeout(()=>{
+        window.open(`https://wa.me/?text=${encodeURIComponent(caption)}`,"_blank");
+      }, 800);
     } catch(e){ showToast("Erro ao exportar: "+e.message,"red"); }
   });
 
@@ -5226,7 +5248,22 @@ function bindEvents(){
 }
 
 // ── START ─────────────────────────────────────────────────────────────────────
-window.addEventListener("resize",()=>{ if(CURRENT_USER) render(); });
+// Re-render on real layout changes (rotation, window resize) but NOT on virtual
+// keyboard open/close — keyboard only changes height, not width, and toggling
+// it shouldn't tear down the DOM while the user has an input focused (this was
+// causing edit fields to lose focus instantly, looking like they "wouldn't open").
+let _lastViewportWidth = window.innerWidth;
+let _resizeDebounce = null;
+window.addEventListener("resize",()=>{
+  clearTimeout(_resizeDebounce);
+  _resizeDebounce = setTimeout(()=>{
+    const widthChanged = window.innerWidth !== _lastViewportWidth;
+    _lastViewportWidth = window.innerWidth;
+    // Only re-render if width actually changed (rotation/real resize).
+    // Height-only changes (virtual keyboard) are ignored.
+    if(widthChanged && CURRENT_USER) render();
+  }, 250);
+});
 
 // ── FIREBASE AUTH GATE ────────────────────────────────────────────────────────
 // Show error if Firebase fails to connect
