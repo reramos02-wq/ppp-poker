@@ -4775,14 +4775,29 @@ function bindEvents(){
     getFinanceData(s).caixinhaCash = parseFloat(this.value)||0;
     await saveFinanceData(); requestAnimationFrame(render);
   });
+  // Editing Caixinha Torneio freezes the CURRENT prize values (whatever they
+  // were — auto or already-overridden) as a fixed override first. This way the
+  // change in caixinha never silently rescales the prizes; instead, the totals
+  // fall out of sync and the validation indicators turn red, prompting the
+  // admin to adjust each position manually.
+  function freezeCurrentPrizesAsOverride(s){
+    const fin = getFinanceData(s);
+    if(!fin.prizeOverrides || !fin.prizeOverrides.length){
+      const current = calcPremiacao(s); // computed with the OLD caixinha value
+      fin.prizeOverrides = current.map(p=>({value:p.value}));
+    }
+  }
+
   document.getElementById("bi-caixinha-torneio")?.addEventListener("change", async function(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    freezeCurrentPrizesAsOverride(s);
     getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
     await saveFinanceData(); requestAnimationFrame(render);
   });
   // Same field, mirrored in the Premiação tab — both write to fin.caixinhaTorneio
   document.getElementById("bi-caixinha-torneio-prem")?.addEventListener("change", async function(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    freezeCurrentPrizesAsOverride(s);
     getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
     await saveFinanceData(); requestAnimationFrame(render);
   });
