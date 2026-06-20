@@ -855,6 +855,8 @@ function getITMPercents(numPlayers){
 function calcPremiacao(s){
   const fin = getFinanceData(s);
   const potLiquido = calcPotLiquido(s);
+  const caixinhaTorneio = Number(fin.caixinhaTorneio)||0;
+  const totalAPremiar = potLiquido - caixinhaTorneio;
   const numPlayers = (s.inscriptions||[]).length;
   const autoPcts = getITMPercents(numPlayers);
 
@@ -862,13 +864,13 @@ function calcPremiacao(s){
     return fin.prizeOverrides.map((o,i)=>({
       position: i+1,
       pct: o.pct,
-      value: potLiquido * (o.pct/100)
+      value: totalAPremiar * (o.pct/100)
     }));
   }
   return autoPcts.map((pct,i)=>({
     position: i+1,
     pct,
-    value: potLiquido * (pct/100)
+    value: totalAPremiar * (pct/100)
   }));
 }
 
@@ -3239,6 +3241,13 @@ function renderBuyinPremiacao(s){
   const potLiquido = calcPotLiquido(s);
   const premios = calcPremiacao(s);
   const caixinhaTorneio = Number(fin.caixinhaTorneio)||0;
+  const totalAPremiar = potLiquido - caixinhaTorneio;
+
+  // Validation indicators
+  const sumPct = premios.reduce((sum,p)=>sum+p.pct,0);
+  const sumValue = premios.reduce((sum,p)=>sum+p.value,0);
+  const pctOk = Math.abs(sumPct-100) < 0.01;
+  const valueOk = Math.abs(sumValue-totalAPremiar) < 0.5; // 50 cent tolerance for rounding
 
   const rows = premios.map((p,i)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
@@ -3263,13 +3272,39 @@ function renderBuyinPremiacao(s){
       <div style="font-size:12px;color:var(--muted)">Pot Líquido (base do cálculo)</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow)">${fmtBRL(potLiquido)}</div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">${numPlayers} inscritos · Faixa ITM aplicada automaticamente</div>
-      ${caixinhaTorneio>0?`<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ Caixinha Torneio de ${fmtBRL(caixinhaTorneio)} será descontada do total premiado</div>`:""}
+    </div>
+
+    <!-- Caixinha Torneio — synced with Custos tab (same fin.caixinhaTorneio field) -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:8px">Caixinha Torneio</div>
+      <div style="position:relative;margin-bottom:8px">
+        <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
+        <input id="bi-caixinha-torneio-prem" type="number" value="${fin.caixinhaTorneio}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px;box-sizing:border-box"/>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">Descontada do Pot Líquido antes da distribuição da premiação.</div>
+      <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
+        <span style="color:var(--muted);font-size:12px">Total a Premiar</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${fmtBRL(totalAPremiar)}</span>
+      </div>
     </div>
 
     <div class="card" style="padding:0 12px">${rows}</div>
 
+    <!-- Validation indicators -->
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <div style="flex:1;background:var(--surface2);border:1px solid ${pctOk?"var(--green)":"var(--red)"};border-radius:6px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Soma das %</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:${pctOk?"var(--green)":"var(--red)"}">${pctOk?"✓":"⚠"} ${sumPct.toFixed(2)}%</div>
+      </div>
+      <div style="flex:1;background:var(--surface2);border:1px solid ${valueOk?"var(--green)":"var(--red)"};border-radius:6px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Soma dos Prêmios</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:${valueOk?"var(--green)":"var(--red)"}">${valueOk?"✓":"⚠"} ${fmtBRL(sumValue)}</div>
+      </div>
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:12px">
       <button id="bi-add-prize-pos" class="btn bo sm">＋ Adicionar Posição</button>
+
       <button id="bi-reset-prizes" class="btn bo sm" style="color:var(--muted)">↺ Recalcular Automático</button>
     </div>`;
 }
@@ -4737,6 +4772,12 @@ function bindEvents(){
     getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
     await saveFinanceData(); requestAnimationFrame(render);
   });
+  // Same field, mirrored in the Premiação tab — both write to fin.caixinhaTorneio
+  document.getElementById("bi-caixinha-torneio-prem")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
+    await saveFinanceData(); requestAnimationFrame(render);
+  });
 
   // ── PREMIAÇÃO TAB EVENTS ─────────────────────────────────────────────────────
   document.querySelectorAll("[data-prize-pct]").forEach(el=>{
@@ -4757,12 +4798,12 @@ function bindEvents(){
     el.addEventListener("change", async function(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.prizeValue);
-      const potLiquido = calcPotLiquido(s);
-      const current = calcPremiacao(s);
       const fin = getFinanceData(s);
+      const totalAPremiar = calcPotLiquido(s) - (Number(fin.caixinhaTorneio)||0);
+      const current = calcPremiacao(s);
       const override = current.map(p=>({pct:p.pct}));
       const newValue = parseFloat(this.value)||0;
-      override[i].pct = potLiquido>0 ? (newValue/potLiquido)*100 : 0;
+      override[i].pct = totalAPremiar>0 ? (newValue/totalAPremiar)*100 : 0;
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
     });
