@@ -861,11 +861,19 @@ function calcPremiacao(s){
   const autoPcts = getITMPercents(numPlayers);
 
   if(fin.prizeOverrides && fin.prizeOverrides.length){
-    return fin.prizeOverrides.map((o,i)=>({
-      position: i+1,
-      pct: o.pct,
-      value: totalAPremiar * (o.pct/100)
-    }));
+    // Manual overrides store FIXED R$ values (not percentages that auto-recalculate).
+    // This means changing the Caixinha Torneio does NOT silently rescale already-set
+    // prizes — instead it throws the "Soma dos Prêmios" indicator out of balance,
+    // so the admin sees the mismatch and adjusts each position by hand.
+    return fin.prizeOverrides.map((o,i)=>{
+      // Backward compatibility: older overrides stored {pct} instead of {value}.
+      const value = o.value !== undefined ? o.value : totalAPremiar * ((o.pct||0)/100);
+      return {
+        position: i+1,
+        pct: totalAPremiar>0 ? (value/totalAPremiar)*100 : 0,
+        value
+      };
+    });
   }
   return autoPcts.map((pct,i)=>({
     position: i+1,
@@ -4780,30 +4788,33 @@ function bindEvents(){
   });
 
   // ── PREMIAÇÃO TAB EVENTS ─────────────────────────────────────────────────────
+  // Editing % converts it to a fixed R$ value (based on current totalAPremiar)
+  // and stores THAT as the override — so it stays fixed even if totalAPremiar
+  // later changes (e.g. caixinha torneio edited), making any mismatch visible
+  // in the validation indicators instead of being silently absorbed.
   document.querySelectorAll("[data-prize-pct]").forEach(el=>{
     el.addEventListener("change", async function(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.prizePct);
-      const current = calcPremiacao(s); // current array (auto or override)
       const fin = getFinanceData(s);
-      // Build override array from current state, then apply the edit
-      const override = current.map(p=>({pct:p.pct}));
-      override[i].pct = parseFloat(this.value)||0;
+      const totalAPremiar = calcPotLiquido(s) - (Number(fin.caixinhaTorneio)||0);
+      const current = calcPremiacao(s);
+      const override = current.map(p=>({value:p.value}));
+      const newPct = parseFloat(this.value)||0;
+      override[i].value = totalAPremiar * (newPct/100);
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
     });
   });
-  // Editing the R$ value recalculates the % so both stay in sync.
+  // Editing the R$ value directly — this IS the fixed value, stored as-is.
   document.querySelectorAll("[data-prize-value]").forEach(el=>{
     el.addEventListener("change", async function(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.prizeValue);
       const fin = getFinanceData(s);
-      const totalAPremiar = calcPotLiquido(s) - (Number(fin.caixinhaTorneio)||0);
       const current = calcPremiacao(s);
-      const override = current.map(p=>({pct:p.pct}));
-      const newValue = parseFloat(this.value)||0;
-      override[i].pct = totalAPremiar>0 ? (newValue/totalAPremiar)*100 : 0;
+      const override = current.map(p=>({value:p.value}));
+      override[i].value = parseFloat(this.value)||0;
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
     });
@@ -4814,7 +4825,7 @@ function bindEvents(){
       const i = parseInt(this.dataset.prizeRemove);
       const current = calcPremiacao(s);
       const fin = getFinanceData(s);
-      const override = current.map(p=>({pct:p.pct}));
+      const override = current.map(p=>({value:p.value}));
       override.splice(i,1);
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
@@ -4824,8 +4835,8 @@ function bindEvents(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     const current = calcPremiacao(s);
     const fin = getFinanceData(s);
-    const override = current.map(p=>({pct:p.pct}));
-    override.push({pct:0});
+    const override = current.map(p=>({value:p.value}));
+    override.push({value:0});
     fin.prizeOverrides = override;
     await saveFinanceData(); requestAnimationFrame(render);
   });
