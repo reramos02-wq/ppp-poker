@@ -3232,36 +3232,46 @@ function renderBuyinCustos(s){
   const taxaFT = calcTaxaFT(s);
   const potLiquido = calcPotLiquido(s);
 
+  // Shared input styles
+  const nameStyle = `width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;color:#fff;font-size:14px;box-sizing:border-box`;
+  const valWrap = `position:relative;width:100%`;
+  const valPrefix = `position:absolute;left:10px;top:11px;color:var(--muted);font-size:13px;pointer-events:none`;
+  const valStyle = `width:100%;background:var(--surface2);border:1px solid var(--yellow);border-radius:4px;padding:10px 12px 10px 32px;color:#fff;font-size:15px;font-weight:700;box-sizing:border-box`;
+
   const dealersHtml = (fin.dealers||[]).map((d,i)=>`
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" data-dealer-row="${i}">
-      <input data-dealer-name="${i}" value="${d.name||""}" placeholder="Nome do Dealer" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
-      <div style="position:relative;width:110px">
-        <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
-        <input data-dealer-cost="${i}" type="number" value="${d.cost}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px"/>
+    <div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:var(--bg-dark)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Dealer ${i+1}</div>
+        ${(fin.dealers||[]).length>1?`<button data-dealer-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:12px;flex-shrink:0">✕</button>`:""}
       </div>
-      ${(fin.dealers||[]).length>1?`<button data-dealer-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:34px;height:34px;cursor:pointer;flex-shrink:0">✕</button>`:""}
+      <input data-dealer-name="${i}" value="${d.name||""}" placeholder="Nome do Dealer" style="${nameStyle};margin-bottom:8px"/>
+      <div style="${valWrap}">
+        <span style="${valPrefix}">R$</span>
+        <input data-dealer-cost="${i}" type="number" inputmode="decimal" value="${d.cost}" style="${valStyle}"/>
+      </div>
     </div>`).join("");
 
   const extrasHtml = (fin.extraCosts||[]).map((e,i)=>`
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" data-extra-row="${i}">
-      <input data-extra-label="${i}" value="${e.label||""}" placeholder="Descrição do custo" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
-      <div style="position:relative;width:110px">
-        <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
-        <input data-extra-value="${i}" type="number" value="${e.value}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px"/>
+    <div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:var(--bg-dark)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Custo Extra ${i+1}</div>
+        <button data-extra-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:12px;flex-shrink:0">✕</button>
       </div>
-      <button data-extra-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:34px;height:34px;cursor:pointer;flex-shrink:0">✕</button>
+      <input data-extra-label="${i}" value="${e.label||""}" placeholder="Descrição" style="${nameStyle};margin-bottom:8px"/>
+      <div style="${valWrap}">
+        <span style="${valPrefix}">R$</span>
+        <input data-extra-value="${i}" type="number" inputmode="decimal" value="${e.value}" style="${valStyle}"/>
+      </div>
     </div>`).join("");
 
   return `
     <!-- Floor -->
     <div class="card" style="margin-bottom:12px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Floor</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="bi-floor-name" value="${fin.floorName||""}" placeholder="Nome do Floor" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:#fff;font-size:13px"/>
-        <div style="position:relative;width:110px">
-          <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
-          <input id="bi-floor-cost" type="number" value="${fin.floorCost}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px"/>
-        </div>
+      <input id="bi-floor-name" value="${fin.floorName||""}" placeholder="Nome do Floor" style="${nameStyle};margin-bottom:8px"/>
+      <div style="${valWrap}">
+        <span style="${valPrefix}">R$</span>
+        <input id="bi-floor-cost" type="number" inputmode="decimal" value="${fin.floorCost}" style="${valStyle}"/>
       </div>
     </div>
 
@@ -3269,36 +3279,36 @@ function renderBuyinCustos(s){
     <div class="card" style="margin-bottom:12px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Dealers</div>
       <div id="bi-dealers-list">${dealersHtml}</div>
-      <button id="bi-add-dealer" class="btn bo sm" style="margin-top:6px">＋ Adicionar Dealer</button>
+      <button id="bi-add-dealer" class="btn bo sm" style="margin-top:4px">＋ Adicionar Dealer</button>
     </div>
 
     <!-- Extra costs -->
     <div class="card" style="margin-bottom:12px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Custos Extras</div>
       <div id="bi-extras-list">${extrasHtml || '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Nenhum custo extra.</div>'}</div>
-      <button id="bi-add-extra" class="btn bo sm" style="margin-top:6px">＋ Adicionar Custo Extra</button>
+      <button id="bi-add-extra" class="btn bo sm" style="margin-top:4px">＋ Adicionar Custo Extra</button>
     </div>
 
     <!-- Caixinhas -->
     <div class="card" style="margin-bottom:16px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">Caixinhas</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;flex-direction:column;gap:12px">
         <div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Caixinha Cash</div>
-          <div style="position:relative">
-            <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
-            <input id="bi-caixinha-cash" type="number" value="${fin.caixinhaCash}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px;box-sizing:border-box"/>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Caixinha Cash</div>
+          <div style="${valWrap}">
+            <span style="${valPrefix}">R$</span>
+            <input id="bi-caixinha-cash" type="number" inputmode="decimal" value="${fin.caixinhaCash}" style="${valStyle}"/>
           </div>
         </div>
         <div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Caixinha Torneio</div>
-          <div style="position:relative">
-            <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
-            <input id="bi-caixinha-torneio" type="number" value="${fin.caixinhaTorneio}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px;box-sizing:border-box"/>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Caixinha Torneio</div>
+          <div style="${valWrap}">
+            <span style="${valPrefix}">R$</span>
+            <input id="bi-caixinha-torneio" type="number" inputmode="decimal" value="${fin.caixinhaTorneio}" style="${valStyle}"/>
           </div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">As caixinhas não afetam o Pot Final — são divididas entre Floor e Dealers separadamente (ver Resumo Geral). A Caixinha Torneio é descontada da premiação.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px">As caixinhas não afetam o Pot Final — são divididas entre Floor e Dealers separadamente (ver Resumo Geral). A Caixinha Torneio é descontada da premiação.</div>
     </div>
 
     <!-- Summary -->
@@ -4216,6 +4226,31 @@ function openBuyinConfirm(type, value, onConfirm){
   </div>`;
   document.getElementById("bi-confirm-yes").addEventListener("click",()=>{ closeAdminModal(); onConfirm(); });
   document.getElementById("bi-confirm-no").addEventListener("click", closeAdminModal);
+}
+
+// Double-confirmation for removing RS/RD — avoids accidental taps
+function openBuyinRemoveConfirm(type, onConfirm){
+  const el = document.getElementById("admin-modal");
+  if(!el) return;
+  el.innerHTML = `
+  <div class="ov" id="bi-rm-ov" style="z-index:1200">
+    <div class="modal" style="max-width:340px;text-align:center;padding:28px 24px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--red);margin-bottom:8px">Remover ${type}?</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Tem certeza? Esta ação subtrai 1 ${type} do jogador.</div>
+      <div style="font-size:12px;color:var(--red);margin-bottom:24px;font-weight:600">⚠ Confirme duas vezes para evitar erros</div>
+      <button id="bi-rm-yes1" class="btn bd fw" style="font-size:15px;padding:14px;margin-bottom:10px">Sim, remover 1 ${type}</button>
+      <button id="bi-rm-no" class="btn bo fw" style="font-size:13px">Cancelar</button>
+    </div>
+  </div>`;
+  document.getElementById("bi-rm-no").addEventListener("click", closeAdminModal);
+  document.getElementById("bi-rm-yes1").addEventListener("click",()=>{
+    const btn = document.getElementById("bi-rm-yes1");
+    if(!btn) return;
+    btn.id = "bi-rm-yes2";
+    btn.textContent = "⚠ CONFIRMAR REMOÇÃO";
+    btn.style.border = "2px solid var(--red)";
+    document.getElementById("bi-rm-yes2").addEventListener("click",()=>{ closeAdminModal(); onConfirm(); });
+  });
 }
 
 // Cash Game: add entry — shows current accumulated total, asks for new value, then confirms
