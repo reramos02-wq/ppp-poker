@@ -3656,20 +3656,22 @@ function renderCashGamePlayer(s){
       <div style="font-size:12px;color:var(--muted)">Entrada ${i+1}</div>
       <div style="display:flex;align-items:center;gap:8px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:#fff">${fmtBRL(e.value)}</div>
-        <button data-cg-edit-entry="${i}" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:11px">✏️</button>
+        <button data-cg-edit-entry="${i}" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:12px">✏️</button>
+        <button data-cg-del-entry="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:12px">✕</button>
       </div>
     </div>`).join("");
 
   return `<div class="sec">
     <button id="btn-cg-player-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à lista</button>
 
-    <!-- Player header -->
+    <!-- Player header with remove option -->
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
       ${AV(uid,"lg")}
-      <div>
+      <div style="flex:1">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff">${pl.name}</div>
         <div style="font-size:13px;color:var(--muted)">"${pl.nickname}"</div>
       </div>
+      <button id="btn-cg-remove-player" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;flex-shrink:0">🗑 Remover</button>
     </div>
 
     <!-- Total entries -->
@@ -5019,6 +5021,70 @@ function bindEvents(){
         await saveCashGameData();
         render();
         showToast("Entrada corrigida.","green");
+      });
+    });
+  });
+
+  // Delete entry — double confirmation
+  document.querySelectorAll("[data-cg-del-entry]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const s = DB.stages.find(x=>x.id===CASHGAME_MGMT); if(!s) return;
+      const idx = parseInt(btn.dataset.cgDelEntry);
+      const cg = getCashGameData(s);
+      const entries = cg.entries[CASHGAME_PLAYER]||[];
+      const val = entries[idx]?.value||0;
+      const el = document.getElementById("admin-modal"); if(!el) return;
+      el.innerHTML = `
+      <div class="ov" style="z-index:1200">
+        <div class="modal" style="max-width:340px;text-align:center;padding:28px 24px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--red);margin-bottom:8px">Excluir Entrada ${idx+1}?</div>
+          <div style="font-size:14px;color:var(--muted);margin-bottom:20px">${fmtBRL(val)} — esta ação não pode ser desfeita.</div>
+          <button id="cg-del-entry-yes" class="btn bd fw" style="font-size:15px;padding:14px;margin-bottom:10px">✕ Excluir Entrada</button>
+          <button id="cg-del-entry-no" class="btn bo fw" style="font-size:13px">Cancelar</button>
+        </div>
+      </div>`;
+      document.getElementById("cg-del-entry-no").addEventListener("click", closeAdminModal);
+      document.getElementById("cg-del-entry-yes").addEventListener("click", async()=>{
+        cg.entries[CASHGAME_PLAYER].splice(idx, 1);
+        closeAdminModal();
+        await saveCashGameData();
+        render();
+        showToast("Entrada excluída.","green");
+      });
+    });
+  });
+
+  // Remove player from cash game — double confirmation
+  document.getElementById("btn-cg-remove-player")?.addEventListener("click",()=>{
+    const s = DB.stages.find(x=>x.id===CASHGAME_MGMT); if(!s) return;
+    const pl = getP(CASHGAME_PLAYER)||{nickname:CASHGAME_PLAYER};
+    const el = document.getElementById("admin-modal"); if(!el) return;
+    el.innerHTML = `
+    <div class="ov" style="z-index:1200">
+      <div class="modal" style="max-width:340px;text-align:center;padding:28px 24px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--red);margin-bottom:8px">Remover ${pl.nickname}?</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px">O jogador e todas as suas entradas e saída serão removidos do Cash Game desta etapa.</div>
+        <div style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:20px">⚠ Confirme duas vezes</div>
+        <button id="cg-rm-player-yes1" class="btn bd fw" style="font-size:15px;padding:14px;margin-bottom:10px">Sim, remover jogador</button>
+        <button id="cg-rm-player-no" class="btn bo fw" style="font-size:13px">Cancelar</button>
+      </div>
+    </div>`;
+    document.getElementById("cg-rm-player-no").addEventListener("click", closeAdminModal);
+    document.getElementById("cg-rm-player-yes1").addEventListener("click",()=>{
+      const b = document.getElementById("cg-rm-player-yes1"); if(!b) return;
+      b.id = "cg-rm-player-yes2";
+      b.textContent = "⚠ CONFIRMAR REMOÇÃO";
+      b.style.border = "2px solid var(--red)";
+      document.getElementById("cg-rm-player-yes2").addEventListener("click", async()=>{
+        const cg = getCashGameData(s);
+        cg.players = (cg.players||[]).filter(u=>u!==CASHGAME_PLAYER);
+        delete cg.entries[CASHGAME_PLAYER];
+        delete cg.cashouts[CASHGAME_PLAYER];
+        closeAdminModal();
+        CASHGAME_PLAYER = null;
+        await saveCashGameData();
+        render();
+        showToast("Jogador removido do Cash Game.","green");
       });
     });
   });
