@@ -3397,24 +3397,39 @@ function renderBuyinGeral(s){
   const potFinal = calcPotFinal(s);
   const potLiquido = calcPotLiquido(s);
   const staffPayouts = calcStaffPayouts(s);
-
-  // Match results (positions) to players, if the stage has results published
   const results = s.results || [];
 
-  const playerRows = ins.map(uid=>{
+  // All UIDs to show: torneio inscribed + cash-game-only players
+  const cg = getCashGameData(s);
+  const cashOnlyUids = (cg.players||[]).filter(uid=>!ins.includes(uid));
+  const allUids = [...ins, ...cashOnlyUids];
+
+  const thStyle = "padding:6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase";
+
+  const playerRows = allUids.map(uid=>{
     const pl = getP(uid)||{name:uid,nickname:"?"};
-    const rec = getBuyinRecord(s, uid);
-    const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+    const isCashOnly = !ins.includes(uid);
+    const rec = isCashOnly ? {rs:0,rd:0,addon:false,paid:false} : getBuyinRecord(s, uid);
+    const totalTorneio = isCashOnly ? 0 : vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
     const result = results.find(r=>r.playerId===uid);
     const prize = result ? (premios.find(p=>p.position===result.position)?.value || 0) : 0;
-    const saldo = prize - total;
+
+    // Cash game saldo for this player
+    const cashSaldo = getCashPlayerSaldo(s, uid); // null = em jogo / sem cash
+
+    // Saldo Final = Prêmio − Entrada Torneio + Saldo Cash (if any)
+    const saldoTorneio = prize - totalTorneio;
+    const saldoFinal = saldoTorneio + (cashSaldo !== null ? cashSaldo : 0);
+
     const isPaid = !!rec.paid;
-    return `<tr>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px">${pl.nickname||pl.name}</td>
+
+    return `<tr style="${isCashOnly?"opacity:0.85":""}">
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px">${pl.nickname||pl.name}${isCashOnly?` <span style="font-size:10px;color:var(--green)">CG</span>`:""}</td>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${result?result.position+"º":"—"}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px;text-align:right">${fmtBRL(total)}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px;text-align:right">${isCashOnly?"—":fmtBRL(totalTorneio)}</td>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:${prize>0?"var(--yellow)":"var(--muted)"};font-size:13px;text-align:right;font-weight:${prize>0?"700":"400"}">${prize>0?fmtBRL(prize):"—"}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${saldo<0?"var(--red)":saldo>0?"var(--green)":"var(--muted)"}">${saldo===0?"—":(saldo>0?"+":"")+fmtBRL(saldo)}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${cashSaldo===null?"var(--muted)":cashSaldo<0?"var(--red)":cashSaldo>0?"var(--green)":"var(--muted)"}">${cashSaldo===null?"—":(cashSaldo>0?"+":"")+fmtBRL(cashSaldo)}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${saldoFinal<0?"var(--red)":saldoFinal>0?"var(--green)":"var(--muted)"}">${saldoFinal===0?"—":(saldoFinal>0?"+":"")+fmtBRL(saldoFinal)}</td>
       <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:center">
         <input type="checkbox" data-paid-uid="${uid}" ${isPaid?"checked":""} style="width:18px;height:18px;cursor:pointer;accent-color:var(--yellow)"/>
       </td>
@@ -3441,14 +3456,15 @@ function renderBuyinGeral(s){
 
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Jogadores</div>
       <div style="overflow-x:auto;margin-bottom:18px">
-        <table style="width:100%;border-collapse:collapse">
+        <table style="width:100%;border-collapse:collapse;min-width:600px">
           <thead><tr style="border-bottom:2px solid var(--yellow)">
-            <th style="padding:6px;text-align:left;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Jogador</th>
-            <th style="padding:6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Pos.</th>
-            <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Entrada</th>
-            <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Prêmio</th>
-            <th style="padding:6px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Saldo Final</th>
-            <th style="padding:6px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Pago</th>
+            <th style="${thStyle};text-align:left">Jogador</th>
+            <th style="${thStyle};text-align:center">Pos.</th>
+            <th style="${thStyle};text-align:right">Entrada</th>
+            <th style="${thStyle};text-align:right">Prêmio</th>
+            <th style="${thStyle};text-align:right">Saldo Cash</th>
+            <th style="${thStyle};text-align:right">Saldo Final</th>
+            <th style="${thStyle};text-align:center">Pago</th>
           </tr></thead>
           <tbody>${playerRows}</tbody>
         </table>
