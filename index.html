@@ -3530,6 +3530,9 @@ function renderCashGameMgmt(){
   if(CASHGAME_PLAYER) return renderCashGamePlayer(s);
 
   const cg = getCashGameData(s);
+  const fin = getFinanceData(s);
+  const caixinhaCash = Number(fin.caixinhaCash)||0;
+
   const playerRows = (cg.players||[]).map((uid,i)=>{
     const pl = getP(uid)||{name:uid,nickname:"?"};
     const totalEntries = getCashPlayerTotalEntries(s, uid);
@@ -3562,19 +3565,32 @@ function renderCashGameMgmt(){
     </div>
   </div>`;
 
-  // Totals summary
+  // Totals: saídas dos jogadores + caixinha cash (que sai do pot do cash game)
   const totalEntradas = (cg.players||[]).reduce((sum,uid)=>sum+getCashPlayerTotalEntries(s,uid),0);
-  const totalSaidas = (cg.players||[]).reduce((sum,uid)=>{
+  const totalSaidasJogadores = (cg.players||[]).reduce((sum,uid)=>{
     const c = getCashPlayerCashout(s,uid);
     return sum + (c===null?0:c);
   },0);
+  const totalSaidas = totalSaidasJogadores + caixinhaCash;
+  const balanced = Math.abs(totalEntradas - totalSaidas) < 0.01;
 
   return `<div class="sec">
     <button id="btn-cg-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à etapa</button>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">🃏 Cash Game</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${s.name}</div>
 
-    <div style="display:flex;gap:10px;margin-bottom:16px">
+    <!-- Caixinha Cash — synced with Financeiro tab (fin.caixinhaCash) -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:8px">Caixinha Cash</div>
+      <div style="position:relative;margin-bottom:6px">
+        <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
+        <input id="cg-caixinha-cash" type="number" value="${fin.caixinhaCash}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px;box-sizing:border-box"/>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">Vinculada ao Financeiro → Custos. Entra no Total Saídas para conferência.</div>
+    </div>
+
+    <!-- Summary cards -->
+    <div style="display:flex;gap:10px;margin-bottom:10px">
       <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;text-align:center">
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Total Entradas</div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;color:#fff">${fmtBRL(totalEntradas)}</div>
@@ -3582,6 +3598,15 @@ function renderCashGameMgmt(){
       <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;text-align:center">
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Total Saídas</div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;color:#fff">${fmtBRL(totalSaidas)}</div>
+        ${caixinhaCash>0?`<div style="font-size:10px;color:var(--muted);margin-top:2px">incl. caixinha ${fmtBRL(caixinhaCash)}</div>`:""}
+      </div>
+    </div>
+
+    <!-- Validation indicator -->
+    <div style="background:var(--surface2);border:1px solid ${balanced?"var(--green)":"var(--red)"};border-radius:6px;padding:10px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px;color:var(--muted)">Conferência (Entradas vs Saídas)</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:${balanced?"var(--green)":"var(--red)"}">
+        ${balanced?"✓ FECHADO":`⚠ DIFERENÇA: ${fmtBRL(Math.abs(totalEntradas-totalSaidas))}`}
       </div>
     </div>
 
@@ -4832,6 +4857,14 @@ function bindEvents(){
   document.getElementById("btn-cg-player-back")?.addEventListener("click",()=>{
     CASHGAME_PLAYER = null;
     render();
+  });
+
+  // Caixinha Cash — synced with Financeiro Custos tab (same fin.caixinhaCash)
+  document.getElementById("cg-caixinha-cash")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===CASHGAME_MGMT); if(!s) return;
+    getFinanceData(s).caixinhaCash = parseFloat(this.value)||0;
+    await saveCashGameData();
+    requestAnimationFrame(render);
   });
 
   document.querySelectorAll("[data-cg-player]").forEach(el=>{
