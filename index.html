@@ -2289,7 +2289,7 @@ function renderHome(){
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-size:22px">🏆</span>
           <div style="text-align:left">
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:#FFD700;letter-spacing:1px">PRÊMIO MESA FINAL</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:#FFD700;letter-spacing:1px">PREMIAÇÃO FINAL DE TEMPORADA</div>
             <div style="font-size:11px;color:var(--muted)">Pot acumulado da temporada 2026</div>
           </div>
         </div>
@@ -2334,7 +2334,7 @@ function renderRanking(){
     <button class="tb${RANK_TAB==="nlholdem"?" on":""}" data-rtab="nlholdem">🃏 NL Hold'em</button>
     <button class="tb${RANK_TAB==="knockout"?" on":""}" data-rtab="knockout">🥊 Knockout</button>
   </div>
-  <button id="btn-ft-prize" class="btn bo fw" style="margin-bottom:14px;border-color:#FFD700;color:#FFD700;font-size:13px">🏆 Prêmio Mesa Final</button>
+  <button id="btn-ft-prize" class="btn bo fw" style="margin-bottom:14px;border-color:#FFD700;color:#FFD700;font-size:13px">🏆 Premiação Final de Temporada</button>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
   <div class="rl">${list.map((r,i)=>{const isFinalTable=isGeral&&i<9;return`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer${isFinalTable?";border-left:3px solid #FFD700;background:rgba(255,215,0,0.04)":""}">
     ${isFinalTable?`<div style="position:absolute;right:8px;top:4px;font-size:9px;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;color:#FFD700;text-transform:uppercase;opacity:0.7">Mesa Final</div>`:""}
@@ -4094,7 +4094,7 @@ function renderFTPrize(){
 
   return `<div class="sec">
     <button id="btn-ft-prize-back" class="btn bo mb10" style="font-size:12px">‹ Voltar</button>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">🏆 Prêmio Mesa Final</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">🏆 Premiação Final de Temporada</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Temporada 2026 — acumulado por etapa</div>
 
     <!-- Total acumulado -->
