@@ -830,6 +830,16 @@ function calcTaxaFT(s){
   return calcPotFinal(s) * 0.15;
 }
 
+// FT Prize pool contribution per stage.
+// Admins can override this in the FT Prize table (stored in s.ftContribution)
+// without affecting the Financeiro → Custos calculations (which always use calcTaxaFT).
+function getFTContribution(s){
+  if(s.ftContribution !== undefined && s.ftContribution !== null){
+    return Number(s.ftContribution);
+  }
+  return calcTaxaFT(s);
+}
+
 // POT LÍQUIDO = POT FINAL − Taxa FT (used as base for ITM prize %)
 function calcPotLiquido(s){
   return calcPotFinal(s) - calcTaxaFT(s);
@@ -1231,6 +1241,63 @@ function calcRankGeral(){
     return tiebreak(a, b, stageFilterGeral);
   });
 }
+
+// ── FINANCIAL RANKING ─────────────────────────────────────────────────────────
+// Builds per-player financial summaries across all finished stages.
+// Returns array sorted by saldoGeral desc (best first, negatives last).
+function calcFinancialRanking(){
+  const finishedStages = DB.stages.filter(s=>
+    s.status==="finished" && (s.season===ACTIVE_SEASON||!s.season)
+  );
+  const map = {}; // uid → {uid, entradas, premios, saldoTorneio, cashEntradas, cashSaidas, saldoCash, saldoGeral}
+
+  const ensurePlayer = uid => {
+    if(!map[uid]) map[uid] = {uid, entradas:0, premios:0, saldoTorneio:0, cashEntradas:0, cashSaidas:0, saldoCash:0, saldoGeral:0};
+    return map[uid];
+  };
+
+  // Ensure ALL players appear (even with zero activity)
+  DB.players.forEach(p => ensurePlayer(p.uid));
+
+  finishedStages.forEach(s=>{
+    const vals = getBuyinValues(s);
+    const ins = s.inscriptions||[];
+    const premios = calcPremiacao(s);
+    const results = s.results||[];
+    const cg = getCashGameData(s);
+
+    // Torneio entries and prizes
+    ins.forEach(uid=>{
+      const rec = getBuyinRecord(s, uid);
+      const entrada = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+      const result = results.find(r=>r.playerId===uid);
+      const prize = result ? (premios.find(p=>p.position===result.position)?.value||0) : 0;
+      const row = ensurePlayer(uid);
+      row.entradas += entrada;
+      row.premios += prize;
+    });
+
+    // Cash game entries and cashouts
+    (cg.players||[]).forEach(uid=>{
+      const row = ensurePlayer(uid);
+      row.cashEntradas += getCashPlayerTotalEntries(s, uid);
+      const cashout = getCashPlayerCashout(s, uid);
+      if(cashout !== null) row.cashSaidas += cashout;
+    });
+  });
+
+  // Compute derived fields
+  Object.values(map).forEach(r=>{
+    r.saldoTorneio = r.premios - r.entradas;
+    r.saldoCash    = r.cashSaidas - r.cashEntradas;
+    r.saldoGeral   = r.saldoTorneio + r.saldoCash;
+  });
+
+  return Object.values(map)
+    .filter(r=> r.entradas>0 || r.cashEntradas>0) // exclude players with zero activity
+    .sort((a,b)=> b.saldoGeral - a.saldoGeral);
+}
+
 
 function calcStats(uid){
   let p=0,w=0,wNL=0,wKO=0,wFT=0,ft=0,ko=0;
@@ -2218,6 +2285,16 @@ function renderHome(){
       ${isLive(next)?`<div style="margin-top:8px;overflow-x:auto;white-space:nowrap;padding-bottom:4px">${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:'?',nickname:'?'};return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 8px 3px 3px;margin-right:4px;font-size:11px;color:#fff;white-space:nowrap">'+AV(uid)+pl.nickname+'</span>';}).join('')}</div>`:""}
     </div>`:""}
     ${geralTop.length?`<div class="mb10">
+      <button id="btn-ft-prize-home" style="width:100%;background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,215,0,0.05));border:1px solid #FFD700;border-radius:6px;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:22px">🏆</span>
+          <div style="text-align:left">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:#FFD700;letter-spacing:1px">PRÊMIO MESA FINAL</div>
+            <div style="font-size:11px;color:var(--muted)">Pot acumulado da temporada 2026</div>
+          </div>
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:#FFD700">${fmtBRL(DB.stages.filter(s=>s.status==="finished"&&!s.isFinal).reduce((sum,s)=>sum+getFTContribution(s),0))}</div>
+      </button>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Líderes Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${geralTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
@@ -2246,6 +2323,7 @@ function renderHome(){
 
 // ── RANKING ───────────────────────────────────────────────────────────────────
 function renderRanking(){
+  if(FT_PRIZE_VIEW) return renderFTPrize();
   const list = RANK_TAB==="geral"?calcRankGeral():calcRank(RANK_TAB);
   const isKO = RANK_TAB==="knockout";
   const isGeral = RANK_TAB==="geral";
@@ -2256,6 +2334,7 @@ function renderRanking(){
     <button class="tb${RANK_TAB==="nlholdem"?" on":""}" data-rtab="nlholdem">🃏 NL Hold'em</button>
     <button class="tb${RANK_TAB==="knockout"?" on":""}" data-rtab="knockout">🥊 Knockout</button>
   </div>
+  <button id="btn-ft-prize" class="btn bo fw" style="margin-bottom:14px;border-color:#FFD700;color:#FFD700;font-size:13px">🏆 Prêmio Mesa Final</button>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
   <div class="rl">${list.map((r,i)=>{const isFinalTable=isGeral&&i<9;return`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer${isFinalTable?";border-left:3px solid #FFD700;background:rgba(255,215,0,0.04)":""}">
     ${isFinalTable?`<div style="position:absolute;right:8px;top:4px;font-size:9px;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;color:#FFD700;text-transform:uppercase;opacity:0.7">Mesa Final</div>`:""}
@@ -3880,12 +3959,123 @@ function renderAdminPlayers(){
   }).join("")}</div>`;
 }
 
-let TOOLS_VIEW = "home"; // home | diagnose | audit
+let TOOLS_VIEW = "home"; // home | diagnose | audit | fin_ranking
+let FT_PRIZE_VIEW = false; // true = showing FT Prize table (all users)
 let DIAGNOSE_EDIT_UID = null;
 
+// ── RANKING FINANCEIRO (Admin only) ──────────────────────────────────────────
+function renderFinancialRanking(){
+  const data = calcFinancialRanking();
+  const thS = "padding:7px 6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;white-space:nowrap";
+
+  const tabs = ["geral","torneio","cash"].map(t=>`
+    <button data-fintab="${t}" style="background:none;border:none;border-bottom:${(TOOLS_VIEW==="fin_ranking_"+t||(TOOLS_VIEW==="fin_ranking"&&t==="geral"))?"2px solid var(--yellow)":"2px solid transparent"};color:${(TOOLS_VIEW==="fin_ranking_"+t||(TOOLS_VIEW==="fin_ranking"&&t==="geral"))?"var(--yellow)":"var(--muted)"};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;padding:8px 14px;cursor:pointer;margin-bottom:-2px;white-space:nowrap">
+      ${t==="geral"?"🌐 Geral":t==="torneio"?"🃏 Torneio":"💵 Cash Game"}
+    </button>`).join("");
+
+  const activeTab = TOOLS_VIEW.replace("fin_ranking_","") === "fin_ranking" ? "geral" : TOOLS_VIEW.replace("fin_ranking_","");
+
+  const rows = data.map((r,i)=>{
+    const pl = getP(r.uid)||{name:r.uid,nickname:"?"};
+    let cols = "";
+    if(activeTab==="geral"||activeTab==="fin_ranking"){
+      cols = `
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:12px;text-align:right">${fmtBRL(r.entradas)}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:${r.premios>0?"var(--yellow)":"var(--muted)"};font-size:12px;text-align:right">${r.premios>0?fmtBRL(r.premios):"—"}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:12px;text-align:right">${r.cashEntradas>0?fmtBRL(r.cashEntradas):"—"}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:12px;text-align:right">${r.cashSaidas>0?fmtBRL(r.cashSaidas):"—"}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${r.saldoGeral<0?"var(--red)":r.saldoGeral>0?"var(--green)":"var(--muted)"}">${r.saldoGeral===0?"—":(r.saldoGeral>0?"+":"")+fmtBRL(r.saldoGeral)}</td>`;
+    } else if(activeTab==="torneio"){
+      cols = `
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:12px;text-align:right">${fmtBRL(r.entradas)}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:${r.premios>0?"var(--yellow)":"var(--muted)"};font-size:12px;text-align:right">${r.premios>0?fmtBRL(r.premios):"—"}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${r.saldoTorneio<0?"var(--red)":r.saldoTorneio>0?"var(--green)":"var(--muted)"}">${r.saldoTorneio===0?"—":(r.saldoTorneio>0?"+":"")+fmtBRL(r.saldoTorneio)}</td>`;
+    } else {
+      cols = `
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:12px;text-align:right">${r.cashEntradas>0?fmtBRL(r.cashEntradas):"—"}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:12px;text-align:right">${r.cashSaidas>0?fmtBRL(r.cashSaidas):"—"}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${r.saldoCash<0?"var(--red)":r.saldoCash>0?"var(--green)":"var(--muted)"}">${r.saldoCash===0?"—":(r.saldoCash>0?"+":"")+fmtBRL(r.saldoCash)}</td>`;
+    }
+    return `<tr>
+      <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:12px;text-align:center">${i+1}</td>
+      <td style="padding:7px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px">${pl.nickname||pl.name}</td>
+      ${cols}
+    </tr>`;
+  }).join("");
+
+  const headers = activeTab==="geral"||activeTab==="fin_ranking"
+    ? `<th style="${thS};text-align:right">Entrada Torneio</th><th style="${thS};text-align:right">Prêmio</th><th style="${thS};text-align:right">Entrada Cash</th><th style="${thS};text-align:right">Saída Cash</th><th style="${thS};text-align:right">Saldo Geral</th>`
+    : activeTab==="torneio"
+    ? `<th style="${thS};text-align:right">Entradas</th><th style="${thS};text-align:right">Prêmios</th><th style="${thS};text-align:right">Saldo</th>`
+    : `<th style="${thS};text-align:right">Entradas Cash</th><th style="${thS};text-align:right">Saídas Cash</th><th style="${thS};text-align:right">Saldo</th>`;
+
+  return `<div>
+    <button id="btn-finrank-back" class="btn bo mb10" style="font-size:12px">‹ Voltar</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:#fff;margin-bottom:4px">💰 Ranking Financeiro</div>
+    <div style="font-size:12px;color:var(--red);margin-bottom:12px;font-weight:600">⚠ Uso exclusivo da diretoria — não compartilhar</div>
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px;overflow-x:auto">
+      ${tabs}
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:400px">
+        <thead><tr style="border-bottom:2px solid var(--yellow)">
+          <th style="${thS};text-align:center">#</th>
+          <th style="${thS};text-align:left">Jogador</th>
+          ${headers}
+        </tr></thead>
+        <tbody>${rows||'<tr><td colspan="6" style="padding:16px;color:var(--muted);text-align:center">Nenhum dado financeiro registrado ainda.</td></tr>'}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ── FT PRIZE TABLE (all users) ────────────────────────────────────────────────
+function renderFTPrize(){
+  const finishedStages = DB.stages
+    .filter(s=>s.status==="finished" && !s.isFinal && (s.season===ACTIVE_SEASON||!s.season))
+    .sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+
+  const totalFT = finishedStages.reduce((sum,s)=>sum+getFTContribution(s),0);
+
+  const stageRows = finishedStages.map(s=>{
+    const contrib = getFTContribution(s);
+    const isOverridden = s.ftContribution !== undefined && s.ftContribution !== null;
+    const auto = calcTaxaFT(s);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600;color:#fff">${s.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${fmtD(s.date)} · ${s.type==="nlholdem"?"NL Hold'em":"Knockout"}</div>
+        ${isOverridden?`<div style="font-size:10px;color:var(--yellow);margin-top:2px">✏️ Valor editado (auto: ${fmtBRL(auto)})</div>`:""}
+      </div>
+      ${IS_ADMIN?`
+      <div style="position:relative;width:110px;flex-shrink:0">
+        <span style="position:absolute;left:8px;top:8px;color:var(--muted);font-size:12px;pointer-events:none">R$</span>
+        <input data-ft-stage="${s.id}" type="number" inputmode="decimal" value="${contrib.toFixed(2)}" style="width:100%;background:var(--surface2);border:1px solid ${isOverridden?"var(--yellow)":"var(--border)"};border-radius:4px;padding:7px 8px 7px 28px;color:#fff;font-size:13px;font-weight:700;box-sizing:border-box;text-align:right"/>
+      </div>`:`<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:var(--yellow);flex-shrink:0">${fmtBRL(contrib)}</div>`}
+    </div>`;
+  }).join("");
+
+  return `<div class="sec">
+    <button id="btn-ft-prize-back" class="btn bo mb10" style="font-size:12px">‹ Voltar</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">🏆 Prêmio Mesa Final</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Temporada 2026 — acumulado por etapa</div>
+
+    <div style="background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,215,0,0.04));border:2px solid #FFD700;border-radius:8px;padding:16px 20px;margin-bottom:20px;text-align:center">
+      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">Total Acumulado</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:36px;color:#FFD700">${fmtBRL(totalFT)}</div>
+    </div>
+
+    <div class="card" style="padding:0 12px">
+      ${finishedStages.length===0?'<div style="color:var(--muted);font-size:13px;padding:16px 0">Nenhuma etapa finalizada ainda.</div>':stageRows}
+    </div>
+    ${IS_ADMIN?`<div style="font-size:11px;color:var(--muted);margin-top:10px">Admins podem editar o valor de cada etapa. A edição não afeta os cálculos do Financeiro da etapa.</div>`:""}
+  </div>`;
+}
+
 function renderAdminTools(){
-  if(TOOLS_VIEW==="diagnose") return renderToolsDiagnose();
-  if(TOOLS_VIEW==="audit")    return renderToolsAudit();
+  if(TOOLS_VIEW==="diagnose")    return renderToolsDiagnose();
+  if(TOOLS_VIEW==="audit")       return renderToolsAudit();
+  if(TOOLS_VIEW==="fin_ranking") return renderFinancialRanking();
   return renderToolsHome();
 }
 
@@ -3910,6 +4100,17 @@ function renderToolsHome(){
         <div>
           <div style="font-weight:700;color:#fff;font-size:15px">Auditoria Firestore</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">Verificar duplicatas, UIDs fantasma e gerar relatório completo</div>
+        </div>
+        <div style="margin-left:auto;color:var(--muted)">›</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;cursor:pointer" id="btn-tool-fin-ranking">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">💰</div>
+        <div>
+          <div style="font-weight:700;color:#fff;font-size:15px">Ranking Financeiro</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Saldos de torneio, cash game e geral por jogador — uso exclusivo da diretoria</div>
         </div>
         <div style="margin-left:auto;color:var(--muted)">›</div>
       </div>
@@ -5693,6 +5894,36 @@ function bindEvents(){
   // Admin tools — home
   document.getElementById("btn-tool-diagnose")?.addEventListener("click",()=>{ TOOLS_VIEW="diagnose"; render(); });
   document.getElementById("btn-tool-audit")?.addEventListener("click",()=>{ TOOLS_VIEW="audit"; render(); });
+  document.getElementById("btn-tool-fin-ranking")?.addEventListener("click",()=>{ TOOLS_VIEW="fin_ranking"; render(); });
+
+  // Financial Ranking: back + tab switch
+  document.getElementById("btn-finrank-back")?.addEventListener("click",()=>{ TOOLS_VIEW="home"; render(); });
+  document.querySelectorAll("[data-fintab]").forEach(btn=>{
+    btn.addEventListener("click",()=>{ TOOLS_VIEW="fin_ranking_"+btn.dataset.fintab; render(); });
+  });
+
+  // FT Prize: open from Ranking page and Home page
+  document.getElementById("btn-ft-prize")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; render(); });
+  document.getElementById("btn-ft-prize-home")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; TAB="ranking"; render(); });
+  document.getElementById("btn-ft-prize-back")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=false; render(); });
+
+  // FT Prize: admin inline edit per stage — saves to stage.ftContribution
+  document.querySelectorAll("[data-ft-stage]").forEach(inp=>{
+    inp.addEventListener("change", async function(){
+      const sid = this.dataset.ftStage;
+      const val = parseFloat(this.value);
+      const s = DB.stages.find(x=>x.id===sid);
+      if(!s) return;
+      s.ftContribution = isNaN(val) ? null : val;
+      try{
+        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          stages: sanitizeStages(DB.stages),
+          updatedAt: serverTimestamp()
+        });
+        requestAnimationFrame(render);
+      } catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
+    });
+  });
   document.getElementById("btn-tools-back")?.addEventListener("click",()=>{ TOOLS_VIEW="home"; DIAGNOSE_EDIT_UID=null; render(); });
 
   // Diagnose fix-dupes (both from home and audit)
