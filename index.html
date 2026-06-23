@@ -4037,29 +4037,36 @@ function renderFTPrize(){
 
   const totalFT = finishedStages.reduce((sum,s)=>sum+getFTContribution(s),0);
 
-  // Each pot = total / 4 (Taxa FT divided equally among 4 destinations)
-  const poteNHL      = totalFT / 4;
-  const potePKO      = totalFT / 4;
-  const poteRanking  = totalFT / 4;
-  const poteMesaFinal= totalFT / 4;
+  // Each stage contributes to ONE of NLH or PKO (based on type), plus Ranking and FT.
+  // Taxa FT ÷ 3 → split equally between: [NLH or PKO], Ranking Geral, Mesa Final.
+  let poteNHL = 0, potePKO = 0, poteRanking = 0, poteMesaFinal = 0;
+  finishedStages.forEach(s=>{
+    const contrib = getFTContribution(s);
+    const each = contrib / 3;
+    if(s.type==="nlholdem") poteNHL += each;
+    else potePKO += each;
+    poteRanking   += each;
+    poteMesaFinal += each;
+  });
 
-  const potCard = (label, emoji, value) => `
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;text-align:center">
+  const potCard = (label, emoji, value, dimmed=false) => `
+    <div style="background:var(--surface2);border:1px solid ${dimmed?"var(--border)":"var(--border)"};border-radius:6px;padding:10px 12px;text-align:center;opacity:${dimmed?0.45:1}">
       <div style="font-size:16px;margin-bottom:4px">${emoji}</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px">${label}</div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;color:var(--yellow)">${fmtBRL(value)}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;color:${dimmed?"var(--muted)":"var(--yellow)"}">${value>0?fmtBRL(value):"R$ 0"}</div>
     </div>`;
 
   const stageRows = finishedStages.map(s=>{
     const contrib = getFTContribution(s);
     const isOverridden = s.ftContribution !== undefined && s.ftContribution !== null;
     const auto = calcTaxaFT(s);
-    const each = contrib / 4;
+    const each = contrib / 3;
+    const isNLH = s.type==="nlholdem";
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:600;color:#fff">${s.name}</div>
-          <div style="font-size:11px;color:var(--muted)">${fmtD(s.date)} · ${s.type==="nlholdem"?"NL Hold'em":"Knockout"}</div>
+          <div style="font-size:11px;color:var(--muted)">${fmtD(s.date)} · ${isNLH?"NL Hold'em":"Knockout"}</div>
           ${isOverridden?`<div style="font-size:10px;color:var(--yellow);margin-top:2px">✏️ Valor editado (auto: ${fmtBRL(auto)})</div>`:""}
         </div>
         ${IS_ADMIN?`
@@ -4068,13 +4075,9 @@ function renderFTPrize(){
           <input data-ft-stage="${s.id}" type="number" inputmode="decimal" value="${contrib.toFixed(2)}" style="width:100%;background:var(--surface2);border:1px solid ${isOverridden?"var(--yellow)":"var(--border)"};border-radius:4px;padding:7px 8px 7px 28px;color:#fff;font-size:13px;font-weight:700;box-sizing:border-box;text-align:right"/>
         </div>`:`<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:var(--yellow);flex-shrink:0">${fmtBRL(contrib)}</div>`}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
         <div style="background:var(--bg-dark);border-radius:4px;padding:5px 6px;text-align:center">
-          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">NLH</div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:#fff">${fmtBRL(each)}</div>
-        </div>
-        <div style="background:var(--bg-dark);border-radius:4px;padding:5px 6px;text-align:center">
-          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">PKO</div>
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">${isNLH?"NLH":"PKO"}</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:#fff">${fmtBRL(each)}</div>
         </div>
         <div style="background:var(--bg-dark);border-radius:4px;padding:5px 6px;text-align:center">
