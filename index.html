@@ -5732,9 +5732,50 @@ function bindEvents(){
         });
       }
       showToast("Gerando imagem...","green");
-      const canvas = await html2canvas(el, {
-        backgroundColor:"#1a1a1a", scale:2, allowTaint:true, useCORS:false, logging:false
+
+      // Clone the element so we can mutate it without affecting the live DOM.
+      // Key fix: remove overflow:auto from the table wrapper so html2canvas
+      // captures the full table width instead of just the visible viewport slice.
+      const clone = el.cloneNode(true);
+      clone.style.position = "fixed";
+      clone.style.top = "-99999px";
+      clone.style.left = "0";
+      clone.style.width = "auto";       // let it expand to full content width
+      clone.style.minWidth = "700px";   // ensure columns don't collapse
+      clone.style.background = "#1a1a1a";
+      clone.style.padding = "20px";
+      clone.style.boxSizing = "border-box";
+
+      // Remove overflow:auto from any scrollable wrappers so everything shows
+      clone.querySelectorAll("*").forEach(node=>{
+        const s = node.style;
+        if(s.overflowX === "auto" || s.overflow === "auto"){
+          s.overflowX = "visible";
+          s.overflow  = "visible";
+          s.width     = "auto";
+          s.minWidth  = "none";
+        }
+        // Also expand tables to auto width
+        if(node.tagName === "TABLE"){
+          s.width    = "auto";
+          s.minWidth = "none";
+        }
       });
+
+      document.body.appendChild(clone);
+
+      const canvas = await html2canvas(clone, {
+        backgroundColor:"#1a1a1a",
+        scale:2,
+        allowTaint:true,
+        useCORS:false,
+        logging:false,
+        width: clone.scrollWidth,
+        windowWidth: clone.scrollWidth + 40,
+      });
+
+      document.body.removeChild(clone);
+
       const dataUrl = canvas.toDataURL("image/png");
       const fileName = "resumo-financeiro-ppp-poker.png";
       const caption = `Resumo financeiro — PPP Poker`;
