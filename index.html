@@ -862,33 +862,42 @@ function getITMPercents(numPlayers){
 
 // Calculate prize per position for a stage (NLH only).
 // Returns array: [{position, pct, value}], respecting any manual overrides.
+// Sum of per-position caixinhas — the new source of truth for caixinhaTorneio.
+// In auto mode (no overrides yet), falls back to fin.caixinhaTorneio field.
+function calcCaixinhaTorneioTotal(s){
+  const fin = getFinanceData(s);
+  if(fin.prizeOverrides && fin.prizeOverrides.length){
+    return fin.prizeOverrides.reduce((sum,o)=>sum+(Number(o.caixinha)||0),0);
+  }
+  return Number(fin.caixinhaTorneio)||0;
+}
+
 function calcPremiacao(s){
   const fin = getFinanceData(s);
   const potLiquido = calcPotLiquido(s);
-  const caixinhaTorneio = Number(fin.caixinhaTorneio)||0;
+  // caixinhaTorneio is derived from per-position caixinhas (or the manual field in auto mode)
+  const caixinhaTorneio = calcCaixinhaTorneioTotal(s);
   const totalAPremiar = potLiquido - caixinhaTorneio;
   const numPlayers = (s.inscriptions||[]).length;
   const autoPcts = getITMPercents(numPlayers);
 
   if(fin.prizeOverrides && fin.prizeOverrides.length){
-    // Manual overrides store FIXED R$ values (not percentages that auto-recalculate).
-    // This means changing the Caixinha Torneio does NOT silently rescale already-set
-    // prizes — instead it throws the "Soma dos Prêmios" indicator out of balance,
-    // so the admin sees the mismatch and adjusts each position by hand.
     return fin.prizeOverrides.map((o,i)=>{
-      // Backward compatibility: older overrides stored {pct} instead of {value}.
       const value = o.value !== undefined ? o.value : totalAPremiar * ((o.pct||0)/100);
+      const caixinha = Number(o.caixinha)||0;
       return {
         position: i+1,
         pct: totalAPremiar>0 ? (value/totalAPremiar)*100 : 0,
-        value
+        value,
+        caixinha
       };
     });
   }
   return autoPcts.map((pct,i)=>({
     position: i+1,
     pct,
-    value: totalAPremiar * (pct/100)
+    value: totalAPremiar * (pct/100),
+    caixinha: 0
   }));
 }
 
@@ -897,7 +906,7 @@ function calcPremiacao(s){
 function calcStaffPayouts(s){
   const fin = getFinanceData(s);
   const staffCount = 1 + (fin.dealers||[]).length; // 1 floor + N dealers
-  const caixinhasTotal = (Number(fin.caixinhaCash)||0) + (Number(fin.caixinhaTorneio)||0);
+  const caixinhasTotal = (Number(fin.caixinhaCash)||0) + calcCaixinhaTorneioTotal(s);
   const share = staffCount>0 ? caixinhasTotal/staffCount : 0;
 
   const floor = { role:"Floor", name: fin.floorName||"—", base: Number(fin.floorCost)||0, share, total: (Number(fin.floorCost)||0)+share };
@@ -2487,6 +2496,37 @@ function renderStageDetail(sid){
             </label>`:""}
           </div>`
       }
+      ${(()=>{
+        // Live financial card — visible only when the stage is live and the player is inscribed
+        if(!live || !iAmIn || !CURRENT_USER_UID) return "";
+        const vals = getBuyinValues(s);
+        const rec  = getBuyinRecord(s, CURRENT_USER_UID);
+        const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+        const rows = [
+          {label:"Buy-in", qty:"", value: vals.buyin, show: true},
+          {label:"Rebuy Simples", qty:`× ${rec.rs}`, value: rec.rs*vals.rs, show: rec.rs>0},
+          {label:"Rebuy Duplo",   qty:`× ${rec.rd}`, value: rec.rd*vals.rd, show: rec.rd>0},
+          {label:"Add-on",        qty:"Sim",         value: vals.addon,     show: rec.addon},
+        ].filter(r=>r.show).map(r=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <span style="color:var(--muted);font-size:13px">${r.label}</span>
+              ${r.qty?`<span style="font-size:11px;color:var(--muted);margin-left:6px">${r.qty}</span>`:""}
+            </div>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:#fff">${fmtBRL(r.value)}</span>
+          </div>`).join("");
+        return `<div style="background:var(--surface);border:1px solid var(--yellow);border-radius:6px;padding:14px;margin-top:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span class="live-badge" style="font-size:9px;padding:2px 7px"><span class="live-dot" style="width:5px;height:5px"></span>LIVE</span>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:14px;letter-spacing:1px;color:var(--yellow);text-transform:uppercase">Seu Extrato</div>
+          </div>
+          ${rows||`<div style="color:var(--muted);font-size:13px;padding:4px 0">Apenas buy-in contabilizado.</div>`}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;margin-top:4px">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Total investido</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow)">${fmtBRL(total)}</span>
+          </div>
+        </div>`;
+      })()}
       <div style="display:flex;gap:8px">
         ${ins.length>0?`<button class="btn bo fw" style="padding:12px" data-share-ins="${s.id}">📤 Compartilhar Lista</button>`:""}
         ${s.address?`<button class="btn bo fw" style="padding:12px" onclick="openRouteModal(\`${s.address}\`)">🗺️ Traçar Rota</button>`:""}
@@ -3383,7 +3423,7 @@ function renderBuyinCustos(s){
           <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Caixinha Torneio</div>
           <div style="${valWrap}">
             <span style="${valPrefix}">R$</span>
-            <input id="bi-caixinha-torneio" type="number" inputmode="decimal" value="${fin.caixinhaTorneio}" style="${valStyle}"/>
+            <input id="bi-caixinha-torneio" type="number" inputmode="decimal" value="${calcCaixinhaTorneioTotal(s).toFixed(2)}" ${fin.prizeOverrides&&fin.prizeOverrides.length?`readonly style="${valStyle};opacity:0.6;cursor:not-allowed" title="Calculado automaticamente pela soma das caixinhas por posição (aba Premiação)"`:`style="${valStyle}"`}/>
           </div>
         </div>
       </div>
@@ -3406,31 +3446,42 @@ function renderBuyinPremiacao(s){
   const numPlayers = (s.inscriptions||[]).length;
   const potLiquido = calcPotLiquido(s);
   const premios = calcPremiacao(s);
-  const caixinhaTorneio = Number(fin.caixinhaTorneio)||0;
+  const caixinhaTorneio = calcCaixinhaTorneioTotal(s); // derived from per-position caixinhas
   const totalAPremiar = potLiquido - caixinhaTorneio;
 
   // Validation indicators
-  const sumPct = premios.reduce((sum,p)=>sum+p.pct,0);
+  const sumPct   = premios.reduce((sum,p)=>sum+p.pct,0);
   const sumValue = premios.reduce((sum,p)=>sum+p.value,0);
-  const pctOk = Math.abs(sumPct-100) < 0.01;
-  const valueOk = Math.abs(sumValue-totalAPremiar) < 0.5; // 50 cent tolerance for rounding
+  const sumCaixa = premios.reduce((sum,p)=>sum+(Number(p.caixinha)||0),0);
+  const pctOk   = Math.abs(sumPct-100) < 0.01;
+  const valueOk = Math.abs(sumValue-totalAPremiar) < 0.5;
 
   const rows = premios.map((p,i)=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow);width:28px;flex-shrink:0">${p.position}º</div>
-      <div style="width:75px;flex-shrink:0">
-        <div style="position:relative">
-          <input data-prize-pct="${i}" type="number" value="${p.pct}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 18px 6px 8px;color:#fff;font-size:13px;box-sizing:border-box"/>
-          <span style="position:absolute;right:8px;top:7px;color:var(--muted);font-size:12px">%</span>
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow);width:28px;flex-shrink:0">${p.position}º</div>
+        <div style="width:70px;flex-shrink:0">
+          <div style="position:relative">
+            <input data-prize-pct="${i}" type="number" inputmode="decimal" value="${p.pct.toFixed(2)}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 18px 6px 8px;color:#fff;font-size:12px;box-sizing:border-box"/>
+            <span style="position:absolute;right:6px;top:7px;color:var(--muted);font-size:11px">%</span>
+          </div>
         </div>
-      </div>
-      <div style="flex:1;min-width:0">
-        <div style="position:relative">
-          <span style="position:absolute;left:8px;top:7px;color:var(--muted);font-size:12px">R$</span>
-          <input data-prize-value="${i}" type="number" step="0.01" value="${p.value.toFixed(2)}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 8px 6px 28px;color:#fff;font-size:13px;font-weight:700;box-sizing:border-box;text-align:right"/>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Prêmio</div>
+          <div style="position:relative">
+            <span style="position:absolute;left:8px;top:7px;color:var(--muted);font-size:11px">R$</span>
+            <input data-prize-value="${i}" type="number" inputmode="decimal" step="0.01" value="${p.value.toFixed(2)}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 8px 6px 26px;color:#fff;font-size:13px;font-weight:700;box-sizing:border-box;text-align:right"/>
+          </div>
         </div>
+        <div style="width:90px;flex-shrink:0">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Caixinha</div>
+          <div style="position:relative">
+            <span style="position:absolute;left:8px;top:7px;color:var(--muted);font-size:11px">R$</span>
+            <input data-prize-caixa="${i}" type="number" inputmode="decimal" step="0.01" value="${(Number(p.caixinha)||0).toFixed(2)}" style="width:100%;background:var(--surface2);border:1px solid var(--yellow);border-radius:4px;padding:6px 6px 6px 26px;color:#fff;font-size:13px;font-weight:700;box-sizing:border-box;text-align:right"/>
+          </div>
+        </div>
+        ${premios.length>2?`<button data-prize-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:28px;height:28px;cursor:pointer;flex-shrink:0;font-size:12px">✕</button>`:""}
       </div>
-      ${premios.length>2?`<button data-prize-remove="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:30px;height:30px;cursor:pointer;flex-shrink:0;font-size:12px">✕</button>`:""}
     </div>`).join("");
 
   return `
@@ -3440,20 +3491,22 @@ function renderBuyinPremiacao(s){
       <div style="font-size:11px;color:var(--muted);margin-top:4px">${numPlayers} inscritos · Faixa ITM aplicada automaticamente</div>
     </div>
 
-    <!-- Caixinha Torneio — synced with Custos tab (same fin.caixinhaTorneio field) -->
+    <!-- Caixinha Torneio — read-only, derived as sum of per-position caixinhas -->
     <div class="card" style="margin-bottom:16px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin-bottom:8px">Caixinha Torneio</div>
-      <div style="position:relative;margin-bottom:8px">
-        <span style="position:absolute;left:9px;top:9px;color:var(--muted);font-size:13px">R$</span>
-        <input id="bi-caixinha-torneio-prem" type="number" value="${fin.caixinhaTorneio}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px 8px 30px;color:#fff;font-size:13px;box-sizing:border-box"/>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase">Caixinha Torneio</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--yellow)">${fmtBRL(caixinhaTorneio)}</div>
       </div>
-      <div style="font-size:11px;color:var(--muted)">Descontada do Pot Líquido antes da distribuição da premiação.</div>
+      <div style="font-size:11px;color:var(--muted)">Soma das caixinhas por posição — descontada do Pot Líquido antes da distribuição.</div>
       <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
         <span style="color:var(--muted);font-size:12px">Total a Premiar</span>
         <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${fmtBRL(totalAPremiar)}</span>
       </div>
     </div>
 
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;justify-content:space-between">
+      <span>Posição</span><span style="margin-right:98px">Prêmio</span><span>Caixinha</span>
+    </div>
     <div class="card" style="padding:0 12px">${rows}</div>
 
     <!-- Validation indicators -->
@@ -3467,10 +3520,13 @@ function renderBuyinPremiacao(s){
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:${valueOk?"var(--green)":"var(--red)"}">${valueOk?"✓":"⚠"} ${fmtBRL(sumValue)}</div>
       </div>
     </div>
+    ${sumCaixa>0?`<div style="margin-top:8px;background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Total Caixinhas</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${fmtBRL(sumCaixa)}</div>
+    </div>`:""}
 
     <div style="display:flex;gap:8px;margin-top:12px">
       <button id="bi-add-prize-pos" class="btn bo sm">＋ Adicionar Posição</button>
-
       <button id="bi-reset-prizes" class="btn bo sm" style="color:var(--muted)">↺ Recalcular Automático</button>
     </div>`;
 }
@@ -5619,59 +5675,55 @@ function bindEvents(){
   });
   // Editing Caixinha Torneio freezes the CURRENT prize values (whatever they
   // were — auto or already-overridden) as a fixed override first. This way the
-  // change in caixinha never silently rescales the prizes; instead, the totals
-  // fall out of sync and the validation indicators turn red, prompting the
-  // admin to adjust each position manually.
-  function freezeCurrentPrizesAsOverride(s){
-    const fin = getFinanceData(s);
-    if(!fin.prizeOverrides || !fin.prizeOverrides.length){
-      const current = calcPremiacao(s); // computed with the OLD caixinha value
-      fin.prizeOverrides = current.map(p=>({value:p.value}));
-    }
-  }
-
+  // Caixinha Cash still editable in Custos tab — synced with Cash Game screen
   document.getElementById("bi-caixinha-torneio")?.addEventListener("change", async function(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
-    freezeCurrentPrizesAsOverride(s);
-    getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
-    await saveFinanceData(); requestAnimationFrame(render);
-  });
-  // Same field, mirrored in the Premiação tab — both write to fin.caixinhaTorneio
-  document.getElementById("bi-caixinha-torneio-prem")?.addEventListener("change", async function(){
-    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
-    freezeCurrentPrizesAsOverride(s);
+    // Store in fin.caixinhaTorneio as fallback for auto mode (before any overrides exist)
     getFinanceData(s).caixinhaTorneio = parseFloat(this.value)||0;
     await saveFinanceData(); requestAnimationFrame(render);
   });
 
   // ── PREMIAÇÃO TAB EVENTS ─────────────────────────────────────────────────────
-  // Editing % converts it to a fixed R$ value (based on current totalAPremiar)
-  // and stores THAT as the override — so it stays fixed even if totalAPremiar
-  // later changes (e.g. caixinha torneio edited), making any mismatch visible
-  // in the validation indicators instead of being silently absorbed.
+  // Helper: build override array preserving both value AND caixinha from current state
+  function buildPrizeOverride(current){
+    return current.map(p=>({value:p.value, caixinha:Number(p.caixinha)||0}));
+  }
+
   document.querySelectorAll("[data-prize-pct]").forEach(el=>{
     el.addEventListener("change", async function(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.prizePct);
       const fin = getFinanceData(s);
-      const totalAPremiar = calcPotLiquido(s) - (Number(fin.caixinhaTorneio)||0);
+      const totalAPremiar = calcPotLiquido(s) - calcCaixinhaTorneioTotal(s);
       const current = calcPremiacao(s);
-      const override = current.map(p=>({value:p.value}));
+      const override = buildPrizeOverride(current);
       const newPct = parseFloat(this.value)||0;
       override[i].value = totalAPremiar * (newPct/100);
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
     });
   });
-  // Editing the R$ value directly — this IS the fixed value, stored as-is.
   document.querySelectorAll("[data-prize-value]").forEach(el=>{
     el.addEventListener("change", async function(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
       const i = parseInt(this.dataset.prizeValue);
       const fin = getFinanceData(s);
       const current = calcPremiacao(s);
-      const override = current.map(p=>({value:p.value}));
+      const override = buildPrizeOverride(current);
       override[i].value = parseFloat(this.value)||0;
+      fin.prizeOverrides = override;
+      await saveFinanceData(); requestAnimationFrame(render);
+    });
+  });
+  // New: caixinha per position — updates the derived caixinhaTorneio total
+  document.querySelectorAll("[data-prize-caixa]").forEach(el=>{
+    el.addEventListener("change", async function(){
+      const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+      const i = parseInt(this.dataset.prizeCaixa);
+      const fin = getFinanceData(s);
+      const current = calcPremiacao(s);
+      const override = buildPrizeOverride(current);
+      override[i].caixinha = parseFloat(this.value)||0;
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
     });
@@ -5682,7 +5734,7 @@ function bindEvents(){
       const i = parseInt(this.dataset.prizeRemove);
       const current = calcPremiacao(s);
       const fin = getFinanceData(s);
-      const override = current.map(p=>({value:p.value}));
+      const override = buildPrizeOverride(current);
       override.splice(i,1);
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
@@ -5692,8 +5744,8 @@ function bindEvents(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     const current = calcPremiacao(s);
     const fin = getFinanceData(s);
-    const override = current.map(p=>({value:p.value}));
-    override.push({value:0});
+    const override = buildPrizeOverride(current);
+    override.push({value:0, caixinha:0});
     fin.prizeOverrides = override;
     await saveFinanceData(); requestAnimationFrame(render);
   });
