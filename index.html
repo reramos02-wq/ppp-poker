@@ -3455,6 +3455,7 @@ function renderBuyinPremiacao(s){
   const sumCaixa = premios.reduce((sum,p)=>sum+(Number(p.caixinha)||0),0);
   const pctOk   = Math.abs(sumPct-100) < 0.01;
   const valueOk = Math.abs(sumValue-totalAPremiar) < 0.5;
+  const caixaOk  = Math.abs(sumCaixa-caixinhaTorneio) < 0.5;
 
   const rows = premios.map((p,i)=>`
     <div style="padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
@@ -3520,9 +3521,11 @@ function renderBuyinPremiacao(s){
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:${valueOk?"var(--green)":"var(--red)"}">${valueOk?"✓":"⚠"} ${fmtBRL(sumValue)}</div>
       </div>
     </div>
-    ${sumCaixa>0?`<div style="margin-top:8px;background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Total Caixinhas</div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${fmtBRL(sumCaixa)}</div>
+    ${sumCaixa>0?`<div style="display:flex;gap:10px;margin-top:8px">
+      <div style="flex:1;background:var(--surface2);border:1px solid ${caixaOk?"var(--green)":"var(--red)"};border-radius:6px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Total Caixinhas</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:${caixaOk?"var(--green)":"var(--red)"}">${caixaOk?"✓":"⚠"} ${fmtBRL(sumCaixa)}</div>
+      </div>
     </div>`:""}
 
     <div style="display:flex;gap:8px;margin-top:12px">
@@ -5716,6 +5719,8 @@ function bindEvents(){
     });
   });
   // New: caixinha per position — updates the derived caixinhaTorneio total
+  // When caixinha changes, we keep the % and recalculate the prize value on
+  // the new totalAPremiar so the "Soma dos Prêmios" indicator stays green.
   document.querySelectorAll("[data-prize-caixa]").forEach(el=>{
     el.addEventListener("change", async function(){
       const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
@@ -5724,6 +5729,12 @@ function bindEvents(){
       const current = calcPremiacao(s);
       const override = buildPrizeOverride(current);
       override[i].caixinha = parseFloat(this.value)||0;
+      // Recalculate all prize values on the NEW totalAPremiar
+      const newCaixinhaTot = override.reduce((sum,o)=>sum+(Number(o.caixinha)||0),0);
+      const newTotalAPremiar = calcPotLiquido(s) - newCaixinhaTot;
+      // Keep pcts, recalc values proportionally
+      const pcts = current.map(p=>p.pct);
+      override.forEach((o,idx)=>{ o.value = newTotalAPremiar * (pcts[idx]/100); });
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
     });
