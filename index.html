@@ -847,17 +847,49 @@ function calcPotLiquido(s){
 
 // ITM distribution table based on number of inscribed players.
 // Returns an array of percentages indexed by position (index 0 = 1st place).
-const ITM_TABLE = [
+// NL Hold'em ITM distribution
+const ITM_TABLE_NLH = [
   { max:12, pcts:[65,35] },
   { max:17, pcts:[50,30,20] },
   { max:22, pcts:[45,28,18,9] },
   { max:27, pcts:[42,27,17,9,5] },
   { max:32, pcts:[40,26,16,9,5,4] },
-  { max:40, pcts:[39,25,15,9,5,4,3] }, // 33–40 (max)
+  { max:40, pcts:[39,25,15,9,5,4,3] },
 ];
-function getITMPercents(numPlayers){
-  const tier = ITM_TABLE.find(t=>numPlayers<=t.max) || ITM_TABLE[ITM_TABLE.length-1];
-  return tier.pcts;
+// PKO (Knockout) ITM distribution — prizes only (KO bounties are separate)
+const ITM_TABLE_PKO = [
+  { max:12, pcts:[50,50] },
+  { max:17, pcts:[40,40,20] },
+  { max:22, pcts:[37,36,18,9] },
+  { max:27, pcts:[35,34,17,9,5] },
+  { max:32, pcts:[33,33,16,9,5,4] },
+  { max:40, pcts:[32,32,15,9,5,4,3] },
+];
+// Keep the old name for backward compatibility (used in calcPremiacao)
+const ITM_TABLE = ITM_TABLE_NLH;
+
+function getITMPercents(numPlayers, stageType){
+  const table = stageType==="knockout" ? ITM_TABLE_PKO : ITM_TABLE_NLH;
+  return (table.find(t=>numPlayers<=t.max) || table[table.length-1]).pcts;
+}
+
+// Default KO value per knockout (can be overridden per stage in fin.koValue)
+const DEFAULT_KO_VALUE = 25;
+
+// Total KO earnings for a player in a stage
+function calcKOEarnings(s, uid){
+  const fin = getFinanceData(s);
+  const koValue = Number(fin.koValue)||DEFAULT_KO_VALUE;
+  const result = (s.results||[]).find(r=>r.playerId===uid);
+  const kos = result ? (Number(result.knockouts)||0) : 0;
+  return kos * koValue;
+}
+
+// Total KO payout for the whole stage (sum across all players)
+function calcKOTotalPayout(s){
+  const fin = getFinanceData(s);
+  const koValue = Number(fin.koValue)||DEFAULT_KO_VALUE;
+  return (s.results||[]).reduce((sum,r)=>sum+(Number(r.knockouts)||0)*koValue,0);
 }
 
 // Calculate prize per position for a stage (NLH only).
@@ -879,7 +911,7 @@ function calcPremiacao(s){
   const caixinhaTorneio = calcCaixinhaTorneioTotal(s);
   const totalAPremiar = potLiquido - caixinhaTorneio;
   const numPlayers = (s.inscriptions||[]).length;
-  const autoPcts = getITMPercents(numPlayers);
+  const autoPcts = getITMPercents(numPlayers, s.type);
 
   if(fin.prizeOverrides && fin.prizeOverrides.length){
     return fin.prizeOverrides.map((o,i)=>{
@@ -3448,6 +3480,36 @@ function renderBuyinPremiacao(s){
   const premios = calcPremiacao(s);
   const caixinhaTorneio = calcCaixinhaTorneioTotal(s); // derived from per-position caixinhas
   const totalAPremiar = potLiquido - caixinhaTorneio;
+  const isPKO = s.type==="knockout";
+  const koValue = Number(fin.koValue)||DEFAULT_KO_VALUE;
+  const koTotal = isPKO ? calcKOTotalPayout(s) : 0;
+
+  // KO section (PKO only): list each player's KO count and earnings
+  const koSection = isPKO ? `
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase">🥊 Bounties (KO)</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${fmtBRL(koTotal)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:12px;color:var(--muted)">Valor por KO:</span>
+        <div style="position:relative;width:110px">
+          <span style="position:absolute;left:8px;top:8px;color:var(--muted);font-size:12px;pointer-events:none">R$</span>
+          <input id="bi-ko-value" type="number" inputmode="decimal" value="${koValue}" style="width:100%;background:var(--surface2);border:1px solid var(--yellow);border-radius:4px;padding:7px 8px 7px 26px;color:#fff;font-size:13px;font-weight:700;box-sizing:border-box"/>
+        </div>
+        <span style="font-size:11px;color:var(--muted)">(editável)</span>
+      </div>
+      ${(s.results||[]).filter(r=>Number(r.knockouts)>0).sort((a,b)=>a.position-b.position).map(r=>{
+        const pl = getP(r.playerId)||{nickname:"?"};
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border)">
+          <div style="font-size:13px;color:#fff">${pl.nickname||pl.name} <span style="color:var(--muted);font-size:11px">(${r.position}º)</span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--muted)">🥊 ${r.knockouts} × ${fmtBRL(koValue)}</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--yellow)">${fmtBRL(Number(r.knockouts)*koValue)}</span>
+          </div>
+        </div>`;
+      }).join("") || '<div style="color:var(--muted);font-size:12px;padding:6px 0">Nenhum resultado publicado ainda.</div>'}
+    </div>` : "";
 
   // Validation indicators
   const sumPct   = premios.reduce((sum,p)=>sum+p.pct,0);
@@ -3489,8 +3551,11 @@ function renderBuyinPremiacao(s){
     <div style="background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:12px 16px;margin-bottom:16px">
       <div style="font-size:12px;color:var(--muted)">Pot Líquido (base do cálculo)</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow)">${fmtBRL(potLiquido)}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">${numPlayers} inscritos · Faixa ITM aplicada automaticamente</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">${numPlayers} inscritos · Faixa ITM ${isPKO?"PKO":"NLH"} aplicada automaticamente</div>
+      ${isPKO&&koTotal>0?`<div style="font-size:11px;color:var(--yellow);margin-top:4px">🥊 Bounties: ${fmtBRL(koTotal)} (separados do ITM)</div>`:""}
     </div>
+
+    ${koSection}
 
     <!-- Caixinha Torneio — read-only, derived as sum of per-position caixinhas -->
     <div class="card" style="margin-bottom:16px">
@@ -3546,6 +3611,7 @@ function renderBuyinGeral(s){
   const potLiquido = calcPotLiquido(s);
   const staffPayouts = calcStaffPayouts(s);
   const results = s.results || [];
+  const isPKO = s.type==="knockout";
 
   // All UIDs to show: torneio inscribed + cash-game-only players
   const cg = getCashGameData(s);
@@ -3561,24 +3627,27 @@ function renderBuyinGeral(s){
     const totalTorneio = isCashOnly ? 0 : vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
     const result = results.find(r=>r.playerId===uid);
     const prize = result ? (premios.find(p=>p.position===result.position)?.value || 0) : 0;
+    const koEarnings = isPKO ? calcKOEarnings(s, uid) : 0;
 
     // Cash game saldo for this player
     const cashSaldo = getCashPlayerSaldo(s, uid); // null = em jogo / sem cash
 
-    // Saldo Final = Prêmio − Entrada Torneio + Saldo Cash (if any)
-    const saldoTorneio = prize - totalTorneio;
+    // Saldo Final = Prêmio + KO − Entrada Torneio + Saldo Cash (if any)
+    const saldoTorneio = prize + koEarnings - totalTorneio;
     const saldoFinal = saldoTorneio + (cashSaldo !== null ? cashSaldo : 0);
 
     const isPaid = !!rec.paid;
+    const tdS = "padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px";
 
     return `<tr style="${isCashOnly?"opacity:0.85":""}">
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px">${pl.nickname||pl.name}${isCashOnly?` <span style="font-size:10px;color:var(--green)">CG</span>`:""}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted);font-size:13px;text-align:center">${result?result.position+"º":"—"}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:#fff;font-size:13px;text-align:right">${isCashOnly?"—":fmtBRL(totalTorneio)}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);color:${prize>0?"var(--yellow)":"var(--muted)"};font-size:13px;text-align:right;font-weight:${prize>0?"700":"400"}">${prize>0?fmtBRL(prize):"—"}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${cashSaldo===null?"var(--muted)":cashSaldo<0?"var(--red)":cashSaldo>0?"var(--green)":"var(--muted)"}">${cashSaldo===null?"—":(cashSaldo>0?"+":"")+fmtBRL(cashSaldo)}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;text-align:right;font-weight:700;color:${saldoFinal<0?"var(--red)":saldoFinal>0?"var(--green)":"var(--muted)"}">${saldoFinal===0?"—":(saldoFinal>0?"+":"")+fmtBRL(saldoFinal)}</td>
-      <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:center">
+      <td style="${tdS};color:#fff">${pl.nickname||pl.name}${isCashOnly?` <span style="font-size:10px;color:var(--green)">CG</span>`:""}</td>
+      <td style="${tdS};color:var(--muted);text-align:center">${result?result.position+"º":"—"}</td>
+      <td style="${tdS};text-align:right">${isCashOnly?"—":fmtBRL(totalTorneio)}</td>
+      ${isPKO?`<td style="${tdS};text-align:right;color:${koEarnings>0?"var(--yellow)":"var(--muted)"};font-weight:${koEarnings>0?"700":"400"}">${koEarnings>0?fmtBRL(koEarnings):"—"}</td>`:""}
+      <td style="${tdS};color:${prize>0?"var(--yellow)":"var(--muted)"};text-align:right;font-weight:${prize>0?"700":"400"}">${prize>0?fmtBRL(prize):"—"}</td>
+      <td style="${tdS};text-align:right;font-weight:700;color:${cashSaldo===null?"var(--muted)":cashSaldo<0?"var(--red)":cashSaldo>0?"var(--green)":"var(--muted)"}">${cashSaldo===null?"—":(cashSaldo>0?"+":"")+fmtBRL(cashSaldo)}</td>
+      <td style="${tdS};text-align:right;font-weight:700;color:${saldoFinal<0?"var(--red)":saldoFinal>0?"var(--green)":"var(--muted)"}">${saldoFinal===0?"—":(saldoFinal>0?"+":"")+fmtBRL(saldoFinal)}</td>
+      <td style="${tdS};text-align:center">
         <input type="checkbox" data-paid-uid="${uid}" ${isPaid?"checked":""} style="width:18px;height:18px;cursor:pointer;accent-color:var(--yellow)"/>
       </td>
     </tr>`;
@@ -3609,6 +3678,7 @@ function renderBuyinGeral(s){
             <th style="${thStyle};text-align:left">Jogador</th>
             <th style="${thStyle};text-align:center">Pos.</th>
             <th style="${thStyle};text-align:right">Entrada</th>
+            ${isPKO?`<th style="${thStyle};text-align:right">🥊 KO</th>`:""}
             <th style="${thStyle};text-align:right">Prêmio</th>
             <th style="${thStyle};text-align:right">Saldo Cash</th>
             <th style="${thStyle};text-align:right">Saldo Final</th>
@@ -5751,6 +5821,12 @@ function bindEvents(){
       await saveFinanceData(); requestAnimationFrame(render);
     });
   });
+  document.getElementById("bi-ko-value")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    getFinanceData(s).koValue = parseFloat(this.value)||DEFAULT_KO_VALUE;
+    await saveFinanceData(); requestAnimationFrame(render);
+  });
+
   document.getElementById("bi-add-prize-pos")?.addEventListener("click", async()=>{
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
     const current = calcPremiacao(s);
