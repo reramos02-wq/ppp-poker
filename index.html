@@ -373,6 +373,20 @@ var _authTimeout = setTimeout(function(){
 </script>
 <div id="admin-modal"></div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<style>
+.clock-screen{background:#0a0a0a;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;position:fixed;inset:0;z-index:500;overflow-y:auto}
+.clock-timer{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(72px,20vw,160px);line-height:1;letter-spacing:-2px;color:#fff}
+.clock-timer.break{color:#F5A800}
+.clock-blinds{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(28px,7vw,56px);color:#F5A800;letter-spacing:1px}
+.clock-level{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(14px,3vw,22px);letter-spacing:3px;color:rgba(255,255,255,.5);text-transform:uppercase}
+.clock-stats{display:flex;gap:clamp(12px,4vw,40px);margin-top:10px;justify-content:center;flex-wrap:wrap}
+.clock-stat{text-align:center}
+.clock-stat-v{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(18px,5vw,36px);color:#fff}
+.clock-stat-l{font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,2vw,14px);letter-spacing:2px;color:rgba(255,255,255,.45);text-transform:uppercase}
+.clock-next{font-family:'Barlow Condensed',sans-serif;font-size:clamp(11px,2.5vw,18px);color:rgba(255,255,255,.45);margin-top:8px}
+.clock-bar{width:100%;max-width:600px;height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:12px auto 0;overflow:hidden}
+.clock-bar-fill{height:100%;background:var(--yellow);border-radius:2px;transition:width .5s linear}
+</style>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -754,6 +768,103 @@ const parseBRL = str => {
   const m = String(str).match(/R\$\s*([\d.,]+)/);
   return m ? parseFloat(m[1].replace(",",".")) : 0;
 };
+
+// Parse chip count from strings like "R$ 150 (20k fichas)" → 20000
+const parseChips = str => {
+  if(!str) return 0;
+  const m = String(str).match(/\((\d+(?:[.,]\d+)?)k/i);
+  if(m) return parseFloat(m[1].replace(",","."))*1000;
+  const m2 = String(str).match(/(\d+(?:[.,]\d+)?)\s*fichas/i);
+  if(m2) return parseFloat(m2[1].replace(",","."));
+  return 0;
+};
+
+// Default blind structure (per level: sb, bb, ante, duration in seconds)
+// ante=0 means no ante; isBreak=true means it's a break period
+const DEFAULT_BLIND_LEVELS = [
+  {sb:100,   bb:200,   ante:0,      dur:900, isBreak:false},
+  {sb:100,   bb:300,   ante:0,      dur:900, isBreak:false},
+  {sb:200,   bb:400,   ante:0,      dur:900, isBreak:false},
+  {sb:300,   bb:600,   ante:0,      dur:900, isBreak:false},
+  {sb:400,   bb:800,   ante:0,      dur:900, isBreak:false},
+  {sb:500,   bb:1000,  ante:0,      dur:900, isBreak:false},
+  {sb:600,   bb:1200,  ante:0,      dur:900, isBreak:false},
+  {sb:800,   bb:1600,  ante:0,      dur:900, isBreak:false},
+  {sb:0,     bb:0,     ante:0,      dur:900, isBreak:true },
+  {sb:1000,  bb:2000,  ante:2000,   dur:900, isBreak:false},
+  {sb:1500,  bb:3000,  ante:3000,   dur:900, isBreak:false},
+  {sb:2000,  bb:4000,  ante:4000,   dur:900, isBreak:false},
+  {sb:2500,  bb:5000,  ante:5000,   dur:900, isBreak:false},
+  {sb:3000,  bb:6000,  ante:6000,   dur:900, isBreak:false},
+  {sb:4000,  bb:8000,  ante:8000,   dur:900, isBreak:false},
+  {sb:5000,  bb:10000, ante:10000,  dur:900, isBreak:false},
+  {sb:6000,  bb:12000, ante:12000,  dur:900, isBreak:false},
+  {sb:8000,  bb:16000, ante:16000,  dur:900, isBreak:false},
+  {sb:10000, bb:20000, ante:20000,  dur:900, isBreak:false},
+  {sb:15000, bb:30000, ante:30000,  dur:900, isBreak:false},
+  {sb:20000, bb:40000, ante:40000,  dur:900, isBreak:false},
+  {sb:30000, bb:60000, ante:60000,  dur:900, isBreak:false},
+  {sb:40000, bb:80000, ante:80000,  dur:900, isBreak:false},
+  {sb:50000, bb:100000,ante:100000, dur:900, isBreak:false},
+  {sb:60000, bb:120000,ante:120000, dur:900, isBreak:false},
+  {sb:80000, bb:160000,ante:160000, dur:900, isBreak:false},
+  {sb:100000,bb:200000,ante:200000, dur:900, isBreak:false},
+  {sb:150000,bb:300000,ante:300000, dur:900, isBreak:false},
+];
+
+// Get blind levels for a stage (uses stage.blindLevels or the default)
+function getBlindLevels(s){
+  return (s.blindLevels && s.blindLevels.length) ? s.blindLevels : JSON.parse(JSON.stringify(DEFAULT_BLIND_LEVELS));
+}
+
+// Format chip count for display (100k, 2.5k, etc.)
+function fmtChips(n){
+  if(!n || n===0) return "0";
+  if(n>=1000000) return (n/1000000).toLocaleString("pt-BR",{maximumFractionDigits:1})+"M";
+  if(n>=1000)    return (n/1000).toLocaleString("pt-BR",{maximumFractionDigits:0})+"k";
+  return String(n);
+}
+
+// Get clock state for a stage — returns {levelIdx, elapsed, running, startTs, pausedAt}
+function getClockState(s){
+  return s.clock || {levelIdx:0, elapsed:0, running:false, startTs:null, pausedAt:null};
+}
+
+// Compute how many seconds have elapsed in the current level, based on timestamps.
+// This is computed from server time (startTs = Date.now() when admin pressed play),
+// so all clients see the same value regardless of when they load the page.
+function clockElapsed(cs){
+  if(!cs.running) return cs.elapsed||0;
+  const now = Date.now();
+  return (cs.elapsed||0) + Math.floor((now - (cs.startTs||now))/1000);
+}
+
+// Given elapsed seconds in a level, return {mm, ss} remaining
+function clockRemaining(level, elapsed){
+  const total = level.dur||900;
+  const rem = Math.max(0, total - elapsed);
+  return {mm: Math.floor(rem/60), ss: rem%60, total, rem};
+}
+
+// Calculate average stack
+function calcAvgStack(s){
+  const buyinChips  = parseChips(s.buyin);
+  const rebuyParts  = (s.rebuy||"").split("/");
+  const rsChips     = parseChips(rebuyParts[0]);
+  const addonChips  = parseChips(s.addon);
+  const records     = s.buyinData||[];
+  const ins         = s.inscriptions||[];
+  const totalRS     = records.reduce((sum,r)=>sum+(Number(r.rs)||0),0);
+  const totalRD     = records.reduce((sum,r)=>sum+(Number(r.rd)||0),0);
+  const totalAddon  = records.filter(r=>r.addon).length;
+  const numPlayers  = ins.length;
+  if(!numPlayers) return 0;
+  // RD gives double chips (same as rebuyParts[1] which has 40k fichas)
+  const rdChips = parseChips(rebuyParts[1]||rebuyParts[0]);
+  const total = numPlayers*buyinChips + totalRS*rsChips + totalRD*rdChips + totalAddon*addonChips;
+  return numPlayers>0 ? Math.round(total/numPlayers) : 0;
+}
+
 // Returns {buyin, rs, rd, addon} numeric values from a stage's structure strings.
 // rebuy field: "R$ 100 (20k) / R$ 180 (40k)" — first = RS, second = RD
 function getBuyinValues(s){
@@ -1048,6 +1159,7 @@ const DB = new Proxy(_DB, {
 
 // Navigation state
 let TAB           = "home";
+let CLOCK_STAGE_ID = null; // stage id for the blind clock view
 let EXPANDED      = null;
 let STAGE_DETAIL  = null;
 let MENU_OPEN     = false;
@@ -2180,6 +2292,7 @@ function renderNav(){
 }
 
 function renderPage(){
+  if(CLOCK_STAGE_ID) return renderClock();
   switch(TAB){
     case "home":    return renderHome();
     case "ranking": return renderRanking();
@@ -2510,6 +2623,7 @@ function renderStageDetail(sid){
         ${s.status==="upcoming"?`<button class="btn bo sm" data-toggle-ins="${s.id}" style="font-size:12px">${s.allowInscriptions===false?"🔓 Abrir Inscrições":"🔒 Fechar Inscrições"}</button>`:""}
         <button class="btn bo sm" data-buyin-mgmt="${s.id}" style="font-size:12px;border-color:var(--yellow);color:var(--yellow)">💰 Financeiro</button>
         <button class="btn bo sm" data-cashgame-mgmt="${s.id}" style="font-size:12px;border-color:var(--green);color:var(--green)">🃏 Cash Game</button>
+        <button class="btn bo sm" data-open-clock="${s.id}" style="font-size:12px;border-color:var(--blue);color:var(--blue)">⏱ Relógio</button>
       </div>
     </div>`:""}
 
@@ -2565,7 +2679,8 @@ function renderStageDetail(sid){
           </div>
         </div>`;
       })()}
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${live?`<button class="btn fw" data-open-clock="${s.id}" style="padding:12px;background:var(--blue);border:none;color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;border-radius:4px;cursor:pointer;flex:1">⏱ Ver Relógio</button>`:""}
         ${ins.length>0?`<button class="btn bo fw" style="padding:12px" data-share-ins="${s.id}">📤 Compartilhar Lista</button>`:""}
         ${s.address?`<button class="btn bo fw" style="padding:12px" onclick="openRouteModal(\`${s.address}\`)">🗺️ Traçar Rota</button>`:""}
       </div>
@@ -4100,6 +4215,128 @@ let FT_PRIZE_VIEW = false; // true = showing FT Prize table (all users)
 let DIAGNOSE_EDIT_UID = null;
 
 // ── RANKING FINANCEIRO (Admin only) ──────────────────────────────────────────
+// ── BLIND CLOCK ───────────────────────────────────────────────────────────────
+
+function renderClock(){
+  const s = DB.stages.find(x=>x.id===CLOCK_STAGE_ID);
+  if(!s) return `<div class="clock-screen"><div style="color:#fff">Etapa não encontrada.</div></div>`;
+
+  const levels = getBlindLevels(s);
+  const cs     = getClockState(s);
+  const idx    = Math.min(cs.levelIdx||0, levels.length-1);
+  const level  = levels[idx];
+  const elapsed= clockElapsed(cs);
+  const {mm,ss,rem,total} = clockRemaining(level, elapsed);
+  const pct    = total>0 ? Math.max(0, Math.min(100, (rem/total)*100)) : 0;
+  const nextLv = levels[idx+1];
+  const isBreak= !!level.isBreak;
+  const avgStack = calcAvgStack(s);
+  const ins = s.inscriptions||[];
+  const records = s.buyinData||[];
+  const totalRS = records.reduce((sum,r)=>sum+(Number(r.rs)||0),0);
+  const totalRD = records.reduce((sum,r)=>sum+(Number(r.rd)||0),0);
+  const totalAddon = records.filter(r=>r.addon).length;
+  const totalEntries = ins.length;
+  const totalRebuys  = totalRS+totalRD;
+
+  const fmtTime = (m,sc) => `${String(m).padStart(2,"0")}:${String(sc).padStart(2,"0")}`;
+  const blindLabel = isBreak ? "INTERVALO" : `${fmtChips(level.sb)} / ${fmtChips(level.bb)}${level.ante?` ANTE ${fmtChips(level.ante)}`:""}`;
+  const nextLabel = nextLv ? (nextLv.isBreak ? "→ Intervalo" : `→ ${fmtChips(nextLv.sb)}/${fmtChips(nextLv.bb)}${nextLv.ante?" ante "+fmtChips(nextLv.ante):""}`) : "Último nível";
+  const nonBreakIdx = levels.slice(0,idx+1).filter(l=>!l.isBreak).length;
+  const nextBreak = levels.slice(idx+1).find(l=>l.isBreak);
+  const levelsUntilBreak = nextBreak ? levels.slice(idx+1,levels.indexOf(nextBreak)).length+1 : null;
+
+  // Admin controls
+  const adminBar = IS_ADMIN ? `
+    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;justify-content:center">
+      ${cs.running
+        ? `<button id="clk-pause" style="background:rgba(231,76,60,.2);border:1px solid #e74c3c;color:#e74c3c;padding:10px 24px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">⏸ Pausar</button>`
+        : `<button id="clk-play"  style="background:rgba(46,204,113,.2);border:1px solid #2ecc71;color:#2ecc71;padding:10px 24px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">▶ Iniciar</button>`}
+      <button id="clk-prev" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:10px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">◀ Anterior</button>
+      <button id="clk-next" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:10px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">Próximo ▶</button>
+      <button id="clk-edit" style="background:rgba(245,168,0,.12);border:1px solid rgba(245,168,0,.4);color:#F5A800;padding:10px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;cursor:pointer">⚙ Estrutura</button>
+    </div>` : "";
+
+  return `<div class="clock-screen" id="clock-screen">
+    <button id="clk-close" style="position:fixed;top:14px;right:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;z-index:600">✕</button>
+
+    <!-- Logo + stage -->
+    <div style="text-align:center;margin-bottom:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(13px,3vw,22px);letter-spacing:3px;color:rgba(255,255,255,.6);text-transform:uppercase">${s.name} · ${s.type==="knockout"?"PKO":"NLH"}</div>
+    </div>
+
+    <!-- Level badge -->
+    <div class="clock-level" style="margin-bottom:6px">${isBreak?"BREAK":"Round "+(idx+1-levels.slice(0,idx+1).filter(l=>l.isBreak).length)}</div>
+
+    <!-- Blinds -->
+    <div class="clock-blinds ${isBreak?"break":""}">${blindLabel}</div>
+
+    <!-- Big timer -->
+    <div class="clock-timer ${isBreak?"break":""}" id="clk-display">${fmtTime(mm,ss)}</div>
+
+    <!-- Progress bar -->
+    <div class="clock-bar"><div class="clock-bar-fill" id="clk-bar" style="width:${pct}%"></div></div>
+
+    <!-- Next level -->
+    <div class="clock-next">${nextLabel}${levelsUntilBreak?` · Break em ${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}`:""}</div>
+
+    <!-- Stats -->
+    <div class="clock-stats" style="margin-top:20px">
+      <div class="clock-stat"><div class="clock-stat-v">${totalEntries}</div><div class="clock-stat-l">Entradas</div></div>
+      <div class="clock-stat"><div class="clock-stat-v">${totalRebuys}</div><div class="clock-stat-l">Rebuys</div></div>
+      <div class="clock-stat"><div class="clock-stat-v">${totalAddon}</div><div class="clock-stat-l">Add-ons</div></div>
+      ${avgStack>0?`<div class="clock-stat"><div class="clock-stat-v">${fmtChips(avgStack)}</div><div class="clock-stat-l">Avg Stack</div></div>`:""}
+    </div>
+
+    ${adminBar}
+  </div>`;
+}
+
+function renderBlindEditor(s){
+  const levels = getBlindLevels(s);
+  const fmtDur = d => `${Math.round((d||900)/60)}min`;
+
+  const rows = levels.map((lv,i)=>`
+    <div style="display:grid;grid-template-columns:28px 1fr 1fr 1fr 70px 34px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--muted);text-align:center">
+        <input type="checkbox" class="blv-chk" data-blv="${i}" style="cursor:pointer;accent-color:var(--yellow)"/>
+      </div>
+      ${lv.isBreak
+        ? `<div colspan="3" style="grid-column:2/5;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--yellow)">☕ BREAK</div>`
+        : `<input data-blv-sb="${i}" type="number" value="${lv.sb}" placeholder="SB" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:#fff;font-size:12px;width:100%;box-sizing:border-box"/>
+           <input data-blv-bb="${i}" type="number" value="${lv.bb}" placeholder="BB" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:#fff;font-size:12px;width:100%;box-sizing:border-box"/>
+           <input data-blv-ante="${i}" type="number" value="${lv.ante||0}" placeholder="Ante" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:#fff;font-size:12px;width:100%;box-sizing:border-box"/>`}
+      <input data-blv-dur="${i}" type="number" value="${Math.round((lv.dur||900)/60)}" placeholder="min" style="background:var(--surface2);border:1px solid ${lv.isBreak?"var(--yellow)":"var(--border)"};border-radius:4px;padding:5px 7px;color:#fff;font-size:12px;width:100%;box-sizing:border-box" title="Duração em minutos"/>
+      <button data-blv-del="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:12px">✕</button>
+    </div>`).join("");
+
+  return `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;color:#fff;margin-bottom:4px">⚙ Estrutura de Blinds</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${s.name}</div>
+    <div style="display:grid;grid-template-columns:28px 1fr 1fr 1fr 70px 34px;gap:6px;margin-bottom:6px">
+      <div></div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">SB</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">BB</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Ante</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Duração</div>
+      <div></div>
+    </div>
+    <div id="blv-rows">${rows}</div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button id="blv-add-blind" class="btn bo sm">＋ Nível</button>
+      <button id="blv-add-break" class="btn bo sm" style="color:var(--yellow)">☕ Break</button>
+      <div id="blv-bulk-dur-wrap" style="display:flex;align-items:center;gap:6px;margin-left:auto">
+        <span style="font-size:12px;color:var(--muted)">Selecionados:</span>
+        <input id="blv-bulk-dur" type="number" placeholder="min" style="width:60px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:#fff;font-size:12px"/>
+        <button id="blv-bulk-apply" class="btn bo sm">Aplicar</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="blv-save" class="btn by fw">✓ Salvar</button>
+      <button id="blv-cancel" class="btn bo fw">Cancelar</button>
+    </div>`;
+}
+
 function renderFinancialRanking(){
   const data = calcFinancialRanking();
   const thS = "padding:7px 6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;white-space:nowrap";
@@ -5284,6 +5521,154 @@ function bindEvents(){
       render();
     });
   });
+
+  // ── CLOCK EVENTS ────────────────────────────────────────────────────────────
+  // Open clock from stage detail (admin bar or "Ver Relógio" button)
+  document.querySelectorAll("[data-open-clock]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      CLOCK_STAGE_ID = btn.dataset.openClock;
+      render();
+      // Request wake lock so screen doesn't turn off during play
+      if(navigator.wakeLock){
+        navigator.wakeLock.request("screen").then(wl=>{
+          window._wl = wl;
+        }).catch(()=>{});
+      }
+    });
+  });
+
+  // Close clock — release wake lock
+  document.getElementById("clk-close")?.addEventListener("click",()=>{
+    if(window._wl){ window._wl.release().catch(()=>{}); window._wl=null; }
+    CLOCK_STAGE_ID = null;
+    render();
+  });
+
+  // Admin: play / pause / prev / next
+  async function saveClockState(s){
+    try{
+      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        stages: sanitizeStages(DB.stages), updatedAt: serverTimestamp()
+      });
+    } catch(e){ showToast("Erro: "+e.message,"red"); }
+  }
+
+  document.getElementById("clk-play")?.addEventListener("click", async()=>{
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+    const cs=getClockState(s);
+    s.clock = {...cs, running:true, startTs:Date.now()};
+    await saveClockState(s); render();
+  });
+
+  document.getElementById("clk-pause")?.addEventListener("click", async()=>{
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+    const cs=getClockState(s);
+    const elapsed=clockElapsed(cs);
+    s.clock = {...cs, running:false, elapsed, startTs:null};
+    await saveClockState(s); render();
+  });
+
+  document.getElementById("clk-prev")?.addEventListener("click", async()=>{
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+    const cs=getClockState(s);
+    const newIdx=Math.max(0,(cs.levelIdx||0)-1);
+    s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
+    await saveClockState(s); render();
+  });
+
+  document.getElementById("clk-next")?.addEventListener("click", async()=>{
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+    const levels=getBlindLevels(s);
+    const cs=getClockState(s);
+    const newIdx=Math.min((cs.levelIdx||0)+1, levels.length-1);
+    s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
+    await saveClockState(s); render();
+  });
+
+  // Open blind structure editor
+  document.getElementById("clk-edit")?.addEventListener("click",()=>{
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+    const el=document.getElementById("admin-modal"); if(!el) return;
+    el.innerHTML=`<div class="ov" style="z-index:1200;align-items:flex-start;padding:16px;overflow-y:auto"><div class="modal" style="max-width:500px;width:100%">${renderBlindEditor(s)}</div></div>`;
+    bindBlindEditorEvents(s);
+  });
+
+  function bindBlindEditorEvents(s){
+    document.getElementById("blv-cancel")?.addEventListener("click", closeAdminModal);
+    document.getElementById("blv-add-blind")?.addEventListener("click",()=>{
+      const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:false});
+      s.blindLevels=levels; closeAdminModal();
+      document.getElementById("clk-edit")?.click();
+    });
+    document.getElementById("blv-add-break")?.addEventListener("click",()=>{
+      const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:true});
+      s.blindLevels=levels; closeAdminModal();
+      document.getElementById("clk-edit")?.click();
+    });
+    document.querySelectorAll("[data-blv-del]").forEach(btn=>{
+      btn.addEventListener("click",()=>{
+        const levels=getBlindLevels(s); levels.splice(parseInt(btn.dataset.blvDel),1);
+        s.blindLevels=levels; closeAdminModal();
+        document.getElementById("clk-edit")?.click();
+      });
+    });
+    document.getElementById("blv-bulk-apply")?.addEventListener("click",()=>{
+      const dur=(parseInt(document.getElementById("blv-bulk-dur")?.value)||15)*60;
+      const levels=getBlindLevels(s);
+      document.querySelectorAll(".blv-chk:checked").forEach(chk=>{
+        const i=parseInt(chk.dataset.blv);
+        if(levels[i]) levels[i].dur=dur;
+      });
+      s.blindLevels=levels; closeAdminModal();
+      document.getElementById("clk-edit")?.click();
+    });
+    document.getElementById("blv-save")?.addEventListener("click", async()=>{
+      const levels=getBlindLevels(s);
+      // Read all values from form
+      document.querySelectorAll("[data-blv-sb]").forEach(inp=>{const i=parseInt(inp.dataset.blvSb);if(levels[i])levels[i].sb=parseInt(inp.value)||0;});
+      document.querySelectorAll("[data-blv-bb]").forEach(inp=>{const i=parseInt(inp.dataset.blvBb);if(levels[i])levels[i].bb=parseInt(inp.value)||0;});
+      document.querySelectorAll("[data-blv-ante]").forEach(inp=>{const i=parseInt(inp.dataset.blvAnte);if(levels[i])levels[i].ante=parseInt(inp.value)||0;});
+      document.querySelectorAll("[data-blv-dur]").forEach(inp=>{const i=parseInt(inp.dataset.blvDur);if(levels[i])levels[i].dur=(parseInt(inp.value)||15)*60;});
+      s.blindLevels=levels;
+      await saveClockState(s);
+      closeAdminModal(); render();
+      showToast("Estrutura de blinds salva ✓","green");
+    });
+  }
+
+  // Live tick — updates the display every second without full re-render
+  if(CLOCK_STAGE_ID){
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID);
+    if(s){
+      const cs=getClockState(s);
+      const levels=getBlindLevels(s);
+      const idx=Math.min(cs.levelIdx||0,levels.length-1);
+      const level=levels[idx];
+      if(cs.running){
+        const tick=()=>{
+          if(!CLOCK_STAGE_ID) return; // closed
+          const el=document.getElementById("clk-display");
+          const bar=document.getElementById("clk-bar");
+          if(!el){ return; } // navigated away
+          const elapsed=clockElapsed(cs);
+          const {mm,ss,rem,total}=clockRemaining(level,elapsed);
+          el.textContent=String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+          if(bar) bar.style.width=Math.max(0,Math.min(100,(rem/total)*100))+"%";
+          // Auto-advance when timer hits 0
+          if(rem<=0 && CLOCK_STAGE_ID && IS_ADMIN){
+            const newIdx=Math.min(idx+1,levels.length-1);
+            if(newIdx!==idx){
+              s.clock={levelIdx:newIdx,elapsed:0,running:true,startTs:Date.now()};
+              saveClockState(s).then(()=>render());
+              return;
+            }
+          }
+          if(rem>0) setTimeout(tick,1000);
+        };
+        setTimeout(tick,1000);
+      }
+    }
+  }
 
   document.getElementById("btn-cg-back")?.addEventListener("click",()=>{
     const sid = CASHGAME_MGMT;
