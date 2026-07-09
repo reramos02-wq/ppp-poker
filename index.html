@@ -840,9 +840,15 @@ function getFTContribution(s){
   return calcTaxaFT(s);
 }
 
-// POT LÍQUIDO = POT FINAL − Taxa FT (used as base for ITM prize %)
+// POT LÍQUIDO = base para cálculo do ITM
+// NLH: POT FINAL − Taxa FT
+// PKO: POT FINAL − Taxa FT − Total KO Bounties
+//      (os bounties saem como pool separado antes de distribuir o ITM)
 function calcPotLiquido(s){
-  return calcPotFinal(s) - calcTaxaFT(s);
+  const potFinal = calcPotFinal(s);
+  const taxaFT   = calcTaxaFT(s);
+  const koDeduct = s.type==="knockout" ? calcKOTotalPayout(s) : 0;
+  return potFinal - taxaFT - koDeduct;
 }
 
 // ITM distribution table based on number of inscribed players.
@@ -3468,6 +3474,7 @@ function renderBuyinCustos(s){
       <div class="row" style="justify-content:space-between;padding:4px 0"><span style="color:var(--muted);font-size:13px">Custos Fixos</span><span style="color:var(--red);font-weight:600">− ${fmtBRL(custosFixos)}</span></div>
       <div class="row" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span style="color:#fff;font-weight:700">POT FINAL</span><span style="color:var(--yellow);font-weight:900;font-size:16px">${fmtBRL(potFinal)}</span></div>
       <div class="row" style="justify-content:space-between;padding:4px 0"><span style="color:var(--muted);font-size:13px">Taxa FT (15%)</span><span style="color:var(--red);font-weight:600">− ${fmtBRL(taxaFT)}</span></div>
+      ${s.type==="knockout"?`<div class="row" style="justify-content:space-between;padding:4px 0"><span style="color:var(--muted);font-size:13px">🥊 KO Bounties</span><span style="color:var(--red);font-weight:600">− ${fmtBRL(calcKOTotalPayout(s))}</span></div>`:""}
       <div class="row" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span style="color:#fff;font-weight:700">POT LÍQUIDO</span><span style="color:var(--yellow);font-weight:900;font-size:18px">${fmtBRL(potLiquido)}</span></div>
     </div>`;
 }
