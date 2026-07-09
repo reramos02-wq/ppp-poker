@@ -374,18 +374,68 @@ var _authTimeout = setTimeout(function(){
 <div id="admin-modal"></div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <style>
-.clock-screen{background:#0a0a0a;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;position:fixed;inset:0;z-index:500;overflow-y:auto}
-.clock-timer{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(72px,20vw,160px);line-height:1;letter-spacing:-2px;color:#fff}
-.clock-timer.break{color:#F5A800}
-.clock-blinds{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(28px,7vw,56px);color:#F5A800;letter-spacing:1px}
-.clock-level{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(14px,3vw,22px);letter-spacing:3px;color:rgba(255,255,255,.5);text-transform:uppercase}
-.clock-stats{display:flex;gap:clamp(12px,4vw,40px);margin-top:10px;justify-content:center;flex-wrap:wrap}
-.clock-stat{text-align:center}
-.clock-stat-v{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(18px,5vw,36px);color:#fff}
-.clock-stat-l{font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,2vw,14px);letter-spacing:2px;color:rgba(255,255,255,.45);text-transform:uppercase}
-.clock-next{font-family:'Barlow Condensed',sans-serif;font-size:clamp(11px,2.5vw,18px);color:rgba(255,255,255,.45);margin-top:8px}
-.clock-bar{width:100%;max-width:600px;height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:12px auto 0;overflow:hidden}
-.clock-bar-fill{height:100%;background:var(--yellow);border-radius:2px;transition:width .5s linear}
+/* ── Clock screen wrapper ── */
+.clock-screen{
+  background:#080808;position:fixed;inset:0;z-index:500;
+  display:flex;align-items:center;justify-content:center;
+  padding:12px 16px;box-sizing:border-box;overflow:hidden;
+}
+
+/* ── Portrait layout (default) ── */
+.clk-portrait{
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  width:100%;max-width:520px;
+}
+.clk-landscape{ display:none; }
+
+/* ── Landscape layout (phones/tablets rotated, max-height guard) ── */
+@media (orientation:landscape) and (max-height:520px){
+  .clock-screen{ align-items:stretch; }
+  .clk-portrait{ display:none; }
+  .clk-landscape{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+    align-items:center;
+    width:100%;max-width:1000px;margin:0 auto;
+  }
+  .clk-land-left{ display:flex;flex-direction:column;justify-content:center; }
+  .clk-land-right{ display:flex;flex-direction:column;align-items:center;justify-content:center; }
+}
+
+/* ── Typography tokens ── */
+.clock-timer{
+  font-family:'Barlow Condensed',sans-serif;font-weight:900;
+  font-size:clamp(72px,22vw,160px);line-height:.9;letter-spacing:-3px;color:#fff;
+}
+.clock-timer.break-color{ color:#F5A800; }
+.clock-blinds-label{
+  font-family:'Barlow Condensed',sans-serif;font-weight:900;
+  font-size:clamp(26px,7vw,52px);color:#F5A800;letter-spacing:1px;line-height:1;
+}
+.clock-blinds-label.break-color{ color:#fff; }
+.clock-level-label{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  font-size:clamp(11px,2.5vw,18px);letter-spacing:4px;
+  color:rgba(255,255,255,.4);text-transform:uppercase;
+}
+.clock-next-label{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:clamp(10px,2vw,16px);color:rgba(255,255,255,.4);
+}
+.clock-stat-v{
+  font-family:'Barlow Condensed',sans-serif;font-weight:900;
+  font-size:clamp(18px,5vw,34px);color:#fff;line-height:1;
+}
+.clock-stat-l{
+  font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.8vw,13px);
+  letter-spacing:2px;color:rgba(255,255,255,.38);text-transform:uppercase;margin-top:2px;
+}
+.clock-bar{
+  width:100%;max-width:600px;height:4px;
+  background:rgba(255,255,255,.1);border-radius:2px;margin:10px auto 0;overflow:hidden;
+}
+.clock-bar-fill{ height:100%;background:#F5A800;border-radius:2px;transition:width .8s linear; }
 </style>
 
 <script type="module">
@@ -2443,6 +2493,7 @@ function renderHome(){
         <span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</span>
       </div>
       ${isLive(next)?`<div style="margin-top:8px;overflow-x:auto;white-space:nowrap;padding-bottom:4px">${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:'?',nickname:'?'};return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 8px 3px 3px;margin-right:4px;font-size:11px;color:#fff;white-space:nowrap">'+AV(uid)+pl.nickname+'</span>';}).join('')}</div>`:""}
+      ${isLive(next)?`<button data-open-clock="${next.id}" style="width:100%;margin-top:8px;background:rgba(52,152,219,.15);border:1px solid var(--blue);color:var(--blue);padding:9px 14px;border-radius:5px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:1px;cursor:pointer;text-align:center" onclick="event.stopPropagation()">⏱ Ver Relógio de Blinds</button>`:""}
     </div>`:""}
     ${geralTop.length?`<div class="mb10">
       <button id="btn-ft-prize-home" style="width:100%;background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,215,0,0.05));border:1px solid #FFD700;border-radius:6px;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -4247,48 +4298,86 @@ function renderClock(){
   const levelsUntilBreak = nextBreak ? levels.slice(idx+1,levels.indexOf(nextBreak)).length+1 : null;
 
   // Admin controls
+  const btnStyle = (bg,border,color) =>
+    `background:${bg};border:1px solid ${border};color:${color};padding:9px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;cursor:pointer;letter-spacing:.5px`;
+
   const adminBar = IS_ADMIN ? `
-    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;justify-content:center">
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;justify-content:center">
       ${cs.running
-        ? `<button id="clk-pause" style="background:rgba(231,76,60,.2);border:1px solid #e74c3c;color:#e74c3c;padding:10px 24px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">⏸ Pausar</button>`
-        : `<button id="clk-play"  style="background:rgba(46,204,113,.2);border:1px solid #2ecc71;color:#2ecc71;padding:10px 24px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">▶ Iniciar</button>`}
-      <button id="clk-prev" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:10px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">◀ Anterior</button>
-      <button id="clk-next" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:10px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;cursor:pointer">Próximo ▶</button>
-      <button id="clk-edit" style="background:rgba(245,168,0,.12);border:1px solid rgba(245,168,0,.4);color:#F5A800;padding:10px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;cursor:pointer">⚙ Estrutura</button>
+        ? `<button id="clk-pause" style="${btnStyle("rgba(231,76,60,.18)","#e74c3c","#e74c3c")}">⏸ Pausar</button>`
+        : `<button id="clk-play"  style="${btnStyle("rgba(46,204,113,.18)","#2ecc71","#2ecc71")}">▶ Iniciar</button>`}
+      <button id="clk-prev"  style="${btnStyle("rgba(255,255,255,.07)","rgba(255,255,255,.2)","#fff")}">◀</button>
+      <button id="clk-next"  style="${btnStyle("rgba(255,255,255,.07)","rgba(255,255,255,.2)","#fff")}">▶</button>
+      <button id="clk-reset" style="${btnStyle("rgba(255,165,0,.12)","rgba(255,165,0,.4)","#FFA500")}">↺ Reset</button>
+      <button id="clk-edit"  style="${btnStyle("rgba(245,168,0,.1)","rgba(245,168,0,.35)","#F5A800")}">⚙ Estrutura</button>
     </div>` : "";
 
+  // Shared inner markup used in both portrait and landscape
+  const statRow = `<div style="display:flex;gap:clamp(14px,4vw,40px);justify-content:center;flex-wrap:wrap">
+    <div style="text-align:center"><div class="clock-stat-v">${totalEntries}</div><div class="clock-stat-l">Entradas</div></div>
+    <div style="text-align:center"><div class="clock-stat-v">${totalRebuys}</div><div class="clock-stat-l">Rebuys</div></div>
+    <div style="text-align:center"><div class="clock-stat-v">${totalAddon}</div><div class="clock-stat-l">Add-ons</div></div>
+    ${avgStack>0?`<div style="text-align:center"><div class="clock-stat-v">${fmtChips(avgStack)}</div><div class="clock-stat-l">Avg Stack</div></div>`:""}
+  </div>`;
+
   return `<div class="clock-screen" id="clock-screen">
-    <button id="clk-close" style="position:fixed;top:14px;right:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;z-index:600">✕</button>
+    <!-- Close button (fixed, always visible) -->
+    <button id="clk-close" style="position:fixed;top:12px;right:14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;z-index:600;flex-shrink:0">✕</button>
 
-    <!-- Logo + stage -->
-    <div style="text-align:center;margin-bottom:12px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(13px,3vw,22px);letter-spacing:3px;color:rgba(255,255,255,.6);text-transform:uppercase">${s.name} · ${s.type==="knockout"?"PKO":"NLH"}</div>
+    <!-- ═══ PORTRAIT ═══ -->
+    <div class="clk-portrait">
+      <!-- Logo + name -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <img src="${LOGO_48}" width="36" height="36" alt="PPP Poker" style="display:block;flex-shrink:0"/>
+        <div style="text-align:left">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(12px,3.5vw,18px);letter-spacing:2px;color:rgba(255,255,255,.75);text-transform:uppercase;line-height:1.1">${s.name}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,2vw,12px);letter-spacing:3px;color:rgba(255,255,255,.3);text-transform:uppercase">${s.type==="knockout"?"PKO":"NL Hold'em"}</div>
+        </div>
+      </div>
+      <!-- Round label -->
+      <div class="clock-level-label" style="margin-bottom:4px">${isBreak?"☕ BREAK":"Round "+(idx+1-levels.slice(0,idx+1).filter(l=>l.isBreak).length)}</div>
+      <!-- Blinds -->
+      <div class="clock-blinds-label ${isBreak?"break-color":""}">${blindLabel}</div>
+      <!-- Big timer -->
+      <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display">${fmtTime(mm,ss)}</div>
+      <!-- Progress bar -->
+      <div class="clock-bar"><div class="clock-bar-fill" id="clk-bar" style="width:${pct}%"></div></div>
+      <!-- Next + break info -->
+      <div class="clock-next-label" style="margin-top:6px">${nextLabel}${levelsUntilBreak?` · Break em ${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}`:""}</div>
+      <!-- Stats -->
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);width:100%">${statRow}</div>
+      ${adminBar}
     </div>
 
-    <!-- Level badge -->
-    <div class="clock-level" style="margin-bottom:6px">${isBreak?"BREAK":"Round "+(idx+1-levels.slice(0,idx+1).filter(l=>l.isBreak).length)}</div>
-
-    <!-- Blinds -->
-    <div class="clock-blinds ${isBreak?"break":""}">${blindLabel}</div>
-
-    <!-- Big timer -->
-    <div class="clock-timer ${isBreak?"break":""}" id="clk-display">${fmtTime(mm,ss)}</div>
-
-    <!-- Progress bar -->
-    <div class="clock-bar"><div class="clock-bar-fill" id="clk-bar" style="width:${pct}%"></div></div>
-
-    <!-- Next level -->
-    <div class="clock-next">${nextLabel}${levelsUntilBreak?` · Break em ${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}`:""}</div>
-
-    <!-- Stats -->
-    <div class="clock-stats" style="margin-top:20px">
-      <div class="clock-stat"><div class="clock-stat-v">${totalEntries}</div><div class="clock-stat-l">Entradas</div></div>
-      <div class="clock-stat"><div class="clock-stat-v">${totalRebuys}</div><div class="clock-stat-l">Rebuys</div></div>
-      <div class="clock-stat"><div class="clock-stat-v">${totalAddon}</div><div class="clock-stat-l">Add-ons</div></div>
-      ${avgStack>0?`<div class="clock-stat"><div class="clock-stat-v">${fmtChips(avgStack)}</div><div class="clock-stat-l">Avg Stack</div></div>`:""}
+    <!-- ═══ LANDSCAPE ═══ -->
+    <div class="clk-landscape">
+      <!-- Left column: logo + level + blinds + next + stats -->
+      <div class="clk-land-left">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <img src="${LOGO_48}" width="32" height="32" alt="PPP Poker" style="display:block;flex-shrink:0"/>
+          <div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(10px,2vw,15px);letter-spacing:2px;color:rgba(255,255,255,.75);text-transform:uppercase;line-height:1.1">${s.name}</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.4vw,11px);letter-spacing:3px;color:rgba(255,255,255,.3);text-transform:uppercase">${s.type==="knockout"?"PKO":"NL Hold'em"}</div>
+          </div>
+        </div>
+        <div class="clock-level-label" style="margin-bottom:4px;font-size:clamp(10px,1.8vw,15px)">${isBreak?"☕ BREAK":"Round "+(idx+1-levels.slice(0,idx+1).filter(l=>l.isBreak).length)}</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(20px,5vw,42px);color:${isBreak?"#fff":"#F5A800"};line-height:1;margin-bottom:4px">${blindLabel}</div>
+        <div class="clock-next-label" style="font-size:clamp(9px,1.6vw,13px);margin-bottom:12px">${nextLabel}${levelsUntilBreak?` · Break em ${levelsUntilBreak}nv`:""}</div>
+        <div style="display:flex;gap:clamp(10px,2vw,24px);flex-wrap:wrap">
+          <div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${totalEntries}</div><div class="clock-stat-l">Entradas</div></div>
+          <div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${totalRebuys}</div><div class="clock-stat-l">Rebuys</div></div>
+          <div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${totalAddon}</div><div class="clock-stat-l">Add-ons</div></div>
+          ${avgStack>0?`<div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${fmtChips(avgStack)}</div><div class="clock-stat-l">Avg Stack</div></div>`:""}
+        </div>
+        ${adminBar}
+      </div>
+      <!-- Right column: timer only -->
+      <div class="clk-land-right">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(70px,18vw,150px);line-height:.9;letter-spacing:-3px;color:${isBreak?"#F5A800":"#fff"};text-align:center" id="clk-display-land">${fmtTime(mm,ss)}</div>
+        <div class="clock-bar" style="max-width:320px"><div class="clock-bar-fill" id="clk-bar-land" style="width:${pct}%"></div></div>
+      </div>
     </div>
 
-    ${adminBar}
   </div>`;
 }
 
@@ -5636,26 +5725,32 @@ function bindEvents(){
     });
   }
 
-  // Live tick — updates the display every second without full re-render
+  // Live tick — single rAF loop, no duplicate chains, updates portrait+landscape
   if(CLOCK_STAGE_ID){
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID);
-    if(s){
+    if(s && getClockState(s).running){
       const cs=getClockState(s);
       const levels=getBlindLevels(s);
       const idx=Math.min(cs.levelIdx||0,levels.length-1);
       const level=levels[idx];
-      if(cs.running){
-        const tick=()=>{
-          if(!CLOCK_STAGE_ID) return; // closed
-          const el=document.getElementById("clk-display");
-          const bar=document.getElementById("clk-bar");
-          if(!el){ return; } // navigated away
-          const elapsed=clockElapsed(cs);
-          const {mm,ss,rem,total}=clockRemaining(level,elapsed);
-          el.textContent=String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
-          if(bar) bar.style.width=Math.max(0,Math.min(100,(rem/total)*100))+"%";
-          // Auto-advance when timer hits 0
-          if(rem<=0 && CLOCK_STAGE_ID && IS_ADMIN){
+      let lastSec=-1;
+      const tick=()=>{
+        if(!CLOCK_STAGE_ID || !document.getElementById("clk-display")) return;
+        const elapsed=clockElapsed(cs);
+        const {mm,ss,rem,total}=clockRemaining(level,elapsed);
+        if(rem!==lastSec){
+          lastSec=rem;
+          const txt=String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+          const pct=Math.max(0,Math.min(100,(rem/total)*100));
+          const dP=document.getElementById("clk-display");
+          const bP=document.getElementById("clk-bar");
+          const dL=document.getElementById("clk-display-land");
+          const bL=document.getElementById("clk-bar-land");
+          if(dP) dP.textContent=txt;
+          if(bP) bP.style.width=pct+"%";
+          if(dL) dL.textContent=txt;
+          if(bL) bL.style.width=pct+"%";
+          if(rem<=0 && IS_ADMIN){
             const newIdx=Math.min(idx+1,levels.length-1);
             if(newIdx!==idx){
               s.clock={levelIdx:newIdx,elapsed:0,running:true,startTs:Date.now()};
@@ -5663,12 +5758,20 @@ function bindEvents(){
               return;
             }
           }
-          if(rem>0) setTimeout(tick,1000);
-        };
-        setTimeout(tick,1000);
-      }
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
     }
   }
+
+  // Reset: return to level 0, paused, fresh timestamp
+  document.getElementById("clk-reset")?.addEventListener("click", async()=>{
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+    s.clock={levelIdx:0,elapsed:0,running:false,startTs:null};
+    await saveClockState(s); render();
+    showToast("Relógio reiniciado","green");
+  });
 
   document.getElementById("btn-cg-back")?.addEventListener("click",()=>{
     const sid = CASHGAME_MGMT;
