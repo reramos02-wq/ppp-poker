@@ -5642,18 +5642,31 @@ function bindEvents(){
     } catch(e){ showToast("Erro: "+e.message,"red"); }
   }
 
+  // CLOCK STATE MODEL:
+  // {levelIdx, elapsed (seconds accrued before current play session), running, startTs (Date.now() of last play)}
+  // Total elapsed for current level = elapsed + (Date.now() - startTs)/1000  (when running)
+  //                                 = elapsed                                 (when paused)
+  // On PAUSE:  freeze elapsed = current total, clear startTs
+  // On PLAY:   keep elapsed as-is (already frozen), set fresh startTs = now
+  // On SKIP:   reset elapsed=0, set fresh startTs if still running
+  // This means there is ALWAYS exactly ONE startTs active at a time.
+
   document.getElementById("clk-play")?.addEventListener("click", async()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const cs=getClockState(s);
-    s.clock = {...cs, running:true, startTs:Date.now()};
+    if(cs.running) return; // already running, ignore
+    // elapsed is already correct from the pause — just add a fresh startTs
+    s.clock = {levelIdx:cs.levelIdx||0, elapsed:cs.elapsed||0, running:true, startTs:Date.now()};
     await saveClockState(s); render();
   });
 
   document.getElementById("clk-pause")?.addEventListener("click", async()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const cs=getClockState(s);
-    const elapsed=clockElapsed(cs);
-    s.clock = {...cs, running:false, elapsed, startTs:null};
+    if(!cs.running) return; // already paused, ignore
+    // Snapshot the exact elapsed seconds right now, then clear startTs
+    const frozenElapsed = clockElapsed(cs);
+    s.clock = {levelIdx:cs.levelIdx||0, elapsed:frozenElapsed, running:false, startTs:null};
     await saveClockState(s); render();
   });
 
@@ -5661,6 +5674,7 @@ function bindEvents(){
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const cs=getClockState(s);
     const newIdx=Math.max(0,(cs.levelIdx||0)-1);
+    // New level always starts from 0; one fresh startTs if still running
     s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
     await saveClockState(s); render();
   });
@@ -5725,44 +5739,53 @@ function bindEvents(){
     });
   }
 
-  // Live tick — single rAF loop, no duplicate chains, updates portrait+landscape
+  // Live tick — reads LIVE state from DB each frame (no stale closure).
+  // This means pause/play/skip always take effect immediately.
   if(CLOCK_STAGE_ID){
-    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID);
-    if(s && getClockState(s).running){
-      const cs=getClockState(s);
-      const levels=getBlindLevels(s);
-      const idx=Math.min(cs.levelIdx||0,levels.length-1);
-      const level=levels[idx];
-      let lastSec=-1;
-      const tick=()=>{
-        if(!CLOCK_STAGE_ID || !document.getElementById("clk-display")) return;
-        const elapsed=clockElapsed(cs);
-        const {mm,ss,rem,total}=clockRemaining(level,elapsed);
-        if(rem!==lastSec){
-          lastSec=rem;
-          const txt=String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
-          const pct=Math.max(0,Math.min(100,(rem/total)*100));
-          const dP=document.getElementById("clk-display");
-          const bP=document.getElementById("clk-bar");
-          const dL=document.getElementById("clk-display-land");
-          const bL=document.getElementById("clk-bar-land");
-          if(dP) dP.textContent=txt;
-          if(bP) bP.style.width=pct+"%";
-          if(dL) dL.textContent=txt;
-          if(bL) bL.style.width=pct+"%";
-          if(rem<=0 && IS_ADMIN){
-            const newIdx=Math.min(idx+1,levels.length-1);
-            if(newIdx!==idx){
-              s.clock={levelIdx:newIdx,elapsed:0,running:true,startTs:Date.now()};
-              saveClockState(s).then(()=>render());
-              return;
-            }
+    const tickStageId = CLOCK_STAGE_ID; // capture for exit guard
+    let lastSec = -1;
+    const tick = () => {
+      // Stop if user navigated away or opened a different clock
+      if(CLOCK_STAGE_ID !== tickStageId) return;
+      const dP = document.getElementById("clk-display");
+      if(!dP) return; // DOM gone
+
+      // Always re-read state from DB — never a stale closure
+      const s = DB.stages.find(x=>x.id===tickStageId);
+      if(!s) return;
+      const cs = getClockState(s);
+      const levels = getBlindLevels(s);
+      const idx = Math.min(cs.levelIdx||0, levels.length-1);
+      const level = levels[idx];
+
+      const elapsed = clockElapsed(cs);
+      const {mm,ss,rem,total} = clockRemaining(level, elapsed);
+      const curSec = rem;
+
+      if(curSec !== lastSec){
+        lastSec = curSec;
+        const txt = String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+        const pct = Math.max(0, Math.min(100, (rem/total)*100));
+        const bP = document.getElementById("clk-bar");
+        const dL = document.getElementById("clk-display-land");
+        const bL = document.getElementById("clk-bar-land");
+        dP.textContent = txt;
+        if(bP) bP.style.width = pct+"%";
+        if(dL) dL.textContent = txt;
+        if(bL) bL.style.width = pct+"%";
+        // Auto-advance at zero (admin only)
+        if(rem <= 0 && cs.running && IS_ADMIN){
+          const newIdx = Math.min(idx+1, levels.length-1);
+          if(newIdx !== idx){
+            s.clock = {levelIdx:newIdx, elapsed:0, running:true, startTs:Date.now()};
+            saveClockState(s).then(()=>render());
+            return;
           }
         }
-        requestAnimationFrame(tick);
-      };
+      }
       requestAnimationFrame(tick);
-    }
+    };
+    requestAnimationFrame(tick);
   }
 
   // Reset: return to level 0, paused, fresh timestamp
