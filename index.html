@@ -388,30 +388,53 @@ var _authTimeout = setTimeout(function(){
 }
 .clk-landscape{ display:none; }
 
-/* ──── LANDSCAPE (phone/tablet rotated OR wide desktop/tablet) ──────────── */
-/* Triggered when height < 600px in landscape OR viewport width >= 700px     */
-@media (orientation:landscape) and (max-height:600px),(min-width:700px) and (min-height:500px){
-  .clock-screen{ padding:8px 20px; }
+/* ──── LANDSCAPE — tablet (height 500-600px, width >= 700px) ─────────────── */
+@media (orientation:landscape) and (min-width:700px){
+  .clock-screen{ padding:8px 16px; align-items:stretch; }
   .clk-portrait{ display:none; }
   .clk-landscape{
     display:grid;
-    /* Left: logo+level+blinds+stats | Centre: timer | Right: next+break */
-    grid-template-columns:minmax(160px,1fr) minmax(200px,1.4fr) minmax(140px,.8fr);
-    gap:0 20px;
+    /* Left: logo+stats | Centre: round+blinds+TIMER+bar+btns | Right: next+break */
+    grid-template-columns:minmax(150px,.7fr) minmax(260px,1.4fr) minmax(150px,.7fr);
+    gap:0 18px;
     align-items:center;
     width:100%;max-width:1100px;margin:0 auto;
-    height:100%;max-height:100vh;
+    height:100%;
   }
   .clk-land-left{
-    display:flex;flex-direction:column;justify-content:center;gap:4px;
-    border-right:1px solid rgba(255,255,255,.07);padding-right:18px;height:100%;
+    display:flex;flex-direction:column;justify-content:center;gap:6px;
+    border-right:1px solid rgba(255,255,255,.07);padding-right:16px;height:100%;
   }
   .clk-land-center{
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
   }
   .clk-land-right{
-    display:flex;flex-direction:column;justify-content:center;gap:8px;
-    border-left:1px solid rgba(255,255,255,.07);padding-left:18px;height:100%;
+    display:flex;flex-direction:column;justify-content:center;gap:10px;
+    border-left:1px solid rgba(255,255,255,.07);padding-left:16px;height:100%;
+  }
+}
+
+/* ──── LANDSCAPE — phone (height < 500px) — compact ─────────────────────── */
+@media (orientation:landscape) and (max-height:499px){
+  .clock-screen{ padding:4px 10px; align-items:stretch; }
+  .clk-portrait{ display:none; }
+  .clk-landscape{
+    display:grid;
+    grid-template-columns:minmax(120px,.65fr) minmax(180px,1.4fr) minmax(110px,.6fr);
+    gap:0 10px;
+    align-items:center;
+    width:100%;height:100%;
+  }
+  .clk-land-left{
+    display:flex;flex-direction:column;justify-content:center;gap:3px;
+    border-right:1px solid rgba(255,255,255,.07);padding-right:10px;height:100%;
+  }
+  .clk-land-center{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  }
+  .clk-land-right{
+    display:flex;flex-direction:column;justify-content:center;gap:6px;
+    border-left:1px solid rgba(255,255,255,.07);padding-left:10px;height:100%;
   }
 }
 
@@ -4386,32 +4409,53 @@ function renderClock(){
       ${adminBar}
     </div>
 
-    <!-- ═══ LANDSCAPE (3 cols: info | timer | next+break) ═══ -->
+    <!-- ═══ LANDSCAPE (3 cols: info | round+timer+btns | next+break) ═══ -->
     <div class="clk-landscape">
 
-      <!-- LEFT: logo + round + blinds + stats + admin -->
+      <!-- LEFT: logo + stats only -->
       <div class="clk-land-left">
-        ${logoHdr(28)}
-        ${levelFrag}
-        <div class="clock-blinds-label ${isBreak?"break-color":""}" style="font-size:clamp(18px,4vw,38px);margin:4px 0">${blindLabel}</div>
-        <div style="margin-top:10px">${statFrag("lg")}</div>
-        ${adminBar}
+        ${logoHdr(26)}
+        <div style="margin-top:8px">${statFrag("lg")}</div>
       </div>
 
-      <!-- CENTRE: big timer -->
+      <!-- CENTRE: round+blinds ABOVE timer, admin buttons BELOW -->
       <div class="clk-land-center">
-        <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display-land" style="font-size:clamp(64px,16vw,140px)">${fmtTime(mm,ss)}</div>
-        <div class="clock-bar" style="max-width:300px"><div class="clock-bar-fill" id="clk-bar-land" style="width:${pct}%"></div></div>
+        <!-- Round + blinds ABOVE (blue circle area from print) -->
+        <div style="text-align:center;margin-bottom:2px">
+          <div class="clock-level-label" style="font-size:clamp(10px,2vw,15px);letter-spacing:4px;margin-bottom:2px">${isBreak?"☕ BREAK":"ROUND "+roundNum}</div>
+          <div class="clock-blinds-label ${isBreak?"break-color":""}" style="font-size:clamp(22px,4.5vw,44px)">${blindLabel}</div>
+        </div>
+
+        <!-- Big timer (purple circle — larger) -->
+        <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display-land"
+          style="font-size:clamp(72px,18vw,160px);margin:0"
+          title="${IS_ADMIN?"Clique para editar o tempo":""}">${fmtTime(mm,ss)}</div>
+        <div class="clock-bar" style="max-width:340px;margin-top:6px">
+          <div class="clock-bar-fill" id="clk-bar-land" style="width:${pct}%"></div>
+        </div>
+
+        <!-- Admin buttons BELOW timer (red area from print) -->
+        ${IS_ADMIN ? `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;justify-content:center">
+          ${cs.running
+            ? `<button id="clk-pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
+            : `<button id="clk-play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;padding:8px 20px">▶ Iniciar</button>`}
+          <button id="clk-prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
+          <button id="clk-next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
+          <button id="clk-reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺</button>
+          <button id="clk-edit"  class="clk-btn" style="background:rgba(245,168,0,.1);border-color:rgba(245,168,0,.35);color:#F5A800">⚙</button>
+        </div>` : ""}
       </div>
 
-      <!-- RIGHT: next blind + break countdown -->
+      <!-- RIGHT: next blind (bigger) + break info (bigger, yellow) -->
       <div class="clk-land-right">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.5vw,13px);letter-spacing:2px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:6px">Próximo Nível</div>
-        <div class="clock-next-label" style="font-size:clamp(15px,3vw,26px)">${nextLabel}</div>
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.4vw,12px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:5px">Próximo Nível</div>
+          <div class="clock-next-label" style="font-size:clamp(17px,3.5vw,32px);line-height:1.2">${nextLabel}</div>
+        </div>
         ${levelsUntilBreak ? `
-        <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07)">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.5vw,13px);letter-spacing:2px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:6px">Break em</div>
-          <div class="clock-break-label" style="font-size:clamp(22px,4.5vw,42px)">${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}</div>
+        <div style="padding-top:12px;border-top:1px solid rgba(255,255,255,.08)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.4vw,12px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:5px">Break em</div>
+          <div class="clock-break-label" style="font-size:clamp(28px,6vw,56px);line-height:1">${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}</div>
         </div>` : ""}
       </div>
 
