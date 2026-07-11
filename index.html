@@ -390,27 +390,26 @@ var _authTimeout = setTimeout(function(){
 
 /* ──── LANDSCAPE — tablet (height 500-600px, width >= 700px) ─────────────── */
 @media (orientation:landscape) and (min-width:700px){
-  .clock-screen{ padding:8px 16px; align-items:stretch; }
+  .clock-screen{ padding:8px 20px; align-items:stretch; }
   .clk-portrait{ display:none; }
   .clk-landscape{
     display:grid;
-    /* Left: logo+stats | Centre: round+blinds+TIMER+bar+btns | Right: next+break */
-    grid-template-columns:minmax(150px,.7fr) minmax(260px,1.4fr) minmax(150px,.7fr);
-    gap:0 18px;
+    grid-template-columns:minmax(160px,.65fr) minmax(280px,1.5fr) minmax(160px,.65fr);
+    gap:0 20px;
     align-items:center;
-    width:100%;max-width:1100px;margin:0 auto;
+    width:100%;max-width:1200px;margin:0 auto;
     height:100%;
   }
   .clk-land-left{
-    display:flex;flex-direction:column;justify-content:center;gap:6px;
-    border-right:1px solid rgba(255,255,255,.07);padding-right:16px;height:100%;
+    display:flex;flex-direction:column;justify-content:center;gap:8px;
+    border-right:1px solid rgba(255,255,255,.07);padding-right:18px;height:100%;
   }
   .clk-land-center{
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
   }
   .clk-land-right{
-    display:flex;flex-direction:column;justify-content:center;gap:10px;
-    border-left:1px solid rgba(255,255,255,.07);padding-left:16px;height:100%;
+    display:flex;flex-direction:column;justify-content:center;gap:12px;
+    border-left:1px solid rgba(255,255,255,.07);padding-left:18px;height:100%;
   }
 }
 
@@ -420,7 +419,7 @@ var _authTimeout = setTimeout(function(){
   .clk-portrait{ display:none; }
   .clk-landscape{
     display:grid;
-    grid-template-columns:minmax(120px,.65fr) minmax(180px,1.4fr) minmax(110px,.6fr);
+    grid-template-columns:minmax(110px,.6fr) minmax(180px,1.4fr) minmax(110px,.6fr);
     gap:0 10px;
     align-items:center;
     width:100%;height:100%;
@@ -4379,12 +4378,12 @@ function renderClock(){
   const adminBar = isAdmin ? `
     <div style="display:flex;gap:7px;margin-top:14px;flex-wrap:wrap;justify-content:center">
       ${cs.running
-        ? `<button id="clk-pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
-        : `<button id="clk-play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;font-size:15px;padding:8px 22px">▶ Iniciar</button>`}
-      <button id="clk-prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
-      <button id="clk-next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
-      <button id="clk-reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺ Reset</button>
-      <button id="clk-edit"  class="clk-btn" style="background:rgba(245,168,0,.1);border-color:rgba(245,168,0,.35);color:#F5A800">⚙</button>
+        ? `<button data-clk="pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
+        : `<button data-clk="play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;font-size:15px;padding:8px 22px">▶ Iniciar</button>`}
+      <button data-clk="prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
+      <button data-clk="next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
+      <button data-clk="reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺ Reset</button>
+      <button data-clk="edit"  class="clk-btn" style="background:rgba(245,168,0,.1);border-color:rgba(245,168,0,.35);color:#F5A800">⚙</button>
     </div>` : "";
 
   // ── Fullscreen + close buttons ────────────────────────────────────────────
@@ -4422,40 +4421,40 @@ function renderClock(){
       <div class="clk-land-center">
         <!-- Round + blinds ABOVE (blue circle area from print) -->
         <div style="text-align:center;margin-bottom:2px">
-          <div class="clock-level-label" style="font-size:clamp(10px,2vw,15px);letter-spacing:4px;margin-bottom:2px">${isBreak?"☕ BREAK":"ROUND "+roundNum}</div>
-          <div class="clock-blinds-label ${isBreak?"break-color":""}" style="font-size:clamp(22px,4.5vw,44px)">${blindLabel}</div>
+          <div class="clock-level-label" style="font-size:clamp(11px,2.2vw,18px);letter-spacing:4px;margin-bottom:2px">${isBreak?"☕ BREAK":"ROUND "+roundNum}</div>
+          <div class="clock-blinds-label ${isBreak?"break-color":""}" style="font-size:clamp(28px,6vw,62px)">${blindLabel}</div>
         </div>
 
         <!-- Big timer (purple circle — larger) -->
         <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display-land"
-          style="font-size:clamp(72px,18vw,160px);margin:0"
+          style="font-size:clamp(80px,22vw,200px);margin:0"
           title="${IS_ADMIN?"Clique para editar o tempo":""}">${fmtTime(mm,ss)}</div>
-        <div class="clock-bar" style="max-width:340px;margin-top:6px">
+        <div class="clock-bar" style="max-width:380px;margin-top:6px">
           <div class="clock-bar-fill" id="clk-bar-land" style="width:${pct}%"></div>
         </div>
 
         <!-- Admin buttons BELOW timer (red area from print) -->
         ${IS_ADMIN ? `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;justify-content:center">
           ${cs.running
-            ? `<button id="clk-pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
-            : `<button id="clk-play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;padding:8px 20px">▶ Iniciar</button>`}
-          <button id="clk-prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
-          <button id="clk-next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
-          <button id="clk-reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺</button>
-          <button id="clk-edit"  class="clk-btn" style="background:rgba(245,168,0,.1);border-color:rgba(245,168,0,.35);color:#F5A800">⚙</button>
+            ? `<button data-clk="pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
+            : `<button data-clk="play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;padding:8px 20px">▶ Iniciar</button>`}
+          <button data-clk="prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
+          <button data-clk="next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
+          <button data-clk="reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺</button>
+          <button data-clk="edit"  class="clk-btn" style="background:rgba(245,168,0,.1);border-color:rgba(245,168,0,.35);color:#F5A800">⚙</button>
         </div>` : ""}
       </div>
 
       <!-- RIGHT: next blind (bigger) + break info (bigger, yellow) -->
       <div class="clk-land-right">
         <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.4vw,12px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:5px">Próximo Nível</div>
-          <div class="clock-next-label" style="font-size:clamp(17px,3.5vw,32px);line-height:1.2">${nextLabel}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.6vw,14px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:6px">Próximo Nível</div>
+          <div class="clock-next-label" style="font-size:clamp(18px,4vw,38px);line-height:1.2">${nextLabel}</div>
         </div>
         ${levelsUntilBreak ? `
-        <div style="padding-top:12px;border-top:1px solid rgba(255,255,255,.08)">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.4vw,12px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:5px">Break em</div>
-          <div class="clock-break-label" style="font-size:clamp(28px,6vw,56px);line-height:1">${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}</div>
+        <div style="padding-top:14px;border-top:1px solid rgba(255,255,255,.08)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.6vw,14px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:6px">Break em</div>
+          <div class="clock-break-label" style="font-size:clamp(32px,7.5vw,72px);line-height:1">${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}</div>
         </div>` : ""}
       </div>
 
@@ -5741,8 +5740,33 @@ function bindEvents(){
     document.getElementById("clk-cf-yes").addEventListener("click", ()=>{ closeAdminModal(); onConfirm(); });
   }
 
-  // PLAY
-  document.getElementById("clk-play")?.addEventListener("click", ()=>{
+  // Short beep when a level ends and a new one begins
+  function playLevelUpBeep(){
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      [[880,0,0.15],[1100,0.18,0.15],[1320,0.36,0.25]].forEach(([freq,delay,dur])=>{
+        const osc=ctx.createOscillator();
+        const gain=ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value=freq; osc.type="sine";
+        gain.gain.setValueAtTime(0,ctx.currentTime+delay);
+        gain.gain.linearRampToValueAtTime(0.4,ctx.currentTime+delay+0.02);
+        gain.gain.linearRampToValueAtTime(0,ctx.currentTime+delay+dur);
+        osc.start(ctx.currentTime+delay);
+        osc.stop(ctx.currentTime+delay+dur+0.05);
+      });
+    }catch(e){}
+  }
+
+  // Bind all clock buttons — using data-clk attribute so both portrait+landscape
+  // buttons are handled (querySelectorAll finds all, not just the first like getElementById)
+  function bindClkBtn(action, handler){
+    document.querySelectorAll(`[data-clk="${action}"]`).forEach(el=>{
+      el.addEventListener("click", handler);
+    });
+  }
+
+  bindClkBtn("play", ()=>{
     clkConfirm("▶ Iniciar Relógio", "O contador começará agora para todos os aparelhos.", async ()=>{
       const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
       const cs=getClockState(s);
@@ -5752,8 +5776,7 @@ function bindEvents(){
     });
   });
 
-  // PAUSE
-  document.getElementById("clk-pause")?.addEventListener("click", ()=>{
+  bindClkBtn("pause", ()=>{
     clkConfirm("⏸ Pausar Relógio", "O contador será pausado para todos os aparelhos.", async ()=>{
       const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
       const cs=getClockState(s);
@@ -5763,8 +5786,7 @@ function bindEvents(){
     });
   });
 
-  // PREV
-  document.getElementById("clk-prev")?.addEventListener("click", ()=>{
+  bindClkBtn("prev", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const cs=getClockState(s);
     const newIdx=Math.max(0,(cs.levelIdx||0)-1);
@@ -5777,8 +5799,7 @@ function bindEvents(){
     });
   });
 
-  // NEXT
-  document.getElementById("clk-next")?.addEventListener("click", ()=>{
+  bindClkBtn("next", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const levels=getBlindLevels(s);
     const cs=getClockState(s);
@@ -5791,8 +5812,7 @@ function bindEvents(){
     });
   });
 
-  // RESET
-  document.getElementById("clk-reset")?.addEventListener("click", ()=>{
+  bindClkBtn("reset", ()=>{
     clkConfirm("↺ Reiniciar Relógio", "Volta para o Round 1 e zera o contador. Tem certeza?", async ()=>{
       const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
       s.clock = {levelIdx:0, elapsed:0, running:false, startTs:null};
@@ -5801,7 +5821,7 @@ function bindEvents(){
     });
   });
 
-  // EDIT TIMER (click on the big timer display)
+  // Edit timer (click on timer display)
   function openTimerEditModal(){
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s||!IS_ADMIN) return;
     const cs=getClockState(s);
@@ -5826,7 +5846,6 @@ function bindEvents(){
         <button id="clk-time-cancel" class="btn bo fw" style="font-size:13px;padding:12px">Cancelar</button>
       </div>
     </div>`;
-    // Auto-format as user types
     document.getElementById("clk-time-inp").addEventListener("input", function(){
       let v=this.value.replace(/[^0-9]/g,"");
       if(v.length>4) v=v.slice(0,4);
@@ -5842,13 +5861,11 @@ function bindEvents(){
       if(newSS>59){ showToast("Segundos inválidos","red"); return; }
       const newRem=newMM*60+newSS;
       closeAdminModal();
-      // Second confirmation
       clkConfirm("Confirmar edição", `Definir ${String(newMM).padStart(2,"0")}:${String(newSS).padStart(2,"0")} para este round?`, async ()=>{
         const s2=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s2) return;
         const cs2=getClockState(s2);
         const lv2=getBlindLevels(s2)[Math.min(cs2.levelIdx||0,getBlindLevels(s2).length-1)];
         const dur=lv2?.dur||900;
-        // Set elapsed so that remaining = newRem
         const newElapsed=Math.max(0,dur-newRem);
         s2.clock={levelIdx:cs2.levelIdx||0, elapsed:newElapsed, running:cs2.running, startTs:cs2.running?Date.now():null};
         await saveClockState(s2); render();
@@ -5859,7 +5876,7 @@ function bindEvents(){
   document.getElementById("clk-display")?.addEventListener("click", ()=>{ if(IS_ADMIN) openTimerEditModal(); });
   document.getElementById("clk-display-land")?.addEventListener("click", ()=>{ if(IS_ADMIN) openTimerEditModal(); });
 
-  // FULLSCREEN
+  // Fullscreen
   document.getElementById("clk-fullscreen")?.addEventListener("click", async ()=>{
     const el=document.getElementById("clock-screen")||document.documentElement;
     if(document.fullscreenElement){
@@ -5867,23 +5884,19 @@ function bindEvents(){
     } else if(el.requestFullscreen){
       await el.requestFullscreen().catch(()=>{});
     } else if(el.webkitRequestFullscreen){
-      // Safari/iOS fallback
       el.webkitRequestFullscreen();
     } else {
-      // iOS Safari: can't do true fullscreen — scroll to hide browser chrome
       window.scrollTo(0,1);
-      showToast("Para tela cheia no iOS: use Safari → Compartilhar → Adicionar à Tela de Início","green");
+      showToast("Para tela cheia no iOS: Safari → Compartilhar → Adicionar à Tela de Início","green");
     }
   });
-
-  // Update fullscreen button icon when state changes
   document.addEventListener("fullscreenchange", ()=>{
     const btn=document.getElementById("clk-fullscreen");
-    if(btn) btn.textContent=document.fullscreenElement?"✕⛶":"⛶";
+    if(btn) btn.textContent=document.fullscreenElement?"⛶✕":"⛶";
   });
 
-  // OPEN BLIND EDITOR
-  document.getElementById("clk-edit")?.addEventListener("click",()=>{
+  // Blind editor
+  bindClkBtn("edit", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const el=document.getElementById("admin-modal"); if(!el) return;
     el.innerHTML=`<div class="ov" style="z-index:1200;align-items:flex-start;padding:16px;overflow-y:auto"><div class="modal" style="max-width:500px;width:100%">${renderBlindEditor(s)}</div></div>`;
@@ -5894,16 +5907,19 @@ function bindEvents(){
     document.getElementById("blv-cancel")?.addEventListener("click", closeAdminModal);
     document.getElementById("blv-add-blind")?.addEventListener("click",()=>{
       const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:false});
-      s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
+      s.blindLevels=levels; closeAdminModal();
+      document.querySelectorAll("[data-clk='edit']")[0]?.click();
     });
     document.getElementById("blv-add-break")?.addEventListener("click",()=>{
       const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:true});
-      s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
+      s.blindLevels=levels; closeAdminModal();
+      document.querySelectorAll("[data-clk='edit']")[0]?.click();
     });
     document.querySelectorAll("[data-blv-del]").forEach(btn=>{
       btn.addEventListener("click",()=>{
         const levels=getBlindLevels(s); levels.splice(parseInt(btn.dataset.blvDel),1);
-        s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
+        s.blindLevels=levels; closeAdminModal();
+        document.querySelectorAll("[data-clk='edit']")[0]?.click();
       });
     });
     document.getElementById("blv-bulk-apply")?.addEventListener("click",()=>{
@@ -5912,7 +5928,8 @@ function bindEvents(){
       document.querySelectorAll(".blv-chk:checked").forEach(chk=>{
         const i=parseInt(chk.dataset.blv); if(levels[i]) levels[i].dur=dur;
       });
-      s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
+      s.blindLevels=levels; closeAdminModal();
+      document.querySelectorAll("[data-clk='edit']")[0]?.click();
     });
     document.getElementById("blv-save")?.addEventListener("click", async()=>{
       const levels=getBlindLevels(s);
@@ -5926,14 +5943,15 @@ function bindEvents(){
     });
   }
 
-  // Live tick — reads live state from DB each rAF (no stale closure)
+  // Live tick — reads live state each rAF, sounds beep on level change
   if(CLOCK_STAGE_ID){
     const tickStageId=CLOCK_STAGE_ID;
-    let lastSec=-1;
+    let lastSec=-1, beeped=false;
     const tick=()=>{
       if(CLOCK_STAGE_ID!==tickStageId) return;
-      const dP=document.getElementById("clk-display")||document.getElementById("clk-display-land");
-      if(!dP) return;
+      const dP=document.getElementById("clk-display");
+      const dL=document.getElementById("clk-display-land");
+      if(!dP && !dL) return;
       const s=DB.stages.find(x=>x.id===tickStageId); if(!s) return;
       const cs=getClockState(s);
       const levels=getBlindLevels(s);
@@ -5945,20 +5963,24 @@ function bindEvents(){
         lastSec=rem;
         const txt=String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
         const pct=Math.max(0,Math.min(100,(rem/total)*100));
-        const dPort=document.getElementById("clk-display");
-        const bPort=document.getElementById("clk-bar");
-        const dLand=document.getElementById("clk-display-land");
-        const bLand=document.getElementById("clk-bar-land");
-        if(dPort) dPort.textContent=txt;
-        if(bPort) bPort.style.width=pct+"%";
-        if(dLand) dLand.textContent=txt;
-        if(bLand) bLand.style.width=pct+"%";
-        if(rem<=0 && cs.running && IS_ADMIN){
-          const newIdx=Math.min(idx+1,levels.length-1);
-          if(newIdx!==idx){
-            s.clock={levelIdx:newIdx,elapsed:0,running:true,startTs:Date.now()};
-            saveClockState(s).then(()=>render()); return;
+        const bP=document.getElementById("clk-bar");
+        const bL=document.getElementById("clk-bar-land");
+        if(dP) dP.textContent=txt;
+        if(bP) bP.style.width=pct+"%";
+        if(dL) dL.textContent=txt;
+        if(bL) bL.style.width=pct+"%";
+        // Beep + auto-advance when reaching zero
+        if(rem<=0 && cs.running){
+          if(!beeped){ beeped=true; playLevelUpBeep(); }
+          if(IS_ADMIN){
+            const newIdx=Math.min(idx+1,levels.length-1);
+            if(newIdx!==idx){
+              s.clock={levelIdx:newIdx,elapsed:0,running:true,startTs:Date.now()};
+              saveClockState(s).then(()=>render()); return;
+            }
           }
+        } else {
+          beeped=false;
         }
       }
       requestAnimationFrame(tick);
