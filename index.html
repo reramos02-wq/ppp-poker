@@ -374,68 +374,93 @@ var _authTimeout = setTimeout(function(){
 <div id="admin-modal"></div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <style>
-/* ── Clock screen wrapper ── */
+/* ── Clock screen ── */
 .clock-screen{
   background:#080808;position:fixed;inset:0;z-index:500;
   display:flex;align-items:center;justify-content:center;
-  padding:12px 16px;box-sizing:border-box;overflow:hidden;
+  padding:10px 14px;box-sizing:border-box;overflow:hidden;
 }
 
-/* ── Portrait layout (default) ── */
+/* ──── PORTRAIT (default: stacked column) ───────────────────────────────── */
 .clk-portrait{
   display:flex;flex-direction:column;align-items:center;text-align:center;
-  width:100%;max-width:520px;
+  width:100%;max-width:520px;gap:0;
 }
 .clk-landscape{ display:none; }
 
-/* ── Landscape layout (phones/tablets rotated, max-height guard) ── */
-@media (orientation:landscape) and (max-height:520px){
-  .clock-screen{ align-items:stretch; }
+/* ──── LANDSCAPE (phone/tablet rotated OR wide desktop/tablet) ──────────── */
+/* Triggered when height < 600px in landscape OR viewport width >= 700px     */
+@media (orientation:landscape) and (max-height:600px),(min-width:700px) and (min-height:500px){
+  .clock-screen{ padding:8px 20px; }
   .clk-portrait{ display:none; }
   .clk-landscape{
     display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:16px;
+    /* Left: logo+level+blinds+stats | Centre: timer | Right: next+break */
+    grid-template-columns:minmax(160px,1fr) minmax(200px,1.4fr) minmax(140px,.8fr);
+    gap:0 20px;
     align-items:center;
-    width:100%;max-width:1000px;margin:0 auto;
+    width:100%;max-width:1100px;margin:0 auto;
+    height:100%;max-height:100vh;
   }
-  .clk-land-left{ display:flex;flex-direction:column;justify-content:center; }
-  .clk-land-right{ display:flex;flex-direction:column;align-items:center;justify-content:center; }
+  .clk-land-left{
+    display:flex;flex-direction:column;justify-content:center;gap:4px;
+    border-right:1px solid rgba(255,255,255,.07);padding-right:18px;height:100%;
+  }
+  .clk-land-center{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .clk-land-right{
+    display:flex;flex-direction:column;justify-content:center;gap:8px;
+    border-left:1px solid rgba(255,255,255,.07);padding-left:18px;height:100%;
+  }
 }
 
-/* ── Typography tokens ── */
+/* ── Shared typography ── */
 .clock-timer{
   font-family:'Barlow Condensed',sans-serif;font-weight:900;
-  font-size:clamp(72px,22vw,160px);line-height:.9;letter-spacing:-3px;color:#fff;
+  font-size:clamp(72px,20vw,160px);line-height:.88;letter-spacing:-3px;color:#fff;
+  cursor:pointer;user-select:none;
+  transition:opacity .15s;
 }
+.clock-timer:hover{ opacity:.85; }
 .clock-timer.break-color{ color:#F5A800; }
 .clock-blinds-label{
   font-family:'Barlow Condensed',sans-serif;font-weight:900;
-  font-size:clamp(26px,7vw,52px);color:#F5A800;letter-spacing:1px;line-height:1;
+  font-size:clamp(24px,6vw,50px);color:#F5A800;letter-spacing:1px;line-height:1;
 }
 .clock-blinds-label.break-color{ color:#fff; }
 .clock-level-label{
   font-family:'Barlow Condensed',sans-serif;font-weight:700;
-  font-size:clamp(11px,2.5vw,18px);letter-spacing:4px;
-  color:rgba(255,255,255,.4);text-transform:uppercase;
+  font-size:clamp(10px,2.2vw,16px);letter-spacing:4px;
+  color:rgba(255,255,255,.38);text-transform:uppercase;
 }
 .clock-next-label{
-  font-family:'Barlow Condensed',sans-serif;
-  font-size:clamp(10px,2vw,16px);color:rgba(255,255,255,.4);
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  font-size:clamp(13px,2.5vw,22px);color:rgba(255,255,255,.55);line-height:1.3;
+}
+.clock-break-label{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  font-size:clamp(11px,2vw,18px);color:#F5A800;letter-spacing:1px;
 }
 .clock-stat-v{
   font-family:'Barlow Condensed',sans-serif;font-weight:900;
-  font-size:clamp(18px,5vw,34px);color:#fff;line-height:1;
+  font-size:clamp(18px,4vw,32px);color:#fff;line-height:1;
 }
 .clock-stat-l{
-  font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.8vw,13px);
-  letter-spacing:2px;color:rgba(255,255,255,.38);text-transform:uppercase;margin-top:2px;
+  font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.5vw,12px);
+  letter-spacing:2px;color:rgba(255,255,255,.35);text-transform:uppercase;margin-top:2px;
 }
 .clock-bar{
-  width:100%;max-width:600px;height:4px;
-  background:rgba(255,255,255,.1);border-radius:2px;margin:10px auto 0;overflow:hidden;
+  width:100%;max-width:560px;height:4px;
+  background:rgba(255,255,255,.08);border-radius:2px;margin:8px auto 0;overflow:hidden;
 }
 .clock-bar-fill{ height:100%;background:#F5A800;border-radius:2px;transition:width .8s linear; }
+.clk-btn{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;
+  padding:8px 16px;border-radius:6px;cursor:pointer;letter-spacing:.5px;border:1px solid;
+  transition:opacity .15s;
+}
+.clk-btn:hover{opacity:.8;}
 </style>
 
 <script type="module">
@@ -4298,88 +4323,102 @@ function renderClock(){
   const levelsUntilBreak = nextBreak ? levels.slice(idx+1,levels.indexOf(nextBreak)).length+1 : null;
 
   // Admin controls
-  const btnStyle = (bg,border,color) =>
-    `background:${bg};border:1px solid ${border};color:${color};padding:9px 18px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;cursor:pointer;letter-spacing:.5px`;
+  const isAdmin = IS_ADMIN;
+  const roundNum = idx+1 - levels.slice(0,idx+1).filter(l=>l.isBreak).length;
 
-  const adminBar = IS_ADMIN ? `
-    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;justify-content:center">
-      ${cs.running
-        ? `<button id="clk-pause" style="${btnStyle("rgba(231,76,60,.18)","#e74c3c","#e74c3c")}">⏸ Pausar</button>`
-        : `<button id="clk-play"  style="${btnStyle("rgba(46,204,113,.18)","#2ecc71","#2ecc71")}">▶ Iniciar</button>`}
-      <button id="clk-prev"  style="${btnStyle("rgba(255,255,255,.07)","rgba(255,255,255,.2)","#fff")}">◀</button>
-      <button id="clk-next"  style="${btnStyle("rgba(255,255,255,.07)","rgba(255,255,255,.2)","#fff")}">▶</button>
-      <button id="clk-reset" style="${btnStyle("rgba(255,165,0,.12)","rgba(255,165,0,.4)","#FFA500")}">↺ Reset</button>
-      <button id="clk-edit"  style="${btnStyle("rgba(245,168,0,.1)","rgba(245,168,0,.35)","#F5A800")}">⚙ Estrutura</button>
-    </div>` : "";
-
-  // Shared inner markup used in both portrait and landscape
-  const statRow = `<div style="display:flex;gap:clamp(14px,4vw,40px);justify-content:center;flex-wrap:wrap">
-    <div style="text-align:center"><div class="clock-stat-v">${totalEntries}</div><div class="clock-stat-l">Entradas</div></div>
-    <div style="text-align:center"><div class="clock-stat-v">${totalRebuys}</div><div class="clock-stat-l">Rebuys</div></div>
-    <div style="text-align:center"><div class="clock-stat-v">${totalAddon}</div><div class="clock-stat-l">Add-ons</div></div>
-    ${avgStack>0?`<div style="text-align:center"><div class="clock-stat-v">${fmtChips(avgStack)}</div><div class="clock-stat-l">Avg Stack</div></div>`:""}
+  // ── Shared fragments ──────────────────────────────────────────────────────
+  const logoHdr = (w) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <img src="${LOGO_48}" width="${w}" height="${w}" alt="PPP" style="display:block;flex-shrink:0"/>
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(10px,2vw,16px);letter-spacing:2px;color:rgba(255,255,255,.8);text-transform:uppercase;line-height:1.1">${s.name}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.4vw,11px);letter-spacing:3px;color:rgba(255,255,255,.3);text-transform:uppercase">${s.type==="knockout"?"PKO":"NL Hold'em"}</div>
+    </div>
   </div>`;
 
+  const levelFrag = `<div class="clock-level-label">${isBreak?"☕ BREAK":"ROUND "+roundNum}</div>`;
+  const blindsFrag = `<div class="clock-blinds-label ${isBreak?"break-color":""}" style="margin-top:2px">${blindLabel}</div>`;
+
+  const timerFrag = (id,landId) => `
+    <div class="clock-timer ${isBreak?"break-color":""}" id="${id}" title="${isAdmin?"Clique para editar o tempo":""}" style="${isAdmin?"cursor:pointer":"cursor:default"}">${fmtTime(mm,ss)}</div>
+    <div class="clock-bar"><div class="clock-bar-fill" id="${landId||id+"-bar"}" style="width:${pct}%"></div></div>`;
+
+  const nextFrag = `<div class="clock-next-label" style="margin-top:6px">${nextLabel}</div>
+  ${levelsUntilBreak ? `<div class="clock-break-label" style="margin-top:4px">☕ Break em ${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}</div>` : ""}`;
+
+  const statFrag = (sz) => `<div style="display:flex;gap:clamp(10px,3vw,32px);flex-wrap:wrap${sz!=="lg"?";justify-content:center":""}">
+    <div style="text-align:center"><div class="clock-stat-v" style="font-size:clamp(16px,${sz==="lg"?"4vw":"5vw"},${sz==="lg"?"30px":"34px"})">${totalEntries}</div><div class="clock-stat-l">Entradas</div></div>
+    <div style="text-align:center"><div class="clock-stat-v" style="font-size:clamp(16px,${sz==="lg"?"4vw":"5vw"},${sz==="lg"?"30px":"34px"})">${totalRebuys}</div><div class="clock-stat-l">Rebuys</div></div>
+    <div style="text-align:center"><div class="clock-stat-v" style="font-size:clamp(16px,${sz==="lg"?"4vw":"5vw"},${sz==="lg"?"30px":"34px"})">${totalAddon}</div><div class="clock-stat-l">Add-ons</div></div>
+    ${avgStack>0?`<div style="text-align:center"><div class="clock-stat-v" style="font-size:clamp(16px,${sz==="lg"?"4vw":"5vw"},${sz==="lg"?"30px":"34px"})">${fmtChips(avgStack)}</div><div class="clock-stat-l">Avg Stack</div></div>`:""}
+  </div>`;
+
+  // ── Admin controls ────────────────────────────────────────────────────────
+  const adminBar = isAdmin ? `
+    <div style="display:flex;gap:7px;margin-top:14px;flex-wrap:wrap;justify-content:center">
+      ${cs.running
+        ? `<button id="clk-pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
+        : `<button id="clk-play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;font-size:15px;padding:8px 22px">▶ Iniciar</button>`}
+      <button id="clk-prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
+      <button id="clk-next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
+      <button id="clk-reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺ Reset</button>
+      <button id="clk-edit"  class="clk-btn" style="background:rgba(245,168,0,.1);border-color:rgba(245,168,0,.35);color:#F5A800">⚙</button>
+    </div>` : "";
+
+  // ── Fullscreen + close buttons ────────────────────────────────────────────
+  const topBtns = `
+    <div style="position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:601">
+      <button id="clk-fullscreen" title="Tela cheia" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center">⛶</button>
+      <button id="clk-close"      style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>`;
+
   return `<div class="clock-screen" id="clock-screen">
-    <!-- Close button (fixed, always visible) -->
-    <button id="clk-close" style="position:fixed;top:12px;right:14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;z-index:600;flex-shrink:0">✕</button>
+    ${topBtns}
 
     <!-- ═══ PORTRAIT ═══ -->
     <div class="clk-portrait">
-      <!-- Logo + name -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <img src="${LOGO_48}" width="36" height="36" alt="PPP Poker" style="display:block;flex-shrink:0"/>
-        <div style="text-align:left">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(12px,3.5vw,18px);letter-spacing:2px;color:rgba(255,255,255,.75);text-transform:uppercase;line-height:1.1">${s.name}</div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,2vw,12px);letter-spacing:3px;color:rgba(255,255,255,.3);text-transform:uppercase">${s.type==="knockout"?"PKO":"NL Hold'em"}</div>
-        </div>
-      </div>
-      <!-- Round label -->
-      <div class="clock-level-label" style="margin-bottom:4px">${isBreak?"☕ BREAK":"Round "+(idx+1-levels.slice(0,idx+1).filter(l=>l.isBreak).length)}</div>
-      <!-- Blinds -->
-      <div class="clock-blinds-label ${isBreak?"break-color":""}">${blindLabel}</div>
-      <!-- Big timer -->
-      <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display">${fmtTime(mm,ss)}</div>
-      <!-- Progress bar -->
+      ${logoHdr(32)}
+      ${levelFrag}
+      ${blindsFrag}
+      <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display" title="${isAdmin?"Clique para editar o tempo":""}">${fmtTime(mm,ss)}</div>
       <div class="clock-bar"><div class="clock-bar-fill" id="clk-bar" style="width:${pct}%"></div></div>
-      <!-- Next + break info -->
-      <div class="clock-next-label" style="margin-top:6px">${nextLabel}${levelsUntilBreak?` · Break em ${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}`:""}</div>
-      <!-- Stats -->
-      <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);width:100%">${statRow}</div>
+      <div style="margin-top:6px">${nextFrag}</div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);width:100%">${statFrag("sm")}</div>
       ${adminBar}
     </div>
 
-    <!-- ═══ LANDSCAPE ═══ -->
+    <!-- ═══ LANDSCAPE (3 cols: info | timer | next+break) ═══ -->
     <div class="clk-landscape">
-      <!-- Left column: logo + level + blinds + next + stats -->
+
+      <!-- LEFT: logo + round + blinds + stats + admin -->
       <div class="clk-land-left">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <img src="${LOGO_48}" width="32" height="32" alt="PPP Poker" style="display:block;flex-shrink:0"/>
-          <div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(10px,2vw,15px);letter-spacing:2px;color:rgba(255,255,255,.75);text-transform:uppercase;line-height:1.1">${s.name}</div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(8px,1.4vw,11px);letter-spacing:3px;color:rgba(255,255,255,.3);text-transform:uppercase">${s.type==="knockout"?"PKO":"NL Hold'em"}</div>
-          </div>
-        </div>
-        <div class="clock-level-label" style="margin-bottom:4px;font-size:clamp(10px,1.8vw,15px)">${isBreak?"☕ BREAK":"Round "+(idx+1-levels.slice(0,idx+1).filter(l=>l.isBreak).length)}</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(20px,5vw,42px);color:${isBreak?"#fff":"#F5A800"};line-height:1;margin-bottom:4px">${blindLabel}</div>
-        <div class="clock-next-label" style="font-size:clamp(9px,1.6vw,13px);margin-bottom:12px">${nextLabel}${levelsUntilBreak?` · Break em ${levelsUntilBreak}nv`:""}</div>
-        <div style="display:flex;gap:clamp(10px,2vw,24px);flex-wrap:wrap">
-          <div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${totalEntries}</div><div class="clock-stat-l">Entradas</div></div>
-          <div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${totalRebuys}</div><div class="clock-stat-l">Rebuys</div></div>
-          <div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${totalAddon}</div><div class="clock-stat-l">Add-ons</div></div>
-          ${avgStack>0?`<div style="text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(16px,3.5vw,28px);color:#fff">${fmtChips(avgStack)}</div><div class="clock-stat-l">Avg Stack</div></div>`:""}
-        </div>
+        ${logoHdr(28)}
+        ${levelFrag}
+        <div class="clock-blinds-label ${isBreak?"break-color":""}" style="font-size:clamp(18px,4vw,38px);margin:4px 0">${blindLabel}</div>
+        <div style="margin-top:10px">${statFrag("lg")}</div>
         ${adminBar}
       </div>
-      <!-- Right column: timer only -->
-      <div class="clk-land-right">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:clamp(70px,18vw,150px);line-height:.9;letter-spacing:-3px;color:${isBreak?"#F5A800":"#fff"};text-align:center" id="clk-display-land">${fmtTime(mm,ss)}</div>
-        <div class="clock-bar" style="max-width:320px"><div class="clock-bar-fill" id="clk-bar-land" style="width:${pct}%"></div></div>
-      </div>
-    </div>
 
+      <!-- CENTRE: big timer -->
+      <div class="clk-land-center">
+        <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display-land" style="font-size:clamp(64px,16vw,140px)">${fmtTime(mm,ss)}</div>
+        <div class="clock-bar" style="max-width:300px"><div class="clock-bar-fill" id="clk-bar-land" style="width:${pct}%"></div></div>
+      </div>
+
+      <!-- RIGHT: next blind + break countdown -->
+      <div class="clk-land-right">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.5vw,13px);letter-spacing:2px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:6px">Próximo Nível</div>
+        <div class="clock-next-label" style="font-size:clamp(15px,3vw,26px)">${nextLabel}</div>
+        ${levelsUntilBreak ? `
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.5vw,13px);letter-spacing:2px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:6px">Break em</div>
+          <div class="clock-break-label" style="font-size:clamp(22px,4.5vw,42px)">${levelsUntilBreak} nível${levelsUntilBreak!==1?"s":""}</div>
+        </div>` : ""}
+      </div>
+
+    </div>
   </div>`;
 }
+
 
 function renderBlindEditor(s){
   const levels = getBlindLevels(s);
@@ -5633,7 +5672,7 @@ function bindEvents(){
     render();
   });
 
-  // Admin: play / pause / prev / next
+  // ── CLOCK HANDLERS ──────────────────────────────────────────────────────────
   async function saveClockState(s){
     try{
       await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
@@ -5642,53 +5681,164 @@ function bindEvents(){
     } catch(e){ showToast("Erro: "+e.message,"red"); }
   }
 
-  // CLOCK STATE MODEL:
-  // {levelIdx, elapsed (seconds accrued before current play session), running, startTs (Date.now() of last play)}
-  // Total elapsed for current level = elapsed + (Date.now() - startTs)/1000  (when running)
-  //                                 = elapsed                                 (when paused)
-  // On PAUSE:  freeze elapsed = current total, clear startTs
-  // On PLAY:   keep elapsed as-is (already frozen), set fresh startTs = now
-  // On SKIP:   reset elapsed=0, set fresh startTs if still running
-  // This means there is ALWAYS exactly ONE startTs active at a time.
+  // Generic double-confirmation modal for all clock actions
+  function clkConfirm(title, msg, onConfirm){
+    const el = document.getElementById("admin-modal"); if(!el) return;
+    el.innerHTML = `
+    <div class="ov" style="z-index:1300">
+      <div class="modal" style="max-width:320px;text-align:center;padding:26px 20px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:6px">${title}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:20px">${msg}</div>
+        <button id="clk-cf-yes" class="btn by fw" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;padding:18px;margin-bottom:10px;letter-spacing:1px">✓ Confirmar</button>
+        <button id="clk-cf-no"  class="btn bo fw" style="font-size:14px;padding:12px">Cancelar</button>
+      </div>
+    </div>`;
+    document.getElementById("clk-cf-no").addEventListener("click", closeAdminModal);
+    document.getElementById("clk-cf-yes").addEventListener("click", ()=>{ closeAdminModal(); onConfirm(); });
+  }
 
-  document.getElementById("clk-play")?.addEventListener("click", async()=>{
-    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-    const cs=getClockState(s);
-    if(cs.running) return; // already running, ignore
-    // elapsed is already correct from the pause — just add a fresh startTs
-    s.clock = {levelIdx:cs.levelIdx||0, elapsed:cs.elapsed||0, running:true, startTs:Date.now()};
-    await saveClockState(s); render();
+  // PLAY
+  document.getElementById("clk-play")?.addEventListener("click", ()=>{
+    clkConfirm("▶ Iniciar Relógio", "O contador começará agora para todos os aparelhos.", async ()=>{
+      const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+      const cs=getClockState(s);
+      if(cs.running) return;
+      s.clock = {levelIdx:cs.levelIdx||0, elapsed:cs.elapsed||0, running:true, startTs:Date.now()};
+      await saveClockState(s); render();
+    });
   });
 
-  document.getElementById("clk-pause")?.addEventListener("click", async()=>{
-    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-    const cs=getClockState(s);
-    if(!cs.running) return; // already paused, ignore
-    // Snapshot the exact elapsed seconds right now, then clear startTs
-    const frozenElapsed = clockElapsed(cs);
-    s.clock = {levelIdx:cs.levelIdx||0, elapsed:frozenElapsed, running:false, startTs:null};
-    await saveClockState(s); render();
+  // PAUSE
+  document.getElementById("clk-pause")?.addEventListener("click", ()=>{
+    clkConfirm("⏸ Pausar Relógio", "O contador será pausado para todos os aparelhos.", async ()=>{
+      const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+      const cs=getClockState(s);
+      if(!cs.running) return;
+      s.clock = {levelIdx:cs.levelIdx||0, elapsed:clockElapsed(cs), running:false, startTs:null};
+      await saveClockState(s); render();
+    });
   });
 
-  document.getElementById("clk-prev")?.addEventListener("click", async()=>{
+  // PREV
+  document.getElementById("clk-prev")?.addEventListener("click", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const cs=getClockState(s);
     const newIdx=Math.max(0,(cs.levelIdx||0)-1);
-    // New level always starts from 0; one fresh startTs if still running
-    s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
-    await saveClockState(s); render();
+    const levels=getBlindLevels(s);
+    const lv=levels[newIdx];
+    const label=lv?.isBreak?"Break":`Round ${newIdx+1}`;
+    clkConfirm("◀ Nível Anterior", `Voltar para ${label}?`, async ()=>{
+      s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
+      await saveClockState(s); render();
+    });
   });
 
-  document.getElementById("clk-next")?.addEventListener("click", async()=>{
+  // NEXT
+  document.getElementById("clk-next")?.addEventListener("click", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const levels=getBlindLevels(s);
     const cs=getClockState(s);
     const newIdx=Math.min((cs.levelIdx||0)+1, levels.length-1);
-    s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
-    await saveClockState(s); render();
+    const lv=levels[newIdx];
+    const label=lv?.isBreak?"Break":`Round ${newIdx+1}`;
+    clkConfirm("▶ Próximo Nível", `Avançar para ${label}?`, async ()=>{
+      s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
+      await saveClockState(s); render();
+    });
   });
 
-  // Open blind structure editor
+  // RESET
+  document.getElementById("clk-reset")?.addEventListener("click", ()=>{
+    clkConfirm("↺ Reiniciar Relógio", "Volta para o Round 1 e zera o contador. Tem certeza?", async ()=>{
+      const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
+      s.clock = {levelIdx:0, elapsed:0, running:false, startTs:null};
+      await saveClockState(s); render();
+      showToast("Relógio reiniciado","green");
+    });
+  });
+
+  // EDIT TIMER (click on the big timer display)
+  function openTimerEditModal(){
+    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s||!IS_ADMIN) return;
+    const cs=getClockState(s);
+    const levels=getBlindLevels(s);
+    const idx=Math.min(cs.levelIdx||0,levels.length-1);
+    const level=levels[idx];
+    const elapsed=clockElapsed(cs);
+    const {mm,ss}=clockRemaining(level,elapsed);
+    const el=document.getElementById("admin-modal"); if(!el) return;
+    el.innerHTML=`
+    <div class="ov" style="z-index:1300">
+      <div class="modal" style="max-width:320px;text-align:center;padding:26px 20px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:#fff;margin-bottom:6px">⏱ Editar Tempo do Round</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Correção pontual — apenas este round</div>
+        <input id="clk-time-inp" type="text" value="${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}"
+          placeholder="MM:SS" maxlength="5"
+          style="width:100%;background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;
+                 padding:14px;color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:900;
+                 font-size:36px;text-align:center;letter-spacing:4px;box-sizing:border-box;margin-bottom:16px"/>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Formato MM:SS (ex: 12:30)</div>
+        <button id="clk-time-ok" class="btn by fw" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;padding:16px;margin-bottom:10px">OK</button>
+        <button id="clk-time-cancel" class="btn bo fw" style="font-size:13px;padding:12px">Cancelar</button>
+      </div>
+    </div>`;
+    // Auto-format as user types
+    document.getElementById("clk-time-inp").addEventListener("input", function(){
+      let v=this.value.replace(/[^0-9]/g,"");
+      if(v.length>4) v=v.slice(0,4);
+      if(v.length>2) v=v.slice(0,2)+":"+v.slice(2);
+      this.value=v;
+    });
+    document.getElementById("clk-time-cancel").addEventListener("click", closeAdminModal);
+    document.getElementById("clk-time-ok").addEventListener("click", ()=>{
+      const val=document.getElementById("clk-time-inp").value;
+      const parts=val.split(":");
+      if(parts.length!==2){ showToast("Formato inválido. Use MM:SS","red"); return; }
+      const newMM=parseInt(parts[0])||0, newSS=parseInt(parts[1])||0;
+      if(newSS>59){ showToast("Segundos inválidos","red"); return; }
+      const newRem=newMM*60+newSS;
+      closeAdminModal();
+      // Second confirmation
+      clkConfirm("Confirmar edição", `Definir ${String(newMM).padStart(2,"0")}:${String(newSS).padStart(2,"0")} para este round?`, async ()=>{
+        const s2=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s2) return;
+        const cs2=getClockState(s2);
+        const lv2=getBlindLevels(s2)[Math.min(cs2.levelIdx||0,getBlindLevels(s2).length-1)];
+        const dur=lv2?.dur||900;
+        // Set elapsed so that remaining = newRem
+        const newElapsed=Math.max(0,dur-newRem);
+        s2.clock={levelIdx:cs2.levelIdx||0, elapsed:newElapsed, running:cs2.running, startTs:cs2.running?Date.now():null};
+        await saveClockState(s2); render();
+        showToast("Tempo atualizado","green");
+      });
+    });
+  }
+  document.getElementById("clk-display")?.addEventListener("click", ()=>{ if(IS_ADMIN) openTimerEditModal(); });
+  document.getElementById("clk-display-land")?.addEventListener("click", ()=>{ if(IS_ADMIN) openTimerEditModal(); });
+
+  // FULLSCREEN
+  document.getElementById("clk-fullscreen")?.addEventListener("click", async ()=>{
+    const el=document.getElementById("clock-screen")||document.documentElement;
+    if(document.fullscreenElement){
+      await document.exitFullscreen().catch(()=>{});
+    } else if(el.requestFullscreen){
+      await el.requestFullscreen().catch(()=>{});
+    } else if(el.webkitRequestFullscreen){
+      // Safari/iOS fallback
+      el.webkitRequestFullscreen();
+    } else {
+      // iOS Safari: can't do true fullscreen — scroll to hide browser chrome
+      window.scrollTo(0,1);
+      showToast("Para tela cheia no iOS: use Safari → Compartilhar → Adicionar à Tela de Início","green");
+    }
+  });
+
+  // Update fullscreen button icon when state changes
+  document.addEventListener("fullscreenchange", ()=>{
+    const btn=document.getElementById("clk-fullscreen");
+    if(btn) btn.textContent=document.fullscreenElement?"✕⛶":"⛶";
+  });
+
+  // OPEN BLIND EDITOR
   document.getElementById("clk-edit")?.addEventListener("click",()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const el=document.getElementById("admin-modal"); if(!el) return;
@@ -5700,86 +5850,70 @@ function bindEvents(){
     document.getElementById("blv-cancel")?.addEventListener("click", closeAdminModal);
     document.getElementById("blv-add-blind")?.addEventListener("click",()=>{
       const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:false});
-      s.blindLevels=levels; closeAdminModal();
-      document.getElementById("clk-edit")?.click();
+      s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
     });
     document.getElementById("blv-add-break")?.addEventListener("click",()=>{
       const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:true});
-      s.blindLevels=levels; closeAdminModal();
-      document.getElementById("clk-edit")?.click();
+      s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
     });
     document.querySelectorAll("[data-blv-del]").forEach(btn=>{
       btn.addEventListener("click",()=>{
         const levels=getBlindLevels(s); levels.splice(parseInt(btn.dataset.blvDel),1);
-        s.blindLevels=levels; closeAdminModal();
-        document.getElementById("clk-edit")?.click();
+        s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
       });
     });
     document.getElementById("blv-bulk-apply")?.addEventListener("click",()=>{
       const dur=(parseInt(document.getElementById("blv-bulk-dur")?.value)||15)*60;
       const levels=getBlindLevels(s);
       document.querySelectorAll(".blv-chk:checked").forEach(chk=>{
-        const i=parseInt(chk.dataset.blv);
-        if(levels[i]) levels[i].dur=dur;
+        const i=parseInt(chk.dataset.blv); if(levels[i]) levels[i].dur=dur;
       });
-      s.blindLevels=levels; closeAdminModal();
-      document.getElementById("clk-edit")?.click();
+      s.blindLevels=levels; closeAdminModal(); document.getElementById("clk-edit")?.click();
     });
     document.getElementById("blv-save")?.addEventListener("click", async()=>{
       const levels=getBlindLevels(s);
-      // Read all values from form
       document.querySelectorAll("[data-blv-sb]").forEach(inp=>{const i=parseInt(inp.dataset.blvSb);if(levels[i])levels[i].sb=parseInt(inp.value)||0;});
       document.querySelectorAll("[data-blv-bb]").forEach(inp=>{const i=parseInt(inp.dataset.blvBb);if(levels[i])levels[i].bb=parseInt(inp.value)||0;});
       document.querySelectorAll("[data-blv-ante]").forEach(inp=>{const i=parseInt(inp.dataset.blvAnte);if(levels[i])levels[i].ante=parseInt(inp.value)||0;});
       document.querySelectorAll("[data-blv-dur]").forEach(inp=>{const i=parseInt(inp.dataset.blvDur);if(levels[i])levels[i].dur=(parseInt(inp.value)||15)*60;});
       s.blindLevels=levels;
-      await saveClockState(s);
-      closeAdminModal(); render();
+      await saveClockState(s); closeAdminModal(); render();
       showToast("Estrutura de blinds salva ✓","green");
     });
   }
 
-  // Live tick — reads LIVE state from DB each frame (no stale closure).
-  // This means pause/play/skip always take effect immediately.
+  // Live tick — reads live state from DB each rAF (no stale closure)
   if(CLOCK_STAGE_ID){
-    const tickStageId = CLOCK_STAGE_ID; // capture for exit guard
-    let lastSec = -1;
-    const tick = () => {
-      // Stop if user navigated away or opened a different clock
-      if(CLOCK_STAGE_ID !== tickStageId) return;
-      const dP = document.getElementById("clk-display");
-      if(!dP) return; // DOM gone
-
-      // Always re-read state from DB — never a stale closure
-      const s = DB.stages.find(x=>x.id===tickStageId);
-      if(!s) return;
-      const cs = getClockState(s);
-      const levels = getBlindLevels(s);
-      const idx = Math.min(cs.levelIdx||0, levels.length-1);
-      const level = levels[idx];
-
-      const elapsed = clockElapsed(cs);
-      const {mm,ss,rem,total} = clockRemaining(level, elapsed);
-      const curSec = rem;
-
-      if(curSec !== lastSec){
-        lastSec = curSec;
-        const txt = String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
-        const pct = Math.max(0, Math.min(100, (rem/total)*100));
-        const bP = document.getElementById("clk-bar");
-        const dL = document.getElementById("clk-display-land");
-        const bL = document.getElementById("clk-bar-land");
-        dP.textContent = txt;
-        if(bP) bP.style.width = pct+"%";
-        if(dL) dL.textContent = txt;
-        if(bL) bL.style.width = pct+"%";
-        // Auto-advance at zero (admin only)
-        if(rem <= 0 && cs.running && IS_ADMIN){
-          const newIdx = Math.min(idx+1, levels.length-1);
-          if(newIdx !== idx){
-            s.clock = {levelIdx:newIdx, elapsed:0, running:true, startTs:Date.now()};
-            saveClockState(s).then(()=>render());
-            return;
+    const tickStageId=CLOCK_STAGE_ID;
+    let lastSec=-1;
+    const tick=()=>{
+      if(CLOCK_STAGE_ID!==tickStageId) return;
+      const dP=document.getElementById("clk-display")||document.getElementById("clk-display-land");
+      if(!dP) return;
+      const s=DB.stages.find(x=>x.id===tickStageId); if(!s) return;
+      const cs=getClockState(s);
+      const levels=getBlindLevels(s);
+      const idx=Math.min(cs.levelIdx||0,levels.length-1);
+      const level=levels[idx];
+      const elapsed=clockElapsed(cs);
+      const {mm,ss,rem,total}=clockRemaining(level,elapsed);
+      if(rem!==lastSec){
+        lastSec=rem;
+        const txt=String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+        const pct=Math.max(0,Math.min(100,(rem/total)*100));
+        const dPort=document.getElementById("clk-display");
+        const bPort=document.getElementById("clk-bar");
+        const dLand=document.getElementById("clk-display-land");
+        const bLand=document.getElementById("clk-bar-land");
+        if(dPort) dPort.textContent=txt;
+        if(bPort) bPort.style.width=pct+"%";
+        if(dLand) dLand.textContent=txt;
+        if(bLand) bLand.style.width=pct+"%";
+        if(rem<=0 && cs.running && IS_ADMIN){
+          const newIdx=Math.min(idx+1,levels.length-1);
+          if(newIdx!==idx){
+            s.clock={levelIdx:newIdx,elapsed:0,running:true,startTs:Date.now()};
+            saveClockState(s).then(()=>render()); return;
           }
         }
       }
@@ -5788,13 +5922,6 @@ function bindEvents(){
     requestAnimationFrame(tick);
   }
 
-  // Reset: return to level 0, paused, fresh timestamp
-  document.getElementById("clk-reset")?.addEventListener("click", async()=>{
-    const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-    s.clock={levelIdx:0,elapsed:0,running:false,startTs:null};
-    await saveClockState(s); render();
-    showToast("Relógio reiniciado","green");
-  });
 
   document.getElementById("btn-cg-back")?.addEventListener("click",()=>{
     const sid = CASHGAME_MGMT;
