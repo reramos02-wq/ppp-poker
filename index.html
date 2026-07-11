@@ -401,14 +401,14 @@ var _authTimeout = setTimeout(function(){
     height:100vh;
   }
   .clk-land-left{
-    display:flex;flex-direction:column;justify-content:space-between;
+    display:flex;flex-direction:column;justify-content:center;gap:clamp(8px,2vh,20px);
     border-right:1px solid rgba(255,255,255,.07);padding:0 18px 0 0;
   }
   .clk-land-center{
     display:flex;flex-direction:column;align-items:center;justify-content:center;
   }
   .clk-land-right{
-    display:flex;flex-direction:column;justify-content:space-between;
+    display:flex;flex-direction:column;justify-content:center;gap:clamp(12px,3vh,32px);
     border-left:1px solid rgba(255,255,255,.07);padding:0 0 0 18px;
   }
 }
@@ -422,12 +422,12 @@ var _authTimeout = setTimeout(function(){
     gap:0 10px;align-items:stretch;width:100%;height:100vh;
   }
   .clk-land-left{
-    display:flex;flex-direction:column;justify-content:space-between;
+    display:flex;flex-direction:column;justify-content:center;gap:clamp(6px,2vh,16px);
     border-right:1px solid rgba(255,255,255,.07);padding:0 10px 0 0;
   }
   .clk-land-center{ display:flex;flex-direction:column;align-items:center;justify-content:center; }
   .clk-land-right{
-    display:flex;flex-direction:column;justify-content:space-between;
+    display:flex;flex-direction:column;justify-content:center;gap:clamp(8px,2vh,20px);
     border-left:1px solid rgba(255,255,255,.07);padding:0 0 0 10px;
   }
 }
@@ -3784,6 +3784,15 @@ function renderBuyinPremiacao(s){
   const valueOk = Math.abs(sumValue-totalAPremiar) < 0.5;
   const caixaOk  = Math.abs(sumCaixa-caixinhaTorneio) < 0.5;
 
+  // Detect stale overrides (e.g. values calculated before PKO bounties were configured)
+  const hasStaleOverrides = fin.prizeOverrides && fin.prizeOverrides.length && sumPct > 110;
+  const staleWarning = hasStaleOverrides ? `
+    <div style="background:rgba(231,76,60,.1);border:1px solid var(--red);border-radius:6px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--red);font-weight:700;margin-bottom:6px">⚠ Premiação desatualizada</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Os valores foram calculados com uma base diferente (antes de configurar os bounties PKO). Recalcule automaticamente para corrigir.</div>
+      <button id="bi-reset-prizes" class="btn bd fw" style="font-size:13px;padding:10px;color:var(--yellow);border-color:var(--yellow)">↺ Recalcular Automático agora</button>
+    </div>` : "";
+
   const rows = premios.map((p,i)=>`
     <div style="padding:10px 0;border-bottom:1px solid var(--border)" data-prize-row="${i}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -3834,6 +3843,8 @@ function renderBuyinPremiacao(s){
         <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--yellow)">${fmtBRL(totalAPremiar)}</span>
       </div>
     </div>
+
+    ${staleWarning}
 
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;justify-content:space-between">
       <span>Posição</span><span style="margin-right:98px">Prêmio</span><span>Caixinha</span>
@@ -4458,9 +4469,8 @@ function renderClock(){
 
       <!-- LEFT: logo + stats only -->
       <div class="clk-land-left">
-        <div style="margin-bottom:auto;padding-top:12px">${logoHdr(32)}</div>
-        <div style="margin:auto 0">${statFrag("lg")}</div>
-        <div style="margin-top:auto;padding-bottom:12px"></div>
+        ${logoHdr(32)}
+        ${statFrag("lg")}
       </div>
 
       <!-- CENTRE: round+blinds ABOVE timer, admin buttons BELOW -->
@@ -4493,15 +4503,15 @@ function renderClock(){
 
       <!-- RIGHT: next blind + break info -->
       <div class="clk-land-right">
-        <div style="margin-bottom:auto;padding-top:12px">
+        <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.6vw,14px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:8px">Próximo Nível</div>
           <div class="clock-next-label" style="font-size:clamp(18px,4vw,38px);line-height:1.2">${nextLabel}</div>
         </div>
         ${levelsUntilBreak ? `
-        <div style="margin-top:auto;padding-bottom:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:16px">
+        <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:16px">
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.6vw,14px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:8px">Break em</div>
           <div class="clock-break-label" style="font-size:clamp(32px,7.5vw,72px);line-height:1">${levelsUntilBreak} ${levelsUntilBreak!==1?"níveis":"nível"}</div>
-        </div>` : `<div style="margin-top:auto"></div>`}
+        </div>` : ""}
       </div>
 
     </div>
