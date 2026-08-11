@@ -923,12 +923,15 @@ function getClockState(s){
 }
 
 // Compute how many seconds have elapsed in the current level, based on timestamps.
-// This is computed from server time (startTs = Date.now() when admin pressed play),
-// so all clients see the same value regardless of when they load the page.
+// startTs is set to Date.now() on the admin's device when play is pressed,
+// then synced to all clients via Firestore — everyone computes the same elapsed.
 function clockElapsed(cs){
-  if(!cs.running) return cs.elapsed||0;
+  if(!cs.running || !cs.startTs) return cs.elapsed||0;
   const now = Date.now();
-  return (cs.elapsed||0) + Math.floor((now - (cs.startTs||now))/1000);
+  // Guard: if startTs is in the future (clock drift / snapshot not yet arrived),
+  // return just the accumulated elapsed to avoid negative values.
+  const sinceStart = Math.max(0, Math.floor((now - cs.startTs)/1000));
+  return (cs.elapsed||0) + sinceStart;
 }
 
 // Given elapsed seconds in a level, return {mm, ss} remaining
@@ -1028,9 +1031,15 @@ function calcPotFinal(s){
   return calcArrecadado(s) - calcCustosFixos(fin);
 }
 
-// Taxa FT = 15% do POT FINAL
+// Taxa FT = 15% da base tributável
+// NLH: 15% do Pot Final
+// PKO: 15% do (Pot Final − KO Pool) — bounties não entram na base da FT
 function calcTaxaFT(s){
-  return calcPotFinal(s) * 0.15;
+  const potFinal = calcPotFinal(s);
+  if(s.type==="knockout"){
+    return (potFinal - calcKOFromEntries(s)) * 0.15;
+  }
+  return potFinal * 0.15;
 }
 
 // FT Prize pool contribution per stage.
@@ -5999,44 +6008,51 @@ function bindEvents(){
     });
   }
 
-  // Live tick — reads live state each rAF, sounds beep on level change
+  // Live tick — single instance guaranteed by generation counter.
+  // Every render() increments the generation; any older tick loop sees the
+  // mismatch and exits. This prevents multiple concurrent loops after
+  // admin actions trigger render() via onSnapshot.
   if(CLOCK_STAGE_ID){
-    const tickStageId=CLOCK_STAGE_ID;
-    let lastSec=-1, beeped=false;
-    const tick=()=>{
-      if(CLOCK_STAGE_ID!==tickStageId) return;
-      const dP=document.getElementById("clk-display");
-      const dL=document.getElementById("clk-display-land");
+    if(!window._clkGen) window._clkGen = 0;
+    const myGen = ++window._clkGen;
+    const tickStageId = CLOCK_STAGE_ID;
+    let lastSec = -1, beeped = false;
+    const tick = () => {
+      // Stop if a newer tick loop was started (render called again)
+      if(window._clkGen !== myGen) return;
+      // Stop if user closed the clock
+      if(CLOCK_STAGE_ID !== tickStageId) return;
+      const dP = document.getElementById("clk-display");
+      const dL = document.getElementById("clk-display-land");
       if(!dP && !dL) return;
-      const s=DB.stages.find(x=>x.id===tickStageId); if(!s) return;
-      const cs=getClockState(s);
-      const levels=getBlindLevels(s);
-      const idx=Math.min(cs.levelIdx||0,levels.length-1);
-      const level=levels[idx];
-      const elapsed=clockElapsed(cs);
-      const {mm,ss,rem,total}=clockRemaining(level,elapsed);
-      if(rem!==lastSec){
-        lastSec=rem;
-        const txt=String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
-        const pct=Math.max(0,Math.min(100,(rem/total)*100));
-        const bP=document.getElementById("clk-bar");
-        const bL=document.getElementById("clk-bar-land");
-        if(dP) dP.textContent=txt;
-        if(bP) bP.style.width=pct+"%";
-        if(dL) dL.textContent=txt;
-        if(bL) bL.style.width=pct+"%";
-        // Beep + auto-advance when reaching zero
-        if(rem<=0 && cs.running){
-          if(!beeped){ beeped=true; playLevelUpBeep(); }
+      const s = DB.stages.find(x=>x.id===tickStageId); if(!s) return;
+      const cs = getClockState(s);
+      const levels = getBlindLevels(s);
+      const idx = Math.min(cs.levelIdx||0, levels.length-1);
+      const level = levels[idx];
+      const elapsed = clockElapsed(cs);
+      const {mm,ss,rem,total} = clockRemaining(level, elapsed);
+      if(rem !== lastSec){
+        lastSec = rem;
+        const txt = String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+        const pct = Math.max(0, Math.min(100, (rem/total)*100));
+        const bP = document.getElementById("clk-bar");
+        const bL = document.getElementById("clk-bar-land");
+        if(dP) dP.textContent = txt;
+        if(bP) bP.style.width = pct+"%";
+        if(dL) dL.textContent = txt;
+        if(bL) bL.style.width = pct+"%";
+        if(rem <= 0 && cs.running){
+          if(!beeped){ beeped = true; playLevelUpBeep(); }
           if(IS_ADMIN){
-            const newIdx=Math.min(idx+1,levels.length-1);
-            if(newIdx!==idx){
-              s.clock={levelIdx:newIdx,elapsed:0,running:true,startTs:Date.now()};
+            const newIdx = Math.min(idx+1, levels.length-1);
+            if(newIdx !== idx){
+              s.clock = {levelIdx:newIdx, elapsed:0, running:true, startTs:Date.now()};
               saveClockState(s).then(()=>render()); return;
             }
           }
         } else {
-          beeped=false;
+          beeped = false;
         }
       }
       requestAnimationFrame(tick);
@@ -7324,20 +7340,27 @@ function startListeners(user){
         // preserve local finance/buyinData so in-progress edits (inputs being
         // typed) aren't wiped out by the snapshot echo of our own save.
         const editingFinanceId = BUYIN_MGMT;
-        if(editingStageId || editingFinanceId){
-          DB.stages = (data.stages||[]).map(s=>{
-            const local = DB.stages.find(x=>x.id===s.id);
-            if(s.id===editingStageId && local){
-              return {...s, draft: local.draft};
-            }
-            if(s.id===editingFinanceId && local){
-              return {...s, finance: local.finance, buyinData: local.buyinData};
-            }
-            return s;
-          }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
-        } else {
-          DB.stages = (data.stages || []).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
-        }
+        // Also preserve clock state for any stage whose clock is actively running —
+        // the onSnapshot echo of our own saveClockState() would otherwise cause a
+        // brief reset to the Firestore value (which arrives slightly delayed),
+        // making the clock appear to jump back on every admin action.
+        const clockStageId = CLOCK_STAGE_ID;
+        DB.stages = (data.stages||[]).map(s=>{
+          const local = DB.stages.find(x=>x.id===s.id);
+          if(s.id===editingStageId && local){
+            return {...s, draft: local.draft};
+          }
+          if(s.id===editingFinanceId && local){
+            return {...s, finance: local.finance, buyinData: local.buyinData};
+          }
+          // Clock: if this stage's clock is actively running locally, keep the
+          // local clock state (which has the most recent startTs). The Firestore
+          // value will be identical once the echo resolves, so this is safe.
+          if(s.id===clockStageId && local && local.clock && local.clock.running){
+            return {...s, clock: local.clock};
+          }
+          return s;
+        }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
         dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
         // If document exists but is empty, seed it
         if(DB.players.length === 0 && DB.stages.length === 0){
