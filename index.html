@@ -583,6 +583,24 @@ var mo=new MutationObserver(function(muts){
   }); }catch(e){}
   busy=false;
 });
+window.__pppIcons=function(root){
+  try{
+    root=root||document.body; conv(root);
+    var NS='http://www.w3.org/2000/svg';
+    root.querySelectorAll('svg.pi').forEach(function(s){
+      var u=s.querySelector('use'); if(!u) return;
+      var id=(u.getAttribute('href')||'').replace('#','');
+      var sym=document.getElementById(id); if(!sym) return;
+      var cs=getComputedStyle(s);
+      var col=cs.color||'#fff', cut=(cs.getPropertyValue('--cut')||'#222').trim()||'#222';
+      var w=s.getBoundingClientRect();
+      s.setAttribute('viewBox',sym.getAttribute('viewBox')||'0 0 24 24');
+      s.setAttribute('xmlns',NS);
+      if(w.width){ s.setAttribute('width',w.width); s.setAttribute('height',w.height); }
+      s.innerHTML=sym.innerHTML.replace(/currentColor/g,col).replace(/var\(--cut\)/g,cut);
+    });
+  }catch(e){}
+};
 function start(){ conv(document.body); mo.observe(document.body,{childList:true,subtree:true,characterData:true}); }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
 })();
@@ -1892,6 +1910,8 @@ function openShareModal(stage){
       el.appendChild(footer);
 
       // Generate canvas
+      if(window.__pppIcons) window.__pppIcons(el);
+
       const canvas = await html2canvas(el,{
         backgroundColor:"#111",
         scale:2,
@@ -5610,6 +5630,8 @@ window.exportPodium = async function(){
       new Promise(res => setTimeout(res, 8000))
     ]);
 
+    if(window.__pppIcons) window.__pppIcons(clone);
+
     const canvas = await html2canvas(clone, {
       backgroundColor:"#1a1a1a",
       scale:2,
@@ -6797,6 +6819,8 @@ function bindEvents(){
       });
 
       document.body.appendChild(clone);
+
+      if(window.__pppIcons) window.__pppIcons(clone);
 
       const canvas = await html2canvas(clone, {
         backgroundColor:"#1a1a1a",
