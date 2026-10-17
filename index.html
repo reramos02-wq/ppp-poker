@@ -480,6 +480,112 @@ var _authTimeout = setTimeout(function(){
 .clk-btn:hover{opacity:.8;}
 </style>
 
+<style>
+.pi{width:1.1em;height:1.1em;vertical-align:-.17em;display:inline-block;flex-shrink:0;--cut:#222}
+.pi-spade{color:#fff}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    
+    <symbol id="i-spade" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.5S3.5 8 3.5 13.3c0 2.4 1.9 4.2 4.2 4.2 1.4 0 2.6-.6 3.4-1.6-.2 2-.9 3.5-2.4 5.1h6.6c-1.5-1.6-2.2-3.1-2.4-5.1.8 1 2 1.6 3.4 1.6 2.3 0 4.2-1.8 4.2-4.2C20.5 8 12 1.5 12 1.5z"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.5S2.5 15.6 2.5 9.2A5 5 0 0 1 12 6.6a5 5 0 0 1 9.5 2.6c0 6.4-9.5 12.3-9.5 12.3z"/></symbol>
+    <symbol id="i-diamond" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.5l8 10.5-8 10.5L4 12z"/></symbol>
+    <symbol id="i-club" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="7" r="4.6"/><circle cx="6.8" cy="14" r="4.6"/><circle cx="17.2" cy="14" r="4.6"/><path d="M10.4 13h3.2l1.6 8.5H8.8z"/></g></symbol>
+
+    
+    <symbol id="i-bell" viewBox="0 0 24 24"><path fill="currentColor" d="M12 22.5a2.6 2.6 0 0 0 2.6-2.6H9.4a2.6 2.6 0 0 0 2.6 2.6zM19.5 16.5V11a7.5 7.5 0 0 0-5.4-7.2V3a2.1 2.1 0 0 0-4.2 0v.8A7.5 7.5 0 0 0 4.5 11v5.5L2.5 18.5v1.3h19v-1.3z"/></symbol>
+    <symbol id="i-bell-off" viewBox="0 0 24 24"><g><path fill="currentColor" opacity=".55" d="M12 22.5a2.6 2.6 0 0 0 2.6-2.6H9.4a2.6 2.6 0 0 0 2.6 2.6zM19.5 16.5V11a7.5 7.5 0 0 0-5.4-7.2V3a2.1 2.1 0 0 0-4.2 0v.8A7.5 7.5 0 0 0 4.5 11v5.5L2.5 18.5v1.3h19v-1.3z"/><path d="M3.5 2.8l17.5 18.4" stroke="var(--cut)" stroke-width="5.2" stroke-linecap="round"/><path d="M3.5 2.8l17.5 18.4" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></g></symbol>
+    <symbol id="i-arrow-l" viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 3.5L5 12l10.5 8.5z"/></symbol>
+    <symbol id="i-arrow-r" viewBox="0 0 24 24"><path fill="currentColor" d="M8.5 3.5L19 12 8.5 20.5z"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M6 3.2L20.5 12 6 20.8z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M5 3h5v18H5zM14 3h5v18h-5z"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><path fill="currentColor" d="M3 2.5l.5 7 7-1z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 6.5" fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M3.5 9V3.5H9M15 3.5h5.5V9M20.5 15v5.5H15M9 20.5H3.5V15" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="square"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="12" r="7.2"/><rect x="10" y="1" width="4" height="5" rx="1"/><rect x="10" y="1" width="4" height="5" rx="1" transform="rotate(60 12 12)"/><rect x="10" y="1" width="4" height="5" rx="1" transform="rotate(120 12 12)"/><rect x="10" y="1" width="4" height="5" rx="1" transform="rotate(180 12 12)"/><rect x="10" y="1" width="4" height="5" rx="1" transform="rotate(240 12 12)"/><rect x="10" y="1" width="4" height="5" rx="1" transform="rotate(300 12 12)"/></g><circle cx="12" cy="12" r="3.1" fill="var(--cut)"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5l10 8.7h-3.2V21.5h-4.8v-6.8h-4v6.8H5.2V11.2H2z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="8.5" cy="7.5" r="4"/><path d="M1 20.5c0-4.2 3.4-7 7.5-7s7.5 2.8 7.5 7z"/><circle cx="17.5" cy="8.5" r="3.2" opacity=".7"/><path opacity=".7" d="M17 14c3.2.2 6 2.3 6 6.5h-5.2c0-2.6-.5-4.6-.8-6.5z"/></g></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18v16.5H3z"/><path fill="currentColor" d="M6.5 1.5h3v5h-3zM14.5 1.5h3v5h-3z"/><path fill="var(--cut)" d="M3 9.5h18v1.6H3z"/><g fill="var(--cut)"><rect x="6" y="13" width="3" height="3"/><rect x="10.5" y="13" width="3" height="3"/><rect x="15" y="13" width="3" height="3"/><rect x="6" y="17.2" width="3" height="2.4"/><rect x="10.5" y="17.2" width="3" height="2.4"/></g></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.8l3.1 6.6 7.2.9-5.3 5 1.4 7.2L12 17.9l-6.4 3.6L7 14.3 1.7 9.3l7.2-.9z"/></symbol>
+    <symbol id="i-live" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M6.4 6.4a8 8 0 0 0 0 11.2M17.6 6.4a8 8 0 0 1 0 11.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M3.2 3.2a12.5 12.5 0 0 0 0 17.6M20.8 3.2a12.5 12.5 0 0 1 0 17.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity=".5"/></symbol>
+
+    
+    <symbol id="i-chip" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><circle cx="12" cy="12" r="7.2" fill="none" stroke="var(--cut)" stroke-width="1.8" stroke-dasharray="3.1 2.4"/><circle cx="12" cy="12" r="3.4" fill="var(--cut)"/></symbol>
+    <symbol id="i-cards" viewBox="0 0 24 24"><rect x="3" y="4.5" width="12.5" height="17" rx="2" fill="currentColor" opacity=".5" transform="rotate(-12 9 13)"/><rect x="8.5" y="2.5" width="12.5" height="17" rx="2" fill="currentColor" transform="rotate(8 14.7 11)"/><path fill="var(--cut)" transform="translate(9.4 4.2) scale(.55) rotate(8 12 12)" d="M12 1.5S3.5 8 3.5 13.3c0 2.4 1.9 4.2 4.2 4.2 1.4 0 2.6-.6 3.4-1.6-.2 2-.9 3.5-2.4 5.1h6.6c-1.5-1.6-2.2-3.1-2.4-5.1.8 1 2 1.6 3.4 1.6 2.3 0 4.2-1.8 4.2-4.2C20.5 8 12 1.5 12 1.5z"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><g fill="currentColor"><path d="M6 2.5h12v7a6 6 0 0 1-12 0z"/><path d="M10.4 15h3.2v3.6h-3.2zM6.5 19.5h11v2.5h-11z"/></g><path d="M6 4.5H2.8v2.2A4.2 4.2 0 0 0 7 11M18 4.5h3.2v2.2A4.2 4.2 0 0 1 17 11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-ko" viewBox="0 0 24 24"><g fill="currentColor"><path d="M5.5 8.5A5.5 5.5 0 0 1 11 3h3.5A5.5 5.5 0 0 1 20 8.5V13a5.5 5.5 0 0 1-5.5 5.5H8.5a3 3 0 0 1-3-3z"/><rect x="7" y="19.2" width="10.5" height="3.6" rx="1"/></g><path d="M9.5 14.2h7.5" stroke="var(--cut)" stroke-width="1.8" stroke-linecap="round"/><path d="M5.5 12.5H3.7a1.7 1.7 0 0 1-1.7-1.7V9.6A2.4 2.4 0 0 1 4.4 7.2h1.1z" fill="currentColor" opacity=".7"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><path d="M12 5.8V12l4.4 2.6" fill="none" stroke="var(--cut)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-money" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><text x="12" y="16.6" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="12.5" fill="var(--cut)">R$</text></symbol>
+    <symbol id="i-coffee" viewBox="0 0 24 24"><g fill="currentColor"><path d="M3 8h13v6.5a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5z"/><path d="M5 3h2v3H5zM9 2h2v4H9zM13 3h2v3h-2z" opacity=".6"/></g><path d="M16 9.5h1.6a3 3 0 0 1 0 6H16" fill="none" stroke="currentColor" stroke-width="2.2"/><rect x="3" y="21" width="14" height="1.8" rx=".9" fill="currentColor"/></symbol>
+  
+<symbol id="i-warn" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2L23 21.5H1z"/><path d="M12 9v6" stroke="var(--cut)" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="18" r="1.5" fill="var(--cut)"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.5L15.5 5l3.5 3.5L6.5 21H3zM17 3.5l1.5-1.5 3.5 3.5-1.5 1.5z"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><path fill="currentColor" d="M4.5 10.5h15V22h-15z"/><path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="12" cy="16" r="1.9" fill="var(--cut)"/></symbol>
+<symbol id="i-unlock" viewBox="0 0 24 24"><path fill="currentColor" d="M4.5 10.5h15V22h-15z"/><path d="M7.5 10.5V7a4.5 4.5 0 0 1 8.6-1.8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="16" r="1.9" fill="var(--cut)"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path fill="currentColor" d="M4.5 6.5h15L18.4 22H5.6zM8.5 2.5h7l1 2.5h-9z"/><path d="M2.5 6h19" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path fill="currentColor" d="M2 7h4.5L8.5 4h7l2 3H22v13H2z"/><circle cx="12" cy="13" r="4.2" fill="var(--cut)"/><circle cx="12" cy="13" r="2.1" fill="currentColor"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="3.2"/><path d="M15 15l6.5 6.5" stroke="currentColor" stroke-width="3.8" stroke-linecap="round"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.5l6.5 6.5h-4.5v8h-4V8H5.5z"/><path d="M3.5 14v7.5h17V14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linejoin="round"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path fill="currentColor" d="M12 16.5L5.5 10H10V2h4v8h4.5z"/><path d="M3.5 14v7.5h17V14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linejoin="round"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 22S4.5 14.5 4.5 9.5a7.5 7.5 0 0 1 15 0C19.5 14.5 12 22 12 22z"/><circle cx="12" cy="9.5" r="3" fill="var(--cut)"/></symbol>
+<symbol id="i-crown" viewBox="0 0 24 24"><path fill="currentColor" d="M2 7l5 4.5L12 3l5 8.5L22 7l-2 13H4z"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path fill="currentColor" d="M4 2h2.6v20H4z"/><path fill="currentColor" d="M7.5 3h13l-3.5 5.5 3.5 5.5h-13z"/></symbol>
+<symbol id="i-clipboard" viewBox="0 0 24 24"><path fill="currentColor" d="M4.5 4h15v18h-15z"/><rect x="8" y="1.5" width="8" height="5" rx="1.2" fill="currentColor"/><path d="M8 11h8M8 15h8M8 19h5" stroke="var(--cut)" stroke-width="1.9" stroke-linecap="round"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path fill="currentColor" d="M2.5 4.5c3.5-.8 6.5-.6 9.5 1.2v15.8c-3-1.8-6-2-9.5-1.2zM21.5 4.5c-3.5-.8-6.5-.6-9.5 1.2v15.8c3-1.8 6-2 9.5-1.2z"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><path d="M1.5 12h21M12 1.5c-4 3-4 18 0 21M12 1.5c4 3 4 18 0 21" fill="none" stroke="var(--cut)" stroke-width="1.6"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.4-3.4a4.5 4.5 0 0 0-6.4-6.4L12 5.6M14 10a4.5 4.5 0 0 0-6.4 0L4.2 13.4a4.5 4.5 0 0 0 6.4 6.4L12 18.4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path fill="currentColor" d="M3 3h18v14H12l-5.5 4.5V17H3z"/></symbol>
+<symbol id="i-broom" viewBox="0 0 24 24"><path fill="currentColor" d="M14.5 2h4l-3.2 9.5h-4zM8.5 12.5h10l2.5 9.5H3z"/></symbol>
+<symbol id="i-map" viewBox="0 0 24 24"><path fill="currentColor" d="M2 5l6.5-2.5v17L2 22zM9.8 2.5L15 4.5v17l-5.2-2zM16.3 4.5L22 2v17l-5.700 2.5z"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24"><path fill="currentColor" d="M3 3h15l3 3v15H3z"/><rect x="7" y="3" width="8" height="6" fill="var(--cut)"/><rect x="7" y="13" width="10" height="8" fill="var(--cut)"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="5" fill="currentColor"/><path fill="currentColor" d="M2.5 22c0-5.5 4.3-8.5 9.5-8.5s9.5 3 9.5 8.5z"/></symbol>
+<symbol id="i-party" viewBox="0 0 24 24"><path fill="currentColor" d="M2 22l5-14 9 9z"/><path d="M12 4v3M19 6l-2 2M21 12h-3M16 1l1 2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+<symbol id="i-medal-1" viewBox="0 0 24 24"><path fill="#7a5200" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#FFC107"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#7a5200" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#7a5200">1</text></symbol><symbol id="i-medal-2" viewBox="0 0 24 24"><path fill="#4a5059" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#C9CED6"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#4a5059" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#4a5059">2</text></symbol><symbol id="i-medal-3" viewBox="0 0 24 24"><path fill="#5c3410" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#D2884A"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#5c3410" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#5c3410">3</text></symbol></defs></svg>
+<script>
+(function(){
+var MAP={"🃏": "cards", "🥊": "ko", "🏆": "trophy", "✓": "check", "✔": "check", "✅": "check", "✕": "close", "❌": "close", "→": "arrow-r", "⚠️": "warn", "⚠": "warn", "✏️": "edit", "✏": "edit", "📅": "calendar", "💰": "money", "💵": "money", "💸": "money", "🧾": "money", "↺": "reset", "🔄": "reset", "🏠": "home", "⚙️": "gear", "⚙": "gear", "🏅": "star", "🌟": "star", "⭐": "star", "☕": "coffee", "👥": "users", "👤": "user", "🔒": "lock", "🔓": "unlock", "🗑️": "trash", "🗑": "trash", "🧹": "broom", "🗺️": "map", "📸": "camera", "📷": "camera", "🔍": "search", "⛶": "fullscreen", "📤": "share", "⬇️": "download", "💾": "save", "📍": "pin", "📖": "book", "🔔": "bell", "🔕": "bell-off", "📋": "clipboard", "👑": "crown", "💬": "chat", "🏁": "flag", "🌐": "globe", "🔗": "link", "🎉": "party", "🏗️": "gear", "🥇": "medal-1", "🥈": "medal-2", "🥉": "medal-3", "🔬": "search", "🚗": "pin"};
+var keys=Object.keys(MAP).sort(function(a,b){return b.length-a.length;}).map(function(k){return k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');});
+var RX=new RegExp('('+keys.join('|')+')\\uFE0F?','g');
+var SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,OPTION:1,TITLE:1,SVG:1,svg:1,INPUT:1};
+function conv(root){
+  if(!root) return;
+  if(root.nodeType===3){ fix(root); return; }
+  if(root.nodeType!==1||SKIP[root.nodeName]) return;
+  var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:function(n){var p=n.parentNode;return(p&&!SKIP[p.nodeName]&&!(p.closest&&p.closest('svg')))?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
+  var list=[],n; while((n=w.nextNode())) list.push(n);
+  list.forEach(fix);
+}
+function fix(node){
+  var t=node.nodeValue; if(!t) return;
+  RX.lastIndex=0; if(!RX.test(t)) return;
+  RX.lastIndex=0;
+  var frag=document.createDocumentFragment(),last=0,m;
+  while((m=RX.exec(t))){
+    if(m.index>last) frag.appendChild(document.createTextNode(t.slice(last,m.index)));
+    var name=MAP[m[1]];
+    var s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    s.setAttribute('class','pi pi-'+name); s.setAttribute('aria-hidden','true');
+    var u=document.createElementNS('http://www.w3.org/2000/svg','use');
+    u.setAttribute('href','#i-'+name); s.appendChild(u); frag.appendChild(s);
+    last=m.index+m[0].length;
+  }
+  if(last<t.length) frag.appendChild(document.createTextNode(t.slice(last)));
+  node.parentNode.replaceChild(frag,node);
+}
+var busy=false;
+var mo=new MutationObserver(function(muts){
+  if(busy) return; busy=true;
+  try{ muts.forEach(function(m){
+    if(m.type==='characterData') fix(m.target);
+    else m.addedNodes.forEach(function(n){conv(n);});
+  }); }catch(e){}
+  busy=false;
+});
+function start(){ conv(document.body); mo.observe(document.body,{childList:true,subtree:true,characterData:true}); }
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
+})();
+</script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
