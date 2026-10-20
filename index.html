@@ -394,12 +394,19 @@ var _authTimeout = setTimeout(function(){
   .clk-portrait{ display:none; }
   .clk-landscape{
     display:grid;
-    grid-template-columns:minmax(160px,.65fr) minmax(280px,1.5fr) minmax(160px,.65fr);
+    grid-template-columns:minmax(160px,.6fr) minmax(300px,2fr) minmax(160px,.6fr);
     gap:0 20px;
     align-items:stretch;
-    width:100%;max-width:1200px;margin:0 auto;
-    height:100vh;
+    width:100%;max-width:1800px;margin:0 auto;
+    --avail-h:calc(100vh - var(--prize-h,0px));   /* altura livre (tela menos a faixa de premiação) */
+    height:var(--avail-h);
   }
+  /* Tempo e blinds grandes: escalam com a altura LIVRE e a largura da tela (tablet/computador) */
+  .clk-landscape .clk-land-timer{ font-size:clamp(100px,min(calc(var(--avail-h)*.46),27vw),540px); margin:0; }
+  .clk-landscape .clk-land-blinds{ font-size:clamp(32px,min(calc(var(--avail-h)*.16),9vw),170px); line-height:1; }
+  .clk-landscape .clk-land-ante{ font-size:clamp(16px,min(calc(var(--avail-h)*.07),4vw),72px); letter-spacing:3px; margin-top:.15em;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;color:rgba(245,168,0,.75);line-height:1; }
+  .clk-landscape .clk-land-round{ font-size:clamp(13px,min(calc(var(--avail-h)*.03),2.2vw),26px); letter-spacing:4px; margin-bottom:6px; }
   .clk-land-left{
     display:flex;flex-direction:column;justify-content:center;gap:clamp(8px,2vh,20px);
     border-right:1px solid rgba(255,255,255,.07);padding:0 18px 0 0;
@@ -419,8 +426,16 @@ var _authTimeout = setTimeout(function(){
   .clk-landscape{
     display:grid;
     grid-template-columns:minmax(110px,.6fr) minmax(180px,1.4fr) minmax(110px,.6fr);
-    gap:0 10px;align-items:stretch;width:100%;height:100vh;
+    gap:0 10px;align-items:stretch;width:100%;
+    --avail-h:calc(100vh - var(--prize-h,0px));
+    height:var(--avail-h);
   }
+  /* celular deitado (tela baixa) */
+  .clk-landscape .clk-land-timer{ font-size:clamp(60px,min(calc(var(--avail-h)*.44),22vw),200px); margin:0; }
+  .clk-landscape .clk-land-blinds{ font-size:clamp(24px,min(calc(var(--avail-h)*.15),6vw),62px); line-height:1; }
+  .clk-landscape .clk-land-ante{ font-size:clamp(12px,min(calc(var(--avail-h)*.06),3vw),28px); letter-spacing:2px; margin-top:.15em;
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;color:rgba(245,168,0,.75);line-height:1; }
+  .clk-landscape .clk-land-round{ font-size:clamp(12px,2.2vw,20px); letter-spacing:4px; margin-bottom:4px; }
   .clk-land-left{
     display:flex;flex-direction:column;justify-content:center;gap:clamp(6px,2vh,16px);
     border-right:1px solid rgba(255,255,255,.07);padding:0 10px 0 0;
@@ -478,6 +493,36 @@ var _authTimeout = setTimeout(function(){
   transition:opacity .15s;
 }
 .clk-btn:hover{opacity:.8;}
+
+/* ── Faixa de premiação (parte de baixo; aparece depois do intervalo) ── */
+.clock-screen.has-prizes{ --prize-h:clamp(70px,12vh,110px); }
+.clock-screen.has-prizes.prizes-2{ --prize-h:clamp(104px,19vh,170px); }
+.has-prizes .clk-portrait{ padding-bottom:var(--prize-h); }   /* retrato: sobe o conteúdo */
+@media (orientation:landscape) and (max-height:499px){        /* celular deitado: faixa mais baixa */
+  .clock-screen.has-prizes{ --prize-h:52px; }
+  .clock-screen.has-prizes.prizes-2{ --prize-h:76px; }
+}
+.clk-prizes{
+  position:fixed;left:0;right:0;bottom:0;z-index:520;height:var(--prize-h);box-sizing:border-box;
+  padding:0 clamp(10px,2vw,28px);
+  background:linear-gradient(180deg,rgba(245,168,0,.06),rgba(245,168,0,.16));
+  border-top:1px solid rgba(245,168,0,.4);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:calc(var(--prize-h)*.05);overflow:hidden;
+}
+.clk-prize-row{ display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;
+  gap:0 clamp(16px,3vw,48px);max-width:100%; }
+.clk-prize{ display:flex;align-items:baseline;gap:.35em;white-space:nowrap;line-height:1.05;
+  font-family:'Barlow Condensed',sans-serif;font-weight:900; }
+.clk-prize-pos{ font-size:.55em;letter-spacing:1px;opacity:.9; }
+.clk-prize.top{ font-size:min(calc(var(--prize-h)*.36),5.6vw); }
+.prizes-2 .clk-prize.top{ font-size:min(calc(var(--prize-h)*.25),5.6vw); }
+.clk-prize.rest{ font-size:min(calc(var(--prize-h)*.2),4.4vw);color:rgba(255,255,255,.85); }
+.prizes-2 .clk-prize.rest{ font-size:min(calc(var(--prize-h)*.15),4vw); }
+.clk-land-left,.clk-land-right{ min-width:0;overflow-wrap:anywhere; }
+.clk-prize.p1{ color:#FFD700; }
+.clk-prize.p2{ color:#DADADA; }
+.clk-prize.p3{ color:#D98B48; }
 </style>
 
 <style>
@@ -1036,11 +1081,13 @@ function getBlindLevels(s){
 }
 
 // Format chip count for display (100k, 2.5k, etc.)
+// Abreviação só a partir de 10.000: 1.600 → "1.600" · 10.000 → "10k" · 12.500 → "12,5k" · 1.300.000 → "1,3MM"
 function fmtChips(n){
   if(!n || n===0) return "0";
-  if(n>=1000000) return (n/1000000).toLocaleString("pt-BR",{maximumFractionDigits:1})+"M";
-  if(n>=1000)    return (n/1000).toLocaleString("pt-BR",{maximumFractionDigits:0})+"k";
-  return String(n);
+  const short = (v, suf) => (Math.round(v*10)/10).toLocaleString("pt-BR",{maximumFractionDigits:1})+suf;
+  if(n>=1000000) return short(n/1000000, "MM");
+  if(n>=10000)   return short(n/1000, "k");
+  return Number(n).toLocaleString("pt-BR");
 }
 
 // ── BLIND CLOCK — estado no Firestore (coleção "clocks"), tempo sempre DERIVADO ──
@@ -4642,6 +4689,25 @@ function renderClock(){
   const roundLabel = isBreak ? (v.waiting ? "☕ BREAK · AGUARDANDO" : "☕ BREAK") : "ROUND "+roundNum;
   const playLabel  = v.waiting ? "▶ Iniciar Break" : "▶ Iniciar";
 
+  // Blinds na tela larga: sb/bb grandes e o ante numa linha própria, menor
+  const blindMain = isBreak ? "INTERVALO" : `${fmtChips(level.sb)} / ${fmtChips(level.bb)}`;
+  const anteLine  = (!isBreak && level.ante) ? `<div class="clk-land-ante">ANTE ${fmtChips(level.ante)}</div>` : "";
+
+  // Premiação na parte de baixo da tela, depois do 1º intervalo (posições que têm valor na aba Premiação)
+  const firstBreak = levels.findIndex(l=>l.isBreak);
+  let prizeList = [];
+  if(firstBreak>=0 && idx>firstBreak){
+    try{ prizeList = calcPremiacao(s).filter(p=>p.value>0); }catch(e){ prizeList = []; }
+  }
+  const prizeItem = (p) => `<div class="clk-prize ${p.position<=3?"top p"+p.position:"rest"}"><span class="clk-prize-pos">${p.position}º</span><span>${fmtBRL(p.value)}</span></div>`;
+  const prizeTop  = prizeList.filter(p=>p.position<=3);
+  const prizeRest = prizeList.filter(p=>p.position>3);
+  const prizeFrag = prizeList.length ? `<div class="clk-prizes" id="clk-prizes">
+      <div class="clk-prize-row">${prizeTop.map(prizeItem).join("")}</div>
+      ${prizeRest.length?`<div class="clk-prize-row">${prizeRest.map(prizeItem).join("")}</div>`:""}
+    </div>` : "";
+  const prizeCls = prizeList.length ? " has-prizes"+(prizeRest.length?" prizes-2":"") : "";
+
   // ── Shared fragments ──────────────────────────────────────────────────────
   const logoHdr = (w) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
     <img src="${LOGO_48}" width="${w}" height="${w}" alt="PPP" style="display:block;flex-shrink:0"/>
@@ -4687,8 +4753,9 @@ function renderClock(){
       <button id="clk-close"      style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center">✕</button>
     </div>`;
 
-  return `<div class="clock-screen" id="clock-screen">
+  return `<div class="clock-screen${prizeCls}" id="clock-screen">
     ${topBtns}
+    ${prizeFrag}
 
     <!-- ═══ PORTRAIT ═══ -->
     <div class="clk-portrait">
@@ -4715,15 +4782,15 @@ function renderClock(){
       <div class="clk-land-center" style="padding:12px 0">
         <!-- Round + blinds ABOVE -->
         <div style="text-align:center;margin-bottom:4px">
-          <div class="clock-level-label" style="font-size:clamp(12px,2.2vw,20px);letter-spacing:4px;margin-bottom:4px">${roundLabel}</div>
-          <div class="clock-blinds-label ${isBreak?"break-color":""}" style="font-size:clamp(28px,6vw,62px)">${blindLabel}</div>
+          <div class="clock-level-label clk-land-round">${roundLabel}</div>
+          <div class="clock-blinds-label clk-land-blinds ${isBreak?"break-color":""}">${blindMain}</div>
+          ${anteLine}
         </div>
 
         <!-- Big timer -->
-        <div class="clock-timer ${isBreak?"break-color":""}" id="clk-display-land"
-          style="font-size:clamp(80px,22vw,200px);margin:0"
+        <div class="clock-timer clk-land-timer ${isBreak?"break-color":""}" id="clk-display-land"
           title="${IS_ADMIN?"Clique para editar o tempo":""}">${fmtTime(mm,ss)}</div>
-        <div class="clock-bar" style="max-width:380px;margin-top:8px">
+        <div class="clock-bar" style="max-width:min(640px,90%);margin-top:8px">
           <div class="clock-bar-fill" id="clk-bar-land" style="width:${pct}%"></div>
         </div>
 
@@ -4743,12 +4810,12 @@ function renderClock(){
       <div class="clk-land-right">
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.6vw,14px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:8px">Próximo Nível</div>
-          <div class="clock-next-label" style="font-size:clamp(18px,4vw,38px);line-height:1.2">${nextLabel}</div>
+          <div class="clock-next-label" style="font-size:clamp(16px,2.6vw,34px);line-height:1.2">${nextLabel}</div>
         </div>
         ${levelsUntilBreak ? `
         <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:16px">
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:clamp(9px,1.6vw,14px);letter-spacing:2.5px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:8px">Break em</div>
-          <div class="clock-break-label" style="font-size:clamp(32px,7.5vw,72px);line-height:1">${levelsUntilBreak} ${levelsUntilBreak!==1?"níveis":"nível"}</div>
+          <div class="clock-break-label" style="font-size:clamp(26px,4.4vw,60px);line-height:1">${levelsUntilBreak} ${levelsUntilBreak!==1?"níveis":"nível"}</div>
         </div>` : ""}
       </div>
 
