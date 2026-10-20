@@ -608,9 +608,10 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 import { getMessaging, getToken, deleteToken, onMessage, isSupported as fcmIsSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+import { derive as clockDerive, applyAction as clockApply, normalizeState as clockNormalize, IDLE as CLOCK_IDLE } from "./clock-core.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA-VcO_q6mvXIUh4Vbt1hStmQnnar2kKM4",
@@ -1042,29 +1043,122 @@ function fmtChips(n){
   return String(n);
 }
 
-// Get clock state for a stage — returns {levelIdx, elapsed, running, startTs, pausedAt}
-function getClockState(s){
-  return s.clock || {levelIdx:0, elapsed:0, running:false, startTs:null, pausedAt:null};
+// ── BLIND CLOCK — estado no Firestore (coleção "clocks"), tempo sempre DERIVADO ──
+// Nada guarda "tempo restante". Cada aparelho calcula nível e tempo a partir de
+// (elapsedMs, startedAtMs, estrutura de blinds, hora do SERVIDOR). Só o admin grava
+// ações (play/pause/próximo/anterior/reset/editar tempo); o avanço de nível é
+// calculado por todos, então não depende de ninguém online. Lógica em clock-core.js.
+const CLOCK_DOCS = {};      // stageId → estado vindo do Firestore (undefined = ainda carregando)
+let CLOCK_OFFSET_MS = 0;    // hora do servidor − Date.now() do aparelho (via /api/time)
+let _clockUnsub = null, _clockSyncTimer = null, _clockStage = null;
+
+function clockNow(){ return Date.now() + CLOCK_OFFSET_MS; }
+function clockDocId(stageId){ return ACTIVE_SEASON+"_"+stageId; }
+function getClockState(s){ return CLOCK_DOCS[s.id] || CLOCK_IDLE; }
+// Visão derivada do relógio da etapa: {idx, level, next, remainingMs, durMs, running, finished}
+function clockView(s){ return clockDerive(getBlindLevels(s), getClockState(s), clockNow()); }
+
+// Tempo restante do round em mm:ss (arredonda para cima: 00:00 só aparece no instante exato)
+function clockRemaining(v){
+  const rem = Math.ceil(v.remainingMs/1000);
+  return {mm: Math.floor(rem/60), ss: rem%60, rem, total: Math.round(v.durMs/1000)};
 }
 
-// Compute how many seconds have elapsed in the current level, based on timestamps.
-// startTs is set to Date.now() on the admin's device when play is pressed,
-// then synced to all clients via Firestore — everyone computes the same elapsed.
-function clockElapsed(cs){
-  if(!cs.running || !cs.startTs) return cs.elapsed||0;
-  const now = Date.now();
-  // Guard: if startTs is in the future (clock drift / snapshot not yet arrived),
-  // return just the accumulated elapsed to avoid negative values.
-  const sinceStart = Math.max(0, Math.floor((now - cs.startTs)/1000));
-  return (cs.elapsed||0) + sinceStart;
+// Mede a diferença entre o relógio do aparelho e o do servidor (5 amostras, usa a de menor latência)
+async function syncClockOffset(){
+  let best = null;
+  for(let i=0;i<5;i++){
+    try{
+      const t0 = Date.now();
+      const r = await fetch("/api/time?"+t0+"_"+i, {cache:"no-store"});
+      const t1 = Date.now();
+      if(!r.ok) continue;
+      const j = await r.json();
+      if(!Number.isFinite(j.now)) continue;
+      const rtt = t1 - t0;
+      if(!best || rtt < best.rtt) best = {rtt, offset: j.now - (t0 + rtt/2)};
+    }catch(e){}
+  }
+  if(best && best.rtt < 3000) CLOCK_OFFSET_MS = Math.round(best.offset);
 }
 
-// Given elapsed seconds in a level, return {mm, ss} remaining
-function clockRemaining(level, elapsed){
-  const total = level.dur||900;
-  const rem = Math.max(0, total - elapsed);
-  return {mm: Math.floor(rem/60), ss: rem%60, total, rem};
+function startClockSync(stageId){
+  stopClockSync();
+  _clockStage = stageId;
+  syncClockOffset();
+  _clockSyncTimer = setInterval(syncClockOffset, 5*60*1000);
+  _clockUnsub = onSnapshot(doc(db,"clocks",clockDocId(stageId)), (snap)=>{
+    CLOCK_DOCS[stageId] = snap.exists() ? clockNormalize(snap.data()) : CLOCK_IDLE;
+    if(CLOCK_STAGE_ID===stageId) render();
+  }, (err)=>{ showToast("Relógio sem conexão: "+err.message,"red"); });
 }
+function stopClockSync(){
+  if(_clockUnsub){ _clockUnsub(); _clockUnsub = null; }
+  if(_clockSyncTimer){ clearInterval(_clockSyncTimer); _clockSyncTimer = null; }
+  if(_clockStage!==null){ delete CLOCK_DOCS[_clockStage]; _clockStage = null; }
+  window._clkRendered = null;
+  window._clkPrev = null;
+}
+
+// Ação do admin: transação (lê → calcula → grava) com a hora do servidor.
+// Dois admins clicando ao mesmo tempo não se atropelam; offline falha com aviso (nunca diverge).
+async function clockAct(action){
+  const s = DB.stages.find(x=>x.id===CLOCK_STAGE_ID);
+  if(!s || !IS_ADMIN) return false;
+  const levels = getBlindLevels(s);
+  const ref = doc(db,"clocks",clockDocId(s.id));
+  try{
+    await runTransaction(db, async (tx)=>{
+      const snap = await tx.get(ref);
+      const patch = clockApply(levels, snap.exists()?snap.data():CLOCK_IDLE, action, clockNow());
+      if(patch) tx.set(ref, {...patch, stageId:s.id, updatedAt:serverTimestamp(), updatedBy:(auth.currentUser&&auth.currentUser.uid)||null});
+    });
+    return true;
+  } catch(e){ showToast("Erro no relógio: "+e.message,"red"); return false; }
+}
+
+// Sons: um AudioContext só, destravado no clique que abre o relógio (exigência dos celulares)
+function clockAudio(){
+  try{
+    if(!window._clkAudio){
+      const AC = window.AudioContext||window.webkitAudioContext;
+      if(!AC) return null;
+      window._clkAudio = new AC();
+    }
+    if(window._clkAudio.state==="suspended") window._clkAudio.resume();
+    return window._clkAudio;
+  }catch(e){ return null; }
+}
+// n bipes curtos na frequência freq (Hz)
+function clockBeeps(n, freq){
+  const ctx = clockAudio(); if(!ctx) return;
+  try{
+    for(let i=0;i<n;i++){
+      const t = ctx.currentTime + i*0.25;
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = "sine"; osc.frequency.value = freq;
+      osc.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.5, t+0.02);
+      gain.gain.linearRampToValueAtTime(0, t+0.18);
+      osc.start(t); osc.stop(t+0.2);
+    }
+  }catch(e){}
+}
+const playWarnBeep    = ()=> clockBeeps(1, 880);   // entrou no último minuto do nível
+const playLevelUpBeep = ()=> clockBeeps(4, 1320);  // zerou e o nível mudou (bip quádruplo)
+
+// Wake Lock: o navegador solta o lock quando a aba fica oculta → pede de novo ao voltar
+function clockWakeLock(){
+  if(!navigator.wakeLock || !CLOCK_STAGE_ID || window._wl) return;
+  navigator.wakeLock.request("screen").then(wl=>{
+    window._wl = wl;
+    wl.addEventListener("release",()=>{ if(window._wl===wl) window._wl = null; });
+  }).catch(()=>{});
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible" && CLOCK_STAGE_ID){ clockWakeLock(); clockAudio(); syncClockOffset(); }
+});
 
 // Calculate average stack
 function calcAvgStack(s){
@@ -4511,12 +4605,17 @@ function renderClock(){
   const s = DB.stages.find(x=>x.id===CLOCK_STAGE_ID);
   if(!s) return `<div class="clock-screen"><div style="color:#fff">Etapa não encontrada.</div></div>`;
 
+  // Antes do 1º snapshot do Firestore não mostramos nada (evita piscar "tempo cheio" para quem entra tarde)
+  if(CLOCK_DOCS[s.id]===undefined) return `<div class="clock-screen" id="clock-screen">
+    <button id="clk-close" style="position:fixed;top:10px;right:10px;z-index:601;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:17px">✕</button>
+    <div style="color:rgba(255,255,255,.6);font-family:'Barlow Condensed',sans-serif;font-size:22px;letter-spacing:3px;text-transform:uppercase">Conectando ao relógio…</div></div>`;
+
   const levels = getBlindLevels(s);
-  const cs     = getClockState(s);
-  const idx    = Math.min(cs.levelIdx||0, levels.length-1);
-  const level  = levels[idx];
-  const elapsed= clockElapsed(cs);
-  const {mm,ss,rem,total} = clockRemaining(level, elapsed);
+  const v      = clockView(s);   // nível e tempo calculados a partir do estado + hora do servidor
+  const idx    = v.idx;
+  const level  = v.level;
+  const {mm,ss,rem,total} = clockRemaining(v);
+  window._clkRendered = {idx, running:v.running, waiting:v.waiting}; // o tick re-renderiza quando isso muda
   const pct    = total>0 ? Math.max(0, Math.min(100, (rem/total)*100)) : 0;
   const nextLv = levels[idx+1];
   const isBreak= !!level.isBreak;
@@ -4539,6 +4638,9 @@ function renderClock(){
   // Admin controls
   const isAdmin = IS_ADMIN;
   const roundNum = idx+1 - levels.slice(0,idx+1).filter(l=>l.isBreak).length;
+  // Break pré-programado para sozinho no início e espera o admin iniciar a contagem
+  const roundLabel = isBreak ? (v.waiting ? "☕ BREAK · AGUARDANDO" : "☕ BREAK") : "ROUND "+roundNum;
+  const playLabel  = v.waiting ? "▶ Iniciar Break" : "▶ Iniciar";
 
   // ── Shared fragments ──────────────────────────────────────────────────────
   const logoHdr = (w) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -4549,7 +4651,7 @@ function renderClock(){
     </div>
   </div>`;
 
-  const levelFrag = `<div class="clock-level-label">${isBreak?"☕ BREAK":"ROUND "+roundNum}</div>`;
+  const levelFrag = `<div class="clock-level-label">${roundLabel}</div>`;
   const blindsFrag = `<div class="clock-blinds-label ${isBreak?"break-color":""}" style="margin-top:2px">${blindLabel}</div>`;
 
   const timerFrag = (id,landId) => `
@@ -4569,9 +4671,9 @@ function renderClock(){
   // ── Admin controls ────────────────────────────────────────────────────────
   const adminBar = isAdmin ? `
     <div style="display:flex;gap:7px;margin-top:14px;flex-wrap:wrap;justify-content:center">
-      ${cs.running
+      ${v.running
         ? `<button data-clk="pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
-        : `<button data-clk="play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;font-size:15px;padding:8px 22px">▶ Iniciar</button>`}
+        : `<button data-clk="play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;font-size:15px;padding:8px 22px">${playLabel}</button>`}
       <button data-clk="prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
       <button data-clk="next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
       <button data-clk="reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺ Reset</button>
@@ -4613,7 +4715,7 @@ function renderClock(){
       <div class="clk-land-center" style="padding:12px 0">
         <!-- Round + blinds ABOVE -->
         <div style="text-align:center;margin-bottom:4px">
-          <div class="clock-level-label" style="font-size:clamp(12px,2.2vw,20px);letter-spacing:4px;margin-bottom:4px">${isBreak?"☕ BREAK":"ROUND "+roundNum}</div>
+          <div class="clock-level-label" style="font-size:clamp(12px,2.2vw,20px);letter-spacing:4px;margin-bottom:4px">${roundLabel}</div>
           <div class="clock-blinds-label ${isBreak?"break-color":""}" style="font-size:clamp(28px,6vw,62px)">${blindLabel}</div>
         </div>
 
@@ -4627,9 +4729,9 @@ function renderClock(){
 
         <!-- Admin buttons BELOW timer -->
         ${IS_ADMIN ? `<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;justify-content:center">
-          ${cs.running
+          ${v.running
             ? `<button data-clk="pause" class="clk-btn" style="background:rgba(231,76,60,.18);border-color:#e74c3c;color:#e74c3c">⏸ Pausar</button>`
-            : `<button data-clk="play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;padding:8px 20px">▶ Iniciar</button>`}
+            : `<button data-clk="play"  class="clk-btn" style="background:rgba(46,204,113,.18);border-color:#2ecc71;color:#2ecc71;padding:8px 20px">${playLabel}</button>`}
           <button data-clk="prev"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">◀</button>
           <button data-clk="next"  class="clk-btn" style="background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff">▶</button>
           <button data-clk="reset" class="clk-btn" style="background:rgba(255,120,0,.12);border-color:rgba(255,120,0,.4);color:#FF7800">↺</button>
@@ -5892,19 +5994,17 @@ function bindEvents(){
   document.querySelectorAll("[data-open-clock]").forEach(btn=>{
     btn.addEventListener("click",()=>{
       CLOCK_STAGE_ID = btn.dataset.openClock;
-      render();
-      // Request wake lock so screen doesn't turn off during play
-      if(navigator.wakeLock){
-        navigator.wakeLock.request("screen").then(wl=>{
-          window._wl = wl;
-        }).catch(()=>{});
-      }
+      startClockSync(CLOCK_STAGE_ID);   // listener do Firestore + sincronia de hora com o servidor
+      render();                          // mostra "Conectando…" até chegar o 1º snapshot
+      clockWakeLock();                   // tela não apaga durante o jogo
+      clockAudio();                      // destrava o som (precisa do toque do usuário)
     });
   });
 
-  // Close clock — release wake lock
+  // Close clock — release wake lock and stop listening
   document.getElementById("clk-close")?.addEventListener("click",()=>{
     if(window._wl){ window._wl.release().catch(()=>{}); window._wl=null; }
+    stopClockSync();
     CLOCK_STAGE_ID = null;
     render();
   });
@@ -5934,23 +6034,7 @@ function bindEvents(){
     document.getElementById("clk-cf-yes").addEventListener("click", ()=>{ closeAdminModal(); onConfirm(); });
   }
 
-  // Short beep when a level ends and a new one begins
-  function playLevelUpBeep(){
-    try{
-      const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      [[880,0,0.15],[1100,0.18,0.15],[1320,0.36,0.25]].forEach(([freq,delay,dur])=>{
-        const osc=ctx.createOscillator();
-        const gain=ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value=freq; osc.type="sine";
-        gain.gain.setValueAtTime(0,ctx.currentTime+delay);
-        gain.gain.linearRampToValueAtTime(0.4,ctx.currentTime+delay+0.02);
-        gain.gain.linearRampToValueAtTime(0,ctx.currentTime+delay+dur);
-        osc.start(ctx.currentTime+delay);
-        osc.stop(ctx.currentTime+delay+dur+0.05);
-      });
-    }catch(e){}
-  }
+  // (Sons do relógio: playWarnBeep / playLevelUpBeep, definidos junto do bloco do clock.)
 
   // Bind all clock buttons — using data-clk attribute so both portrait+landscape
   // buttons are handled (querySelectorAll finds all, not just the first like getElementById)
@@ -5961,69 +6045,43 @@ function bindEvents(){
   }
 
   bindClkBtn("play", ()=>{
-    clkConfirm("▶ Iniciar Relógio", "O contador começará agora para todos os aparelhos.", async ()=>{
-      const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-      const cs=getClockState(s);
-      if(cs.running) return;
-      s.clock = {levelIdx:cs.levelIdx||0, elapsed:cs.elapsed||0, running:true, startTs:Date.now()};
-      await saveClockState(s); render();
-    });
+    const s0=DB.stages.find(x=>x.id===CLOCK_STAGE_ID);
+    const wait = !!(s0 && clockView(s0).waiting);
+    clkConfirm(wait?"▶ Iniciar Break":"▶ Iniciar Relógio",
+      wait?"A contagem do break começará agora para todos os aparelhos.":"O contador começará agora para todos os aparelhos.",
+      ()=> clockAct({type:"start"}));
   });
 
   bindClkBtn("pause", ()=>{
-    clkConfirm("⏸ Pausar Relógio", "O contador será pausado para todos os aparelhos.", async ()=>{
-      const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-      const cs=getClockState(s);
-      if(!cs.running) return;
-      s.clock = {levelIdx:cs.levelIdx||0, elapsed:clockElapsed(cs), running:false, startTs:null};
-      await saveClockState(s); render();
-    });
+    clkConfirm("⏸ Pausar Relógio", "O contador será pausado para todos os aparelhos.", ()=> clockAct({type:"pause"}));
   });
 
   bindClkBtn("prev", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-    const cs=getClockState(s);
-    const newIdx=Math.max(0,(cs.levelIdx||0)-1);
     const levels=getBlindLevels(s);
-    const lv=levels[newIdx];
-    const label=lv?.isBreak?"Break":`Round ${newIdx+1}`;
-    clkConfirm("◀ Nível Anterior", `Voltar para ${label}?`, async ()=>{
-      s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
-      await saveClockState(s); render();
-    });
+    const lv=levels[Math.max(0,clockView(s).idx-1)];
+    const label=lv?.isBreak?"Break":"o nível anterior";
+    clkConfirm("◀ Nível Anterior", `Voltar para ${label}?`, ()=> clockAct({type:"prev"}));
   });
 
   bindClkBtn("next", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-    const levels=getBlindLevels(s);
-    const cs=getClockState(s);
-    const newIdx=Math.min((cs.levelIdx||0)+1, levels.length-1);
-    const lv=levels[newIdx];
-    const label=lv?.isBreak?"Break":`Round ${newIdx+1}`;
-    clkConfirm("▶ Próximo Nível", `Avançar para ${label}?`, async ()=>{
-      s.clock = {levelIdx:newIdx, elapsed:0, running:cs.running, startTs:cs.running?Date.now():null};
-      await saveClockState(s); render();
-    });
+    const v=clockView(s);
+    if(!v.next){ showToast("Já é o último nível","red"); return; }
+    const label=v.next.isBreak?"Break":"o próximo nível";
+    clkConfirm("▶ Próximo Nível", `Avançar para ${label}?`, ()=> clockAct({type:"next"}));
   });
 
   bindClkBtn("reset", ()=>{
     clkConfirm("↺ Reiniciar Relógio", "Volta para o Round 1 e zera o contador. Tem certeza?", async ()=>{
-      const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
-      s.clock = {levelIdx:0, elapsed:0, running:false, startTs:null};
-      await saveClockState(s); render();
-      showToast("Relógio reiniciado","green");
+      if(await clockAct({type:"reset"})) showToast("Relógio reiniciado","green");
     });
   });
 
   // Edit timer (click on timer display)
   function openTimerEditModal(){
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s||!IS_ADMIN) return;
-    const cs=getClockState(s);
-    const levels=getBlindLevels(s);
-    const idx=Math.min(cs.levelIdx||0,levels.length-1);
-    const level=levels[idx];
-    const elapsed=clockElapsed(cs);
-    const {mm,ss}=clockRemaining(level,elapsed);
+    const {mm,ss}=clockRemaining(clockView(s));
     const el=document.getElementById("admin-modal"); if(!el) return;
     el.innerHTML=`
     <div class="ov" style="z-index:1300">
@@ -6056,14 +6114,7 @@ function bindEvents(){
       const newRem=newMM*60+newSS;
       closeAdminModal();
       clkConfirm("Confirmar edição", `Definir ${String(newMM).padStart(2,"0")}:${String(newSS).padStart(2,"0")} para este round?`, async ()=>{
-        const s2=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s2) return;
-        const cs2=getClockState(s2);
-        const lv2=getBlindLevels(s2)[Math.min(cs2.levelIdx||0,getBlindLevels(s2).length-1)];
-        const dur=lv2?.dur||900;
-        const newElapsed=Math.max(0,dur-newRem);
-        s2.clock={levelIdx:cs2.levelIdx||0, elapsed:newElapsed, running:cs2.running, startTs:cs2.running?Date.now():null};
-        await saveClockState(s2); render();
-        showToast("Tempo atualizado","green");
+        if(await clockAct({type:"setRemaining", remainingMs:newRem*1000})) showToast("Tempo atualizado","green");
       });
     });
   }
@@ -6145,7 +6196,7 @@ function bindEvents(){
     if(!window._clkGen) window._clkGen = 0;
     const myGen = ++window._clkGen;
     const tickStageId = CLOCK_STAGE_ID;
-    let lastSec = -1, beeped = false;
+    let lastSec = -1;
     const tick = () => {
       // Stop if a newer tick loop was started (render called again)
       if(window._clkGen !== myGen) return;
@@ -6155,12 +6206,26 @@ function bindEvents(){
       const dL = document.getElementById("clk-display-land");
       if(!dP && !dL) return;
       const s = DB.stages.find(x=>x.id===tickStageId); if(!s) return;
-      const cs = getClockState(s);
-      const levels = getBlindLevels(s);
-      const idx = Math.min(cs.levelIdx||0, levels.length-1);
-      const level = levels[idx];
-      const elapsed = clockElapsed(cs);
-      const {mm,ss,rem,total} = clockRemaining(level, elapsed);
+      // O tick só LÊ: nível e tempo são derivados do estado + hora do servidor.
+      // Ninguém grava nada quando o nível vira — por isso não trava se o admin sair.
+      const v = clockView(s);
+
+      // Nível virou (ou rodando/parado mudou, ex.: fim do torneio): bipa e redesenha
+      // a tela inteira, pois rótulo de round, blinds e botões mudam.
+      const shown = window._clkRendered;
+      if(shown && (shown.idx !== v.idx || shown.running !== v.running || shown.waiting !== v.waiting)){
+        // bip quádruplo: o relógio estava rodando e zerou (nível mudou, chegou no break ou acabou o torneio)
+        if(shown.running && (v.idx > shown.idx || v.finished)) playLevelUpBeep();
+        render();
+        return;
+      }
+
+      // bip simples ao ENTRAR no último minuto (só se a gente viu o tempo cruzar 60s rodando)
+      const prev = window._clkPrev;
+      if(prev && prev.idx===v.idx && v.running && v.durMs>60000 && prev.rem>60000 && v.remainingMs<=60000 && v.remainingMs>0) playWarnBeep();
+      window._clkPrev = {idx:v.idx, rem:v.remainingMs};
+
+      const {mm,ss,rem,total} = clockRemaining(v);
       if(rem !== lastSec){
         lastSec = rem;
         const txt = String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
@@ -6171,18 +6236,6 @@ function bindEvents(){
         if(bP) bP.style.width = pct+"%";
         if(dL) dL.textContent = txt;
         if(bL) bL.style.width = pct+"%";
-        if(rem <= 0 && cs.running){
-          if(!beeped){ beeped = true; playLevelUpBeep(); }
-          if(IS_ADMIN){
-            const newIdx = Math.min(idx+1, levels.length-1);
-            if(newIdx !== idx){
-              s.clock = {levelIdx:newIdx, elapsed:0, running:true, startTs:Date.now()};
-              saveClockState(s).then(()=>render()); return;
-            }
-          }
-        } else {
-          beeped = false;
-        }
       }
       requestAnimationFrame(tick);
     };
@@ -7471,11 +7524,7 @@ function startListeners(user){
         // preserve local finance/buyinData so in-progress edits (inputs being
         // typed) aren't wiped out by the snapshot echo of our own save.
         const editingFinanceId = BUYIN_MGMT;
-        // Also preserve clock state for any stage whose clock is actively running —
-        // the onSnapshot echo of our own saveClockState() would otherwise cause a
-        // brief reset to the Firestore value (which arrives slightly delayed),
-        // making the clock appear to jump back on every admin action.
-        const clockStageId = CLOCK_STAGE_ID;
+        // (O estado do relógio não vive mais neste documento — ver coleção "clocks".)
         DB.stages = (data.stages||[]).map(s=>{
           const local = DB.stages.find(x=>x.id===s.id);
           if(s.id===editingStageId && local){
@@ -7483,12 +7532,6 @@ function startListeners(user){
           }
           if(s.id===editingFinanceId && local){
             return {...s, finance: local.finance, buyinData: local.buyinData};
-          }
-          // Clock: if this stage's clock is actively running locally, keep the
-          // local clock state (which has the most recent startTs). The Firestore
-          // value will be identical once the echo resolves, so this is safe.
-          if(s.id===clockStageId && local && local.clock && local.clock.running){
-            return {...s, clock: local.clock};
           }
           return s;
         }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
