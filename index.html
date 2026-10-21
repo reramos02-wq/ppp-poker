@@ -344,6 +344,20 @@ select.inp{appearance:none;}
 .podium-base.p1{height:72px;background:linear-gradient(180deg,rgba(255,215,0,.25) 0%,rgba(255,215,0,.1) 100%);border:1px solid rgba(255,215,0,.3);border-bottom:none;font-size:26px}
 .podium-base.p2{height:54px;background:linear-gradient(180deg,rgba(192,192,192,.15) 0%,rgba(192,192,192,.05) 100%);border:1px solid rgba(192,192,192,.2);border-bottom:none}
 .podium-base.p3{height:42px;background:linear-gradient(180deg,rgba(205,127,50,.15) 0%,rgba(205,127,50,.05) 100%);border:1px solid rgba(205,127,50,.2);border-bottom:none}
+
+.sb-lbl{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;padding:10px 20px 0;}
+/* ── TOQUE E LEITURA (celular/tablet) ───────────────────────────────────────────
+   Alvos de toque de pelo menos ~40px (Apple recomenda 44, Android 48) e rótulos não menores que 10px. */
+.rvl,.psl,.hsl{font-size:10px;}
+@media (pointer:coarse){
+  .btn{min-height:40px;}
+  .btn.sm{min-height:38px;}
+  span[data-goto]{padding:12px 6px;margin:-12px -6px;}            /* "Ver tudo →": área de toque maior sem mexer no layout */
+  [data-back-stages]{padding:12px 8px!important;margin-left:-8px;}
+  #pf-logout{padding:14px 10px!important;}
+  #btn-admin-shortcut{min-height:36px;}
+  #btn-export-podium{min-height:40px;}
+}
 </style>
 </head>
 <body>
@@ -1819,7 +1833,7 @@ function showToast(msg, color){
   clearTimeout(t._timer);
   t._timer=setTimeout(function(){t.style.opacity='0';},2500);
 }
-const IS_DESKTOP = () => window.innerWidth > 768;
+const IS_DESKTOP = () => window.innerWidth >= 768;   // igual ao CSS (min-width:768px): em 768px exatos (iPad 9.7"/mini) antes o JS montava o layout de celular com CSS de tablet e sumia a navegação
 
 function getP(uid){ return DB.players.find(p=>p.uid===uid); }
 
@@ -2504,6 +2518,7 @@ function render(){
     document.getElementById("app").innerHTML = html;
     dbg("render() OK");
     bindEvents();
+    navSync();
   } catch(e) {
     dbg("ERRO render(): " + e.message);
     document.getElementById("app").innerHTML =
@@ -2511,6 +2526,165 @@ function render(){
       '<b>Erro render():</b><br/>' + e.message + '</div>';
   }
 }
+
+// ── NAVEGAÇÃO × BOTÃO VOLTAR (Android/iOS/navegador) ─────────────────────────
+// O app troca de tela só por variáveis; sem isto, o botão voltar do aparelho (ou o gesto de voltar do iPhone)
+// sai do app em vez de voltar uma tela. Aqui cada "página" (detalhe, financeiro, relógio…) vira uma entrada do
+// histórico do navegador. Regras:
+//  • abrir um detalhe/relógio/gestão  → nova entrada (voltar fecha o detalhe)
+//  • trocar de aba principal           → Início → aba empilha; aba → aba substitui (voltar vai ao Início)
+//  • sub-abas (Entradas/Custos…)       → só substituem o estado (voltar não passa por elas)
+//  • botão "Voltar" da própria tela    → vira history.back() (não cresce a pilha)
+//  • janela aberta (modal, foto, menu) → voltar FECHA a janela e fica na tela
+let NAV_INIT = false, NAV_STACK = [], NAV_IDX = 0, NAV_SKIP_POP = false, NAV_OV = false;
+function navSnapshot(){
+  return { TAB, STAGE_DETAIL, ADMIN_TAB, ADMIN_STAGE_DETAIL, RULES_TAB, RULES_VIEW, BUYIN_MGMT, BUYIN_PLAYER, BUYIN_TAB,
+           CASHGAME_MGMT, CASHGAME_PLAYER, RANK_TAB, TOOLS_VIEW, CLOCK_STAGE_ID };
+}
+function navKey(s){
+  return JSON.stringify([s.TAB, s.STAGE_DETAIL, s.ADMIN_STAGE_DETAIL, s.BUYIN_MGMT, s.BUYIN_PLAYER, s.CASHGAME_MGMT, s.CASHGAME_PLAYER, s.CLOCK_STAGE_ID, s.TOOLS_VIEW, s.RULES_VIEW]);
+}
+function navIsRoot(s){
+  return !s.STAGE_DETAIL && !s.ADMIN_STAGE_DETAIL && !s.BUYIN_MGMT && !s.BUYIN_PLAYER && !s.CASHGAME_MGMT && !s.CASHGAME_PLAYER
+      && !s.CLOCK_STAGE_ID && (s.TOOLS_VIEW||"home")==="home" && (s.RULES_VIEW||"rules")==="rules";
+}
+function navApply(s){
+  const wasClock = CLOCK_STAGE_ID;
+  TAB=s.TAB||"home"; STAGE_DETAIL=s.STAGE_DETAIL||null; ADMIN_TAB=s.ADMIN_TAB||"stages"; ADMIN_STAGE_DETAIL=s.ADMIN_STAGE_DETAIL||null;
+  RULES_TAB=s.RULES_TAB||"nlholdem"; RULES_VIEW=s.RULES_VIEW||"rules"; BUYIN_MGMT=s.BUYIN_MGMT||null; BUYIN_PLAYER=s.BUYIN_PLAYER||null;
+  BUYIN_TAB=s.BUYIN_TAB||"entradas"; CASHGAME_MGMT=s.CASHGAME_MGMT||null; CASHGAME_PLAYER=s.CASHGAME_PLAYER||null;
+  RANK_TAB=s.RANK_TAB||"geral"; TOOLS_VIEW=s.TOOLS_VIEW||"home"; MENU_OPEN=false; EXPANDED=null;
+  const toClock = s.CLOCK_STAGE_ID || null;
+  if(wasClock && wasClock!==toClock){
+    try{ if(document.fullscreenElement||document.webkitFullscreenElement) (document.exitFullscreen||document.webkitExitFullscreen).call(document); }catch(e){}
+    stopClockSync();
+  }
+  CLOCK_STAGE_ID = toClock;
+  if(toClock && toClock!==wasClock){ try{ startClockSync(toClock); }catch(e){} }
+}
+// Há alguma janela (modal, foto, recorte, menu) aberta por cima da tela?
+function navOverlayOpen(){
+  const shown = (id)=>{ const e=document.getElementById(id); return !!e && e.style.display!=="none" && e.style.display!==""; };
+  const filled = (id)=>{ const e=document.getElementById(id); return !!e && e.children.length>0; };
+  return shown("crop-modal") || shown("lightbox") || filled("admin-modal") || filled("result-modal") || !!MENU_OPEN;
+}
+function navSync(){
+  try{
+    let dropAfter = false;
+    if(NAV_OV && !navOverlayOpen()){ NAV_OV = false; dropAfter = true; }   // janela fechada pela própria tela
+    const snap = navSnapshot(), key = navKey(snap);
+    if(!NAV_INIT){
+      NAV_INIT = true; NAV_STACK = [{key}]; NAV_IDX = 0;
+      history.replaceState({ppp:snap, idx:0}, "");
+    } else {
+      const cur = NAV_STACK[NAV_IDX] || {key:null};
+      if(key === cur.key){
+        if(dropAfter && cur.ov) navDropOverlayEntry();       // mesma tela, janela fechou: remove a entrada da janela
+        else history.replaceState({ppp:snap, idx:NAV_IDX, ov:cur.ov?1:0}, "");
+      } else {
+        // "Voltar" feito pela própria tela: o destino é uma página anterior da pilha → volta no histórico
+        let target = NAV_IDX-1;
+        while(target>=0 && NAV_STACK[target] && NAV_STACK[target].ov) target--;
+        if(target>=0 && NAV_STACK[target] && NAV_STACK[target].key===key){
+          const delta = target - NAV_IDX;
+          NAV_IDX = target; NAV_SKIP_POP = true; NAV_OV = false; history.go(delta);
+          return;
+        }
+        const prevSnap = history.state && history.state.ppp;
+        // aba principal → aba principal (fora do Início): substitui em vez de empilhar
+        if(prevSnap && !cur.ov && navIsRoot(prevSnap) && navIsRoot(snap) && prevSnap.TAB!=="home"){
+          NAV_STACK[NAV_IDX] = {key}; history.replaceState({ppp:snap, idx:NAV_IDX}, "");
+        } else {
+          NAV_STACK = NAV_STACK.slice(0, NAV_IDX+1); NAV_STACK.push({key}); NAV_IDX++;
+          history.pushState({ppp:snap, idx:NAV_IDX}, "");
+        }
+      }
+    }
+    navOverlaySync();
+  }catch(e){ /* histórico indisponível (iframe/sandbox): o app segue funcionando sem ele */ }
+}
+// A janela fechou sem navegação: tira a entrada dela do histórico (senão o 1º "voltar" pareceria não fazer nada).
+function navDropOverlayEntry(){
+  try{
+    if(NAV_STACK[NAV_IDX] && NAV_STACK[NAV_IDX].ov && NAV_IDX>0){
+      NAV_STACK.pop(); NAV_IDX--; NAV_SKIP_POP = true; history.back();
+    }
+  }catch(e){}
+}
+// Janela abriu → ganha uma entrada no histórico, para o "voltar" fechá-la em vez de sair da tela.
+function navOverlaySync(){
+  try{
+    if(!NAV_INIT) return;
+    const open = navOverlayOpen();
+    if(open && !NAV_OV){
+      NAV_OV = true;
+      const snap = navSnapshot(), key = navKey(snap);
+      NAV_STACK = NAV_STACK.slice(0, NAV_IDX+1); NAV_STACK.push({key, ov:true}); NAV_IDX++;
+      history.pushState({ppp:snap, idx:NAV_IDX, ov:1}, "");
+    } else if(!open && NAV_OV){ NAV_OV = false; navDropOverlayEntry(); }
+  }catch(e){}
+}
+// Fecha a janela aberta mais "por cima". Devolve true se fechou alguma.
+function navCloseTopOverlay(){
+  try{
+    const crop = document.getElementById("crop-modal");
+    if(crop && crop.style.display!=="none" && crop.style.display!==""){ (document.getElementById("crop-cancel")||{click(){}}).click(); return true; }
+    const lb = document.getElementById("lightbox");
+    if(lb && lb.style.display!=="none" && lb.style.display!==""){ lb.style.display="none"; return true; }
+    const am = document.getElementById("admin-modal");
+    if(am && am.children.length){ BLV_DRAFT = null; am.innerHTML=""; return true; }
+    const rm = document.getElementById("result-modal");
+    if(rm && rm.children.length){ closeResultModal(); return true; }
+    if(MENU_OPEN){
+      MENU_OPEN=false;
+      document.getElementById("more-menu")?.classList.remove("open");
+      document.getElementById("menu-backdrop")?.classList.remove("open");
+      document.getElementById("btn-more")?.classList.remove("menu-open");
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+window.addEventListener("popstate", (e)=>{
+  if(NAV_SKIP_POP){ NAV_SKIP_POP = false; return; }
+  const st = e.state;
+  const newIdx = (st && typeof st.idx==="number") ? st.idx : null;
+  if(navOverlayOpen()){
+    // "voltar" só para fechar a janela (a tela de baixo não muda)
+    if(newIdx!==null) NAV_IDX = newIdx;
+    NAV_OV = false;
+    navCloseTopOverlay();
+    setTimeout(navOverlaySync, 0);        // ainda sobrou outra janela? ganha nova entrada
+    return;
+  }
+  if(!st || !st.ppp) return;
+  // entrada "velha" de janela já fechada: pula na direção em que o usuário estava indo
+  if(st.ov){
+    const dir = (newIdx!==null && newIdx > NAV_IDX) ? 1 : -1;
+    NAV_IDX = newIdx!==null ? newIdx : NAV_IDX;
+    NAV_SKIP_POP = false;
+    history.go(dir);
+    return;
+  }
+  if(!CURRENT_USER) return;                     // na tela de login não há o que restaurar
+  NAV_IDX = newIdx!==null ? newIdx : 0;
+  NAV_STACK[NAV_IDX] = {key: navKey(st.ppp)};
+  navApply(st.ppp);
+  render();
+  window.scrollTo(0,0);
+});
+// janelas abrem/fecham sem passar pelo render(): observa os contêineres
+let NAV_OBSERVING = false;
+function navObserveOverlays(){
+  if(NAV_OBSERVING) return;
+  try{
+    NAV_OBSERVING = true;
+    const mo = new MutationObserver(()=>navOverlaySync());
+    ["admin-modal","result-modal"].forEach(id=>{ const e=document.getElementById(id); if(e) mo.observe(e,{childList:true}); });
+    ["lightbox","crop-modal"].forEach(id=>{ const e=document.getElementById(id); if(e) mo.observe(e,{attributes:true, attributeFilter:["style"]}); });
+  }catch(e){}
+}
+if(document.readyState!=="loading") navObserveOverlays(); else document.addEventListener("DOMContentLoaded", navObserveOverlays);
 
 // ── PROFILE SCREEN (user settings) ───────────────────────────────────────────
 function renderProfileModal(){
