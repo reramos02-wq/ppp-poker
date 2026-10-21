@@ -773,11 +773,7 @@ async function initNotifState(){
       // For tokens from genuinely different devices, the Cloud Function will
       // automatically purge invalid ones when they fail to deliver.
       if(token && savedTokens.filter(t=>t===token).length > 1){
-        const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
-        if(idx>=0){
-          DB.players[idx] = {...DB.players[idx], fcmTokens:[...new Set(savedTokens)]};
-          savePlayers().catch(()=>{});
-        }
+        mutateMyTokens(list=>list).catch(()=>{});   // a transação já remove duplicados
       }
 
       render(); // reflect the resolved opt-in state once data has arrived
@@ -803,44 +799,46 @@ function waitForPlayer(uid, timeoutMs){
   });
 }
 
+// Altera SÓ a lista de tokens do jogador logado, numa transação sobre a versão mais nova do servidor.
+// (O savePlayers() faz união dos tokens locais com os do servidor, então nunca conseguia REMOVER um token.)
+async function mutateMyTokens(fn){
+  if(!CURRENT_USER_UID) return null;
+  const ref = doc(db,"seasons",ACTIVE_SEASON);
+  let result = null;
+  await runTransaction(db, async (tx)=>{
+    const snap = await tx.get(ref);
+    if(!snap.exists()) throw new Error("temporada não encontrada");
+    const players = (snap.data().players||[]).slice();
+    const i = players.findIndex(p=>p.uid===CURRENT_USER_UID);
+    if(i<0) throw new Error("perfil do jogador não encontrado");
+    result = [...new Set(fn(players[i].fcmTokens||[]).filter(Boolean))];
+    players[i] = {...players[i], fcmTokens: result};
+    tx.update(ref,{players: sanitizePlayers(players), updatedAt: serverTimestamp()});
+  });
+  const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
+  if(idx>=0) DB.players[idx] = {...DB.players[idx], fcmTokens: result};
+  return result;
+}
+
 // Save the device token under the player's Firestore doc so the server
 // (Cloud Function) knows where to deliver pushes for this user.
+// Só troca o token DESTE aparelho; tokens de outros aparelhos do mesmo jogador ficam.
 async function saveNotifToken(token){
-  if(!CURRENT_USER_UID || !token) return;
+  if(!CURRENT_USER_UID || !token) return false;
   try{
-    const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
-    if(idx<0) return;
-    // Keep tokens from OTHER devices (different value) but replace any previous
-    // token from THIS device. Since getToken() always returns the same token for
-    // the same browser/SW registration, we simply store [token] — one per player
-    // for now. If the same user has multiple devices, each will have called
-    // enableNotifications independently and their token will be added here via
-    // merge in savePlayers(). But within the same device, never duplicate.
-    const existing = DB.players[idx].fcmTokens || [];
-    // If the token is already there, nothing to do.
-    if(existing.includes(token)){
-      _lastFcmToken = token;
-      return;
-    }
-    // Remove the previous token we stored for this device (tracked in _lastFcmToken)
-    // then add the fresh one.
-    const filtered = _lastFcmToken
-      ? existing.filter(t => t !== _lastFcmToken)
-      : existing;
-    DB.players[idx] = {...DB.players[idx], fcmTokens: [...filtered, token]};
-    await savePlayers();
-  } catch(e){ console.warn("saveNotifToken error:", e.message); }
+    const old = _lastFcmToken && _lastFcmToken!==token ? _lastFcmToken : null;
+    await mutateMyTokens(list=> [...list.filter(x=>x!==old), token]);
+    _lastFcmToken = token;
+    return true;
+  } catch(e){ console.warn("saveNotifToken error:", e.message); return false; }
 }
 
 async function removeNotifToken(token){
-  if(!CURRENT_USER_UID) return;
+  if(!CURRENT_USER_UID || !token) return false;
   try{
-    const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
-    if(idx<0) return;
-    const tokens = (DB.players[idx].fcmTokens||[]).filter(t=>t!==token);
-    DB.players[idx] = {...DB.players[idx], fcmTokens: tokens};
-    await savePlayers();
-  } catch(e){ console.warn("removeNotifToken error:", e.message); }
+    await mutateMyTokens(list=> list.filter(x=>x!==token));
+    return true;
+  } catch(e){ console.warn("removeNotifToken error:", e.message); return false; }
 }
 
 // User taps the bell when it's OFF — turns our opt-in ON.
@@ -862,10 +860,9 @@ window.enableNotifications = async function(){
     }
     const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration });
     if(token){
-      _lastFcmToken = token;
-      await saveNotifToken(token);
-      NOTIF_OPT_IN = true;
-      showToast("Notificações ativadas!","green");
+      const saved = await saveNotifToken(token);
+      NOTIF_OPT_IN = saved;
+      showToast(saved ? "Notificações ativadas!" : "Não foi possível salvar este aparelho. Tente de novo.", saved ? "green" : "red");
     }
   } catch(e){
     console.error("enableNotifications error:", e);
@@ -880,20 +877,18 @@ window.enableNotifications = async function(){
 // device from receiving pushes, by deleting/removing the FCM token.
 window.disableNotifications = async function(){
   try{
+    // token deste aparelho (o mesmo que está salvo); precisa ser lido ANTES de invalidar
+    let tok = _lastFcmToken;
+    if(!tok && messaging && swRegistration){
+      tok = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration }).catch(()=>null);
+    }
     // Invalidate the token on FCM's side
-    if(messaging){
-      await deleteToken(messaging).catch(()=>{});
-    }
-    // Wipe ALL fcmTokens for this player — ensures clean state even if
-    // duplicate tokens from old sessions were saved.
-    const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID);
-    if(idx>=0){
-      DB.players[idx] = {...DB.players[idx], fcmTokens:[]};
-      await savePlayers().catch(()=>{});
-    }
+    if(messaging){ await deleteToken(messaging).catch(()=>{}); }
+    // Remove só o token DESTE aparelho (antes apagava os de TODOS os aparelhos do jogador)
+    if(tok) await removeNotifToken(tok);
     _lastFcmToken = null;
     NOTIF_OPT_IN = false;
-    showToast("Notificações desativadas.","green");
+    showToast("Notificações desativadas neste aparelho.","green");
   } catch(e){
     console.warn("disableNotifications error:", e.message);
     NOTIF_OPT_IN = false;
@@ -3027,6 +3022,37 @@ function renderPage(){
 }
 
 // ── HOME DESKTOP (2 colunas) ──────────────────────────────────────────────────
+// ── RELÓGIO NA TELA PRINCIPAL ─────────────────────────────────────────────────
+// Todos os relógios do Firestore (clocks/{temporada}_{etapa}). Um relógio aparece na tela principal para TODOS
+// enquanto não estiver "zerado" (zerado = parado no nível 1 com o tempo cheio, como logo após o Reset).
+const CLOCK_LIVE = {};   // etapaId → estado normalizado
+function clockStartedStages(){
+  return DB.stages.filter(s=>{
+    if(s.status==="finished") return false;
+    const st = CLOCK_LIVE[s.id];
+    return !!st && (st.status!=="idle" || (st.elapsedMs||0) > 0);
+  });
+}
+function clockBannerSig(){ return clockStartedStages().map(s=>s.id+":"+CLOCK_LIVE[s.id].status).join(","); }
+function renderClockBanner(){
+  const list = clockStartedStages();
+  if(!list.length) return "";
+  return list.map(s=>{
+    const st = CLOCK_LIVE[s.id];
+    const running = st.status==="running";
+    return `<button data-open-clock="${s.id}" class="clk-home-banner" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:14px 16px;background:linear-gradient(135deg,rgba(52,152,219,.22),rgba(52,152,219,.08));border:1px solid var(--blue);border-radius:6px;color:#fff;cursor:pointer;text-align:left">
+      <span style="display:flex;align-items:center;gap:10px;min-width:0">
+        <span style="font-size:24px">⏱</span>
+        <span style="min-width:0">
+          <span style="display:block;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue)">Relógio ao vivo</span>
+          <span style="display:block;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name} · ${running?"▶ rodando":"⏸ pausado"}</span>
+        </span>
+      </span>
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue);flex-shrink:0">Abrir →</span>
+    </button>`;
+  }).join("");
+}
+
 function renderHomeDesktop(){
   const next  = getNextStage();
   const done  = DB.stages.filter(s=>s.status==="finished");
@@ -3059,7 +3085,7 @@ function renderHomeDesktop(){
     </div>`;
 
   // Next stage — full width card
-  const heroCard = next ? `
+  const heroCard = renderClockBanner() + (next ? `
   <div class="card cy mb16" style="cursor:pointer;border-left:4px solid var(--yellow)" data-goto-expand="${next.id}">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px">
       <div style="flex:1">
@@ -3081,7 +3107,7 @@ function renderHomeDesktop(){
       ${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:"?"};return `<div class="chip"><div class="av" style="width:20px;height:20px;font-size:8px">${ini(pl.name)}</div>${pl.nickname||uid}</div>`;}).join("")}
       ${(next.inscriptions||[]).length===0?'<span style="color:var(--muted);font-size:13px">Nenhum inscrito ainda.</span>':""}
     </div>
-  </div>` : "";
+  </div>` : "");
 
   // Row 1: NLH + KO
   const colNL = `<div class="home-col">
@@ -3151,6 +3177,7 @@ function renderHome(){
     </div>
   </div>
   <div style="padding:16px">
+    ${renderClockBanner()}
     ${next?`<div class="card cy mb10" style="cursor:pointer;border-left:4px solid ${isLive(next)?'var(--red)':'var(--yellow)'}" data-goto-expand="${next.id}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700">📅 Próxima Etapa</div>
@@ -3164,7 +3191,6 @@ function renderHome(){
         <span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</span>
       </div>
       ${isLive(next)?`<div style="margin-top:8px;overflow-x:auto;white-space:nowrap;padding-bottom:4px">${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:'?',nickname:'?'};return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 8px 3px 3px;margin-right:4px;font-size:11px;color:#fff;white-space:nowrap">'+AV(uid)+pl.nickname+'</span>';}).join('')}</div>`:""}
-      ${isLive(next)?`<button data-open-clock="${next.id}" style="width:100%;margin-top:8px;background:rgba(52,152,219,.15);border:1px solid var(--blue);color:var(--blue);padding:9px 14px;border-radius:5px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:1px;cursor:pointer;text-align:center" onclick="event.stopPropagation()">⏱ Ver Relógio de Blinds</button>`:""}
     </div>`:""}
     ${geralTop.length?`<div class="mb10">
       <button id="btn-ft-prize-home" style="width:100%;background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,215,0,0.05));border:1px solid #FFD700;border-radius:6px;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -3353,7 +3379,7 @@ function renderStageDetail(sid){
     ${s.status==="upcoming"?`
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
       ${s.allowInscriptions===false && !iAmIn
-        ? `<div style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:#e74c3c;padding:12px 14px;border-radius:3px;font-size:14px;text-align:center">🔒 Inscrições encerradas</div>`
+        ? `<div style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:#e74c3c;padding:12px 14px;border-radius:3px;font-size:14px;text-align:center">🔒 Inscrições fechadas</div>`
         : `<div>
             <button class="btn fw ${iAmIn?"bd":"by"}" style="padding:14px;font-size:16px" data-inscribe="${s.id}">
               ${iAmIn?"✕ Cancelar inscrição":"✓ Inscrever-me"}
@@ -3402,7 +3428,6 @@ function renderStageDetail(sid){
         </div>`;
       })()}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${live?`<button class="btn fw" data-open-clock="${s.id}" style="padding:12px;background:var(--blue);border:none;color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;border-radius:4px;cursor:pointer;flex:1">⏱ Ver Relógio</button>`:""}
         ${ins.length>0?`<button class="btn bo fw" style="padding:12px" data-share-ins="${s.id}">📤 Compartilhar Lista</button>`:""}
         ${s.address?`<button class="btn bo fw" style="padding:12px" onclick="openRouteModal(\`${s.address}\`)">🗺️ Traçar Rota</button>`:""}
       </div>
@@ -7489,7 +7514,7 @@ function bindEvents(){
       const alreadyIn=ins.includes(CURRENT_USER_UID);
       // Block if inscriptions closed and not already in
       if(stage.allowInscriptions===false && !alreadyIn){
-        showToast("Inscrições encerradas para esta etapa","red");
+        showToast("Inscrições fechadas para esta etapa","red");
         return;
       }
       try {
@@ -7531,7 +7556,7 @@ function bindEvents(){
     stage.allowInscriptions = (action==='open');
     await save();
     render();
-    showToast(action==='open'?"Inscrições abertas!":"Inscrições encerradas!","green");
+    showToast(action==='open'?"Inscrições abertas!":"Inscrições fechadas!","green");
   };
   window.openDiagnoseEdit = function(uidB64){
     const uid = decodeURIComponent(escape(atob(uidB64)));
@@ -8115,6 +8140,24 @@ function startListeners(user){
     }
   );
   _unsubListeners.push(unsub);
+
+  // Relógios (para o aviso "Relógio ao vivo" na tela principal) — tolerante a falha, não bloqueia o app
+  try {
+    const unsubClocks = onSnapshot(collection(db,"clocks"), (snap)=>{
+      const prefix = ACTIVE_SEASON + "_";
+      const seen = {};
+      snap.forEach(d=>{
+        if(!d.id.startsWith(prefix) || d.id===tplDocId()) return;
+        seen[d.id.slice(prefix.length)] = clockNormalize(d.data());
+      });
+      const sigBefore = clockBannerSig();
+      Object.keys(CLOCK_LIVE).forEach(k=>delete CLOCK_LIVE[k]);
+      Object.assign(CLOCK_LIVE, seen);
+      // só redesenha se o aviso mudou e o usuário está na tela principal (não interrompe quem está digitando em outra tela)
+      if(clockBannerSig()!==sigBefore && !CLOCK_STAGE_ID && TAB==="home" && CURRENT_USER) render();
+    }, (e)=>{ console.warn("Clocks listener:", e.message); });
+    _unsubListeners.push(unsubClocks);
+  } catch(e) { console.warn("Clocks setup:", e.message); }
 
   // Listen to rules config (non-blocking)
   try {
