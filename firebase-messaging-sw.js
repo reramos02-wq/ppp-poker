@@ -27,8 +27,8 @@ messaging.onBackgroundMessage((payload) => {
 
   const options = {
     body,
-    icon: data.icon || undefined,
-    badge: data.icon || undefined,
+    icon: data.icon || "/icon-192.png",
+    badge: data.icon || "/favicon-32.png",
     data: { url },
     tag: data.tag || "ppp-poker-notification"
   };

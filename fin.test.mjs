@@ -4,7 +4,7 @@ const h = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 const cut = (a, b) => h.slice(h.indexOf(a), h.indexOf(b));
 const src = [
   cut('// Número no formato brasileiro', '// Default blind structure'),
-  cut('function calcAvgStack', 'const LOGO_48'),
+  cut('function calcAvgStack', '// ── LOGO (vetorial)'),
 ].join('\n');
 const ctx = { DB: { players: [] }, ACTIVE_SEASON: '2026', console }; vm.createContext(ctx);
 vm.runInContext(src + `;this.f={parsePtNum,parseBRL,parseChips,getBuyinValues,calcArrecadado,calcPotFinal,calcTaxaFT,calcPotLiquido,calcPremiacao,calcKOFromEntries,calcKOEarnings,calcStaffPayouts,entradaJogador,getCashPlayerSaldo,getITMPercents,ITM_TABLE_NLH,ITM_TABLE_PKO}`, ctx);
