@@ -1648,28 +1648,78 @@ function sanitizeStages(stages){
   return (stages||[]).map(s => deepSanitize(s));
 }
 
-async function save(){
-  try {
-    await setDoc(doc(db,"seasons",ACTIVE_SEASON), {
-      players: sanitizePlayers(DB.players),
-      stages:  sanitizeStages(DB.stages),
-      admins:  DB.admins || [],
+// ── GRAVAÇÃO COM MESCLAGEM (evita sobrescrever o que outras pessoas gravaram) ──
+// BASE = "foto" do que o servidor tinha na última leitura (json por jogador/etapa).
+// Ao gravar, lemos a versão MAIS NOVA do servidor numa transação e só substituímos o que ESTE aparelho
+// realmente mudou (json diferente da foto). Etapas/jogadores que outra pessoa alterou nesse meio-tempo
+// continuam como estão no servidor. Se a comparação falhar por qualquer motivo, o pior caso é
+// regravar aquela etapa/jogador (o comportamento antigo) — nunca perder dado de quem não foi tocado.
+const BASE = { players:{}, stages:{}, admins:"[]" };
+function setBaseline(players, stages, admins){
+  BASE.players = {}; BASE.stages = {};
+  sanitizePlayers(players).forEach(p=>{ BASE.players[p.uid] = JSON.stringify(p); });
+  sanitizeStages(stages).forEach(s=>{ BASE.stages[s.id] = JSON.stringify(s); });
+  BASE.admins = JSON.stringify(admins||[]);
+}
+function mergeById(server, local, base, key, combine){
+  const localIds = new Set(local.map(x=>x[key]));
+  const out = [];
+  const seen = new Set();
+  for(const sv of server){
+    const id = sv[key];
+    if(!localIds.has(id)){
+      // sumiu localmente: se estava na foto, foi excluído aqui → remove; senão é novo de outra pessoa → mantém
+      if(id in base) continue;
+      out.push(sv); seen.add(id); continue;
+    }
+    const lc = local.find(x=>x[key]===id);
+    out.push(JSON.stringify(lc)!==base[id] ? (combine ? combine(sv, lc, base[id]) : lc) : sv); seen.add(id);
+  }
+  for(const lc of local) if(!seen.has(lc[key])) out.push(lc);
+  return out;
+}
+// Etapa alterada aqui E no servidor: vale a versão local, mas as INSCRIÇÕES são mescladas
+// (quem se inscreveu em outro aparelho continua inscrito; só some quem foi removido AQUI).
+function mergeStage(sv, lc, baseJson){
+  try{
+    const b = JSON.parse(baseJson||"{}");
+    const baseIns = new Set(b.inscriptions||[]), lcIns = lc.inscriptions||[], lcSet = new Set(lcIns);
+    const added = lcIns.filter(u=>!baseIns.has(u));
+    const removed = new Set([...baseIns].filter(u=>!lcSet.has(u)));
+    const ins = [...new Set([...(sv.inscriptions||[]), ...added])].filter(u=>!removed.has(u));
+    return {...lc, inscriptions: ins};
+  }catch(e){ return lc; }
+}
+async function commitDB(){
+  const ref = doc(db,"seasons",ACTIVE_SEASON);
+  const localPlayers = sanitizePlayers(DB.players), localStages = sanitizeStages(DB.stages);
+  let merged = null;
+  await runTransaction(db, async (tx)=>{
+    const snap = await tx.get(ref);
+    const cur = snap.exists() ? snap.data() : {};
+    merged = {
+      players: mergeById(cur.players||[], localPlayers, BASE.players, "uid"),
+      stages:  mergeById(cur.stages||[],  localStages,  BASE.stages,  "id", mergeStage),
+      admins:  JSON.stringify(DB.admins||[]) !== BASE.admins ? (DB.admins||[]) : (cur.admins||[]),
       updatedAt: serverTimestamp()
-    });
-  } catch(e){
+    };
+    if(snap.exists()) tx.update(ref, merged); else tx.set(ref, merged);
+  });
+  setBaseline(merged.players, merged.stages, merged.admins);
+}
+async function save(){
+  try { await commitDB(); return true; }
+  catch(e){
     console.error("Save error:", e.code, e.message);
     showToast("Erro ao salvar: "+e.message,"red");
+    return false;
   }
 }
 
-// Non-admin save — only updates stages array (inscriptions)
+// Gravação de inscrição (não-admin e admin): mesma mesclagem
 async function saveStages(){
-  try {
-    await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
-      stages: sanitizeStages(DB.stages),
-      updatedAt: serverTimestamp()
-    });
-  } catch(e){
+  try { await commitDB(); }
+  catch(e){
     console.error("saveStages error:", e.code, e.message);
     showToast("Erro ao salvar inscrição: "+e.message,"red");
   }
@@ -3730,10 +3780,8 @@ function bindManageInsEvents(sid){
         const newIns = [...new Set([...(s2.inscriptions||[]), p.uid])];
         row.querySelector("button").disabled=true; row.querySelector("button").textContent="...";
         try {
-          await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-            stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x)),
-            updatedAt: serverTimestamp()
-          });
+          const prevIns = s2.inscriptions; s2.inscriptions = newIns;
+          try { await commitDB(); } catch(e){ s2.inscriptions = prevIns; throw e; }
           const ls = DB.stages.find(x=>x.id===sid);
           if(ls) ls.inscriptions=newIns;
           showToast(p.name+" inscrito ✓","green");
@@ -3781,13 +3829,10 @@ function bindManageInsEvents(sid){
       const newIns = [...new Set([...(s2.inscriptions||[]), uid])];
       const saveBtn = document.getElementById("new-player-save");
       saveBtn.disabled=true; saveBtn.textContent="Salvando...";
+      const prevPlayers = DB.players, prevIns2 = s2.inscriptions;
       try {
-        DB.players = [...DB.players, newPlayer];
-        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-          players: sanitizePlayers(DB.players),
-          stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x)),
-          updatedAt: serverTimestamp()
-        });
+        DB.players = [...DB.players, newPlayer]; s2.inscriptions = newIns;
+        try { await commitDB(); } catch(e){ DB.players = prevPlayers; s2.inscriptions = prevIns2; throw e; }
         const ls = DB.stages.find(x=>x.id===sid);
         if(ls) ls.inscriptions=newIns;
         showToast(name+" criado e inscrito ✓","green");
@@ -3821,10 +3866,8 @@ function bindManageInsEvents(sid){
     saveBtn.disabled=true; saveBtn.textContent="Salvando...";
     const newIns = (s.inscriptions||[]).filter(uid=>!PENDING_REMOVALS.has(uid));
     try {
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,inscriptions:newIns}:x)),
-        updatedAt: serverTimestamp()
-      });
+      const prevIns3 = s.inscriptions; s.inscriptions = newIns;
+      try { await commitDB(); } catch(e){ s.inscriptions = prevIns3; throw e; }
       const ls=DB.stages.find(x=>x.id===sid);
       if(ls) ls.inscriptions=newIns;
       showToast(`${PENDING_REMOVALS.size} inscrito(s) removido(s) ✓`,"green");
@@ -7775,7 +7818,10 @@ function startListeners(user){
       dbg("15. Firestore snapshot recebido, exists=" + snap.exists());
       if(snap.exists()){
         const data = snap.data();
-        DB.players = sanitizeIncoming(data.players || [], "players");
+        const _srvPlayers = sanitizeIncoming(data.players || [], "players");
+        const _srvStages  = sanitizeIncoming(data.stages || [], "stages");
+        setBaseline(_srvPlayers, _srvStages, (data.admins||[]));
+        DB.players = _srvPlayers;
         DB.admins  = (data.admins || []).map(a=> typeof a==="string" ? a.replace(/[<>"'`]/g,"") : a);
         // If admin is editing a result, preserve local draft to avoid overwrite
         const editingStageId = resultStage ? resultStage.id : null;
@@ -7784,7 +7830,7 @@ function startListeners(user){
         // typed) aren't wiped out by the snapshot echo of our own save.
         const editingFinanceId = BUYIN_MGMT;
         // (O estado do relógio não vive mais neste documento — ver coleção "clocks".)
-        DB.stages = sanitizeIncoming(data.stages||[], "stages").map(s=>{
+        DB.stages = _srvStages.map(s=>{
           const local = DB.stages.find(x=>x.id===s.id);
           if(s.id===editingStageId && local){
             return {...s, draft: local.draft};
