@@ -3024,11 +3024,10 @@ function renderPage(){
 // ── HOME DESKTOP (2 colunas) ──────────────────────────────────────────────────
 // ── RELÓGIO NA TELA PRINCIPAL ─────────────────────────────────────────────────
 // Todos os relógios do Firestore (clocks/{temporada}_{etapa}). Um relógio aparece na tela principal para TODOS
-// enquanto não estiver "zerado" (zerado = parado no nível 1 com o tempo cheio, como logo após o Reset).
+// enquanto não estiver "zerado", mesmo com a etapa finalizada (zerado = parado no nível 1 com o tempo cheio, como logo após o Reset).
 const CLOCK_LIVE = {};   // etapaId → estado normalizado
 function clockStartedStages(){
   return DB.stages.filter(s=>{
-    if(s.status==="finished") return false;
     const st = CLOCK_LIVE[s.id];
     return !!st && (st.status!=="idle" || (st.elapsedMs||0) > 0);
   });
