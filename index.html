@@ -1077,7 +1077,10 @@ const DEFAULT_BLIND_LEVELS = [
 
 // Get blind levels for a stage (uses stage.blindLevels or the default)
 function getBlindLevels(s){
-  return (s.blindLevels && s.blindLevels.length) ? s.blindLevels : JSON.parse(JSON.stringify(DEFAULT_BLIND_LEVELS));
+  if(s.blindLevels && s.blindLevels.length) return s.blindLevels;
+  // Modelo "para todas as estruturas futuras" (clocks/{temporada}_blindTemplate); senão o padrão do app
+  if(typeof BLIND_TEMPLATE!=="undefined" && Array.isArray(BLIND_TEMPLATE) && BLIND_TEMPLATE.length) return JSON.parse(JSON.stringify(BLIND_TEMPLATE));
+  return JSON.parse(JSON.stringify(DEFAULT_BLIND_LEVELS));
 }
 
 // Format chip count for display (100k, 2.5k, etc.)
@@ -1097,7 +1100,9 @@ function fmtChips(n){
 // calculado por todos, então não depende de ninguém online. Lógica em clock-core.js.
 const CLOCK_DOCS = {};      // stageId → estado vindo do Firestore (undefined = ainda carregando)
 let CLOCK_OFFSET_MS = 0;    // hora do servidor − Date.now() do aparelho (via /api/time)
-let _clockUnsub = null, _clockSyncTimer = null, _clockStage = null;
+let _clockUnsub = null, _clockSyncTimer = null, _clockStage = null, _tplUnsub = null;
+let BLIND_TEMPLATE = undefined;   // undefined = carregando · null = não existe · array = modelo salvo
+const tplDocId = () => ACTIVE_SEASON+"_blindTemplate";
 
 function clockNow(){ return Date.now() + CLOCK_OFFSET_MS; }
 function clockDocId(stageId){ return ACTIVE_SEASON+"_"+stageId; }
@@ -1138,9 +1143,17 @@ function startClockSync(stageId){
     CLOCK_DOCS[stageId] = snap.exists() ? clockNormalize(snap.data()) : CLOCK_IDLE;
     if(CLOCK_STAGE_ID===stageId) render();
   }, (err)=>{ showToast("Relógio sem conexão: "+err.message,"red"); });
+  // Modelo de blinds das etapas futuras: todos os aparelhos carregam ANTES de mostrar o relógio
+  _tplUnsub = onSnapshot(doc(db,"clocks",tplDocId()), (snap)=>{
+    const d = snap.exists() ? snap.data() : null;
+    BLIND_TEMPLATE = (d && Array.isArray(d.levels) && d.levels.length) ? d.levels : null;
+    if(CLOCK_STAGE_ID===stageId) render();
+  }, ()=>{ BLIND_TEMPLATE = null; if(CLOCK_STAGE_ID===stageId) render(); });
 }
 function stopClockSync(){
   if(_clockUnsub){ _clockUnsub(); _clockUnsub = null; }
+  if(_tplUnsub){ _tplUnsub(); _tplUnsub = null; }
+  BLIND_TEMPLATE = undefined;
   if(_clockSyncTimer){ clearInterval(_clockSyncTimer); _clockSyncTimer = null; }
   if(_clockStage!==null){ delete CLOCK_DOCS[_clockStage]; _clockStage = null; }
   window._clkRendered = null;
@@ -1194,6 +1207,15 @@ function clockBeeps(n, freq){
 }
 const playWarnBeep    = ()=> clockBeeps(1, 880);   // entrou no último minuto do nível
 const playLevelUpBeep = ()=> clockBeeps(4, 1320);  // zerou (bip quádruplo); o nível troca 2s depois
+
+// Tela cheia: ícone do botão sempre coerente com o estado real (também depois de re-render, Esc, gesto de voltar)
+const clockFsActive = ()=> !!(document.fullscreenElement || document.webkitFullscreenElement);
+function clockSyncFsIcon(){
+  const btn = document.getElementById("clk-fullscreen");
+  if(btn) btn.textContent = clockFsActive() ? "⛶✕" : "⛶";
+}
+document.addEventListener("fullscreenchange", clockSyncFsIcon);
+document.addEventListener("webkitfullscreenchange", clockSyncFsIcon);
 
 // Wake Lock: o navegador solta o lock quando a aba fica oculta → pede de novo ao voltar
 function clockWakeLock(){
@@ -2355,7 +2377,9 @@ function render(){
       html = renderSidebar() +
         '<div class="main-wrap">' +
         renderTopbar() +
-        '<div id="page">' + (TAB==="home"?renderHomeDesktop():renderPage()) + '</div>' +
+        // Com o relógio aberto, SEMPRE renderPage() (que desenha o relógio). Sem isso, girar o celular
+        // (largura passa de 768px) trocava para o layout desktop e mostrava a home no lugar do relógio.
+        '<div id="page">' + (TAB==="home" && !CLOCK_STAGE_ID ? renderHomeDesktop() : renderPage()) + '</div>' +
         '</div>';
     } else {
       html = '<div id="wrap">' +
@@ -4653,7 +4677,7 @@ function renderClock(){
   if(!s) return `<div class="clock-screen"><div style="color:#fff">Etapa não encontrada.</div></div>`;
 
   // Antes do 1º snapshot do Firestore não mostramos nada (evita piscar "tempo cheio" para quem entra tarde)
-  if(CLOCK_DOCS[s.id]===undefined) return `<div class="clock-screen" id="clock-screen">
+  if(CLOCK_DOCS[s.id]===undefined || BLIND_TEMPLATE===undefined) return `<div class="clock-screen" id="clock-screen">
     <button id="clk-close" style="position:fixed;top:10px;right:10px;z-index:601;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:17px">✕</button>
     <div style="color:rgba(255,255,255,.6);font-family:'Barlow Condensed',sans-serif;font-size:22px;letter-spacing:3px;text-transform:uppercase">Conectando ao relógio…</div></div>`;
 
@@ -4749,7 +4773,7 @@ function renderClock(){
   // ── Fullscreen + close buttons ────────────────────────────────────────────
   const topBtns = `
     <div style="position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:601">
-      <button id="clk-fullscreen" title="Tela cheia" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center">⛶</button>
+      <button id="clk-fullscreen" title="Tela cheia" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center">${clockFsActive()?"⛶✕":"⛶"}</button>
       <button id="clk-close"      style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center">✕</button>
     </div>`;
 
@@ -4824,14 +4848,20 @@ function renderClock(){
 }
 
 
+// Rascunho da estrutura enquanto o editor está aberto. Mexer na ordem/valores NÃO altera o relógio
+// em andamento nem grava nada: só o botão Salvar aplica (e o Cancelar descarta).
+let BLV_DRAFT = null; let BLV_ONCE = new WeakSet(); let BLV_FUTURE = false;   // ONCE = níveis pontuais · FUTURE = alguma inserção valeu para as estruturas futuras
+const BLV_COLS = "22px 1fr 1fr 1fr 58px 26px 28px";
+
 function renderBlindEditor(s){
-  const levels = getBlindLevels(s);
+  const levels = BLV_DRAFT || getBlindLevels(s);
   const fmtDur = d => `${Math.round((d||900)/60)}min`;
+  const mvBtn = "background:var(--surface2);border:1px solid var(--border);color:#fff;border-radius:3px;width:26px;height:17px;padding:0;cursor:pointer;font-size:9px;line-height:1";
 
   const rows = levels.map((lv,i)=>`
-    <div style="display:grid;grid-template-columns:28px 1fr 1fr 1fr 70px 34px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+    <div data-blv-row="${i}" style="display:grid;grid-template-columns:${BLV_COLS};gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
       <div style="font-size:11px;color:var(--muted);text-align:center">
-        <input type="checkbox" class="blv-chk" data-blv="${i}" style="cursor:pointer;accent-color:var(--yellow)"/>
+        <input type="checkbox" class="blv-chk" data-blv="${i}" style="cursor:pointer;accent-color:var(--yellow)" title="Marcar (duração em massa / inserir abaixo)"/>
       </div>
       ${lv.isBreak
         ? `<div colspan="3" style="grid-column:2/5;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--yellow)">☕ BREAK</div>`
@@ -4839,22 +4869,28 @@ function renderBlindEditor(s){
            <input data-blv-bb="${i}" type="number" value="${lv.bb}" placeholder="BB" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:#fff;font-size:12px;width:100%;box-sizing:border-box"/>
            <input data-blv-ante="${i}" type="number" value="${lv.ante||0}" placeholder="Ante" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:#fff;font-size:12px;width:100%;box-sizing:border-box"/>`}
       <input data-blv-dur="${i}" type="number" value="${Math.round((lv.dur||900)/60)}" placeholder="min" style="background:var(--surface2);border:1px solid ${lv.isBreak?"var(--yellow)":"var(--border)"};border-radius:4px;padding:5px 7px;color:#fff;font-size:12px;width:100%;box-sizing:border-box" title="Duração em minutos"/>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button data-blv-up="${i}" ${i===0?"disabled":""} title="Subir" style="${mvBtn}${i===0?";opacity:.25;cursor:default":""}">▲</button>
+        <button data-blv-down="${i}" ${i===levels.length-1?"disabled":""} title="Descer" style="${mvBtn}${i===levels.length-1?";opacity:.25;cursor:default":""}">▼</button>
+      </div>
       <button data-blv-del="${i}" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:12px">✕</button>
     </div>`).join("");
 
   return `
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:17px;color:#fff;margin-bottom:4px">⚙ Estrutura de Blinds</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${s.name}</div>
-    <div style="display:grid;grid-template-columns:28px 1fr 1fr 1fr 70px 34px;gap:6px;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:${BLV_COLS};gap:6px;margin-bottom:6px">
       <div></div>
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">SB</div>
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">BB</div>
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Ante</div>
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Duração</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Min</div>
+      <div style="font-size:10px;color:var(--muted);text-align:center" title="Mover">⇅</div>
       <div></div>
     </div>
     <div id="blv-rows">${rows}</div>
-    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+    <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.4">Use ▲▼ para mover um nível. Para inserir no meio da lista, marque a linha anterior e toque em ＋ Nível ou ☕ Break (sem marcar, entra no fim).</div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
       <button id="blv-add-blind" class="btn bo sm">＋ Nível</button>
       <button id="blv-add-break" class="btn bo sm" style="color:var(--yellow)">☕ Break</button>
       <div id="blv-bulk-dur-wrap" style="display:flex;align-items:center;gap:6px;margin-left:auto">
@@ -6071,6 +6107,7 @@ function bindEvents(){
   // Close clock — release wake lock and stop listening
   document.getElementById("clk-close")?.addEventListener("click",()=>{
     if(window._wl){ window._wl.release().catch(()=>{}); window._wl=null; }
+    if(clockFsActive()){ try{ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }catch(e){} }
     stopClockSync();
     CLOCK_STAGE_ID = null;
     render();
@@ -6188,11 +6225,16 @@ function bindEvents(){
   document.getElementById("clk-display")?.addEventListener("click", ()=>{ if(IS_ADMIN) openTimerEditModal(); });
   document.getElementById("clk-display-land")?.addEventListener("click", ()=>{ if(IS_ADMIN) openTimerEditModal(); });
 
-  // Fullscreen
+  // Fullscreen — na PÁGINA INTEIRA (documentElement), não só no #clock-screen. Motivos:
+  //  1) render() recria o #app (e o #clock-screen) a cada atualização do Firestore, ação do admin ou
+  //     rotação de tela; se o elemento em tela cheia some, o navegador SAI da tela cheia na hora;
+  //  2) o navegador esconde tudo que está fora do elemento em tela cheia, e as janelas de
+  //     confirmação/ajuste (#admin-modal) ficam fora do #clock-screen.
   document.getElementById("clk-fullscreen")?.addEventListener("click", async ()=>{
-    const el=document.getElementById("clock-screen")||document.documentElement;
-    if(document.fullscreenElement){
-      await document.exitFullscreen().catch(()=>{});
+    const el=document.documentElement;
+    if(clockFsActive()){
+      if(document.exitFullscreen) await document.exitFullscreen().catch(()=>{});
+      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
     } else if(el.requestFullscreen){
       await el.requestFullscreen().catch(()=>{});
     } else if(el.webkitRequestFullscreen){
@@ -6202,56 +6244,128 @@ function bindEvents(){
       showToast("Para tela cheia no iOS: Safari → Compartilhar → Adicionar à Tela de Início","green");
     }
   });
-  document.addEventListener("fullscreenchange", ()=>{
-    const btn=document.getElementById("clk-fullscreen");
-    if(btn) btn.textContent=document.fullscreenElement?"⛶✕":"⛶";
-  });
 
   // Blind editor
+  // Trabalha num RASCUNHO (BLV_DRAFT): nada muda no relógio nem é gravado até tocar em Salvar.
   bindClkBtn("edit", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const el=document.getElementById("admin-modal"); if(!el) return;
+    BLV_DRAFT = JSON.parse(JSON.stringify(getBlindLevels(s))); BLV_ONCE = new WeakSet(); BLV_FUTURE = false;
     el.innerHTML=`<div class="ov" style="z-index:1200;align-items:flex-start;padding:16px;overflow-y:auto"><div class="modal" style="max-width:500px;width:100%">${renderBlindEditor(s)}</div></div>`;
     bindBlindEditorEvents(s);
   });
 
+  // Copia para o rascunho o que está digitado nos campos (senão mover/inserir/apagar perderia a edição).
+  function readBlindEditor(){
+    const levels = BLV_DRAFT; if(!levels) return;
+    document.querySelectorAll("[data-blv-sb]").forEach(inp=>{const i=parseInt(inp.dataset.blvSb);if(levels[i])levels[i].sb=parseInt(inp.value)||0;});
+    document.querySelectorAll("[data-blv-bb]").forEach(inp=>{const i=parseInt(inp.dataset.blvBb);if(levels[i])levels[i].bb=parseInt(inp.value)||0;});
+    document.querySelectorAll("[data-blv-ante]").forEach(inp=>{const i=parseInt(inp.dataset.blvAnte);if(levels[i])levels[i].ante=parseInt(inp.value)||0;});
+    document.querySelectorAll("[data-blv-dur]").forEach(inp=>{const i=parseInt(inp.dataset.blvDur);if(levels[i])levels[i].dur=(parseInt(inp.value)||15)*60;});
+  }
+  const checkedBlindRows = () => [...document.querySelectorAll(".blv-chk:checked")].map(c=>parseInt(c.dataset.blv));
+
+  // Redesenha o editor NO LUGAR (não fecha a janela): mantém a rolagem e, se `follow` for o índice novo
+  // de uma linha, mantém essa linha no mesmo ponto da tela — assim dá para tocar ▲/▼ várias vezes seguidas.
+  function redrawBlindEditor(s, opts){
+    opts = opts||{};
+    const modal = document.querySelector("#admin-modal .modal");   // é o .modal que rola (max-height + overflow)
+    if(!modal) return;
+    const scroll = modal.scrollTop;
+    const oldRow = opts.followFrom!=null ? modal.querySelector(`[data-blv-row="${opts.followFrom}"]`) : null;
+    const oldTop = oldRow ? oldRow.getBoundingClientRect().top : null;
+    modal.innerHTML = renderBlindEditor(s);
+    bindBlindEditorEvents(s);
+    modal.scrollTop = scroll;
+    (opts.checked||[]).forEach(i=>{ const c=modal.querySelector(`.blv-chk[data-blv="${i}"]`); if(c) c.checked=true; });
+    if(opts.follow!=null){
+      const row = modal.querySelector(`[data-blv-row="${opts.follow}"]`);
+      if(row){
+        if(oldTop!=null) modal.scrollTop += row.getBoundingClientRect().top - oldTop;
+        else row.scrollIntoView({block:"center"});
+      }
+    }
+  }
+
   function bindBlindEditorEvents(s){
-    document.getElementById("blv-cancel")?.addEventListener("click", closeAdminModal);
-    document.getElementById("blv-add-blind")?.addEventListener("click",()=>{
-      const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:false});
-      s.blindLevels=levels; closeAdminModal();
-      document.querySelectorAll("[data-clk='edit']")[0]?.click();
-    });
-    document.getElementById("blv-add-break")?.addEventListener("click",()=>{
-      const levels=getBlindLevels(s); levels.push({sb:0,bb:0,ante:0,dur:900,isBreak:true});
-      s.blindLevels=levels; closeAdminModal();
-      document.querySelectorAll("[data-clk='edit']")[0]?.click();
-    });
+    document.getElementById("blv-cancel")?.addEventListener("click", ()=>{ BLV_DRAFT=null; BLV_FUTURE=false; closeAdminModal(); });
+
+    // Inserir: logo abaixo da última linha marcada; sem marcação, no fim (comportamento de antes)
+    const addLevel = (isBreak)=>{
+      readBlindEditor();
+      const marked = checkedBlindRows();
+      const at = marked.length ? Math.max(...marked)+1 : BLV_DRAFT.length;
+      const lv = {sb:0,bb:0,ante:0,dur:900,isBreak};
+      BLV_DRAFT.splice(at, 0, lv);
+      redrawBlindEditor(s, {follow:at, checked:[]});
+      if(!isBreak) document.querySelector(`[data-blv-sb="${at}"]`)?.focus({preventScroll:true});
+      askScope(lv, at);
+    };
+    // Pergunta a cada nível inserido: só nesta etapa (pontual) ou também nas estruturas futuras
+    const askScope = (lv, at)=>{
+      const host = document.getElementById("admin-modal"); if(!host) return;
+      const box = document.createElement("div");
+      box.id = "blv-scope";
+      box.innerHTML = `<div class="ov" style="z-index:1300;align-items:center;padding:16px"><div class="modal" style="max-width:420px;width:100%">
+        <div class="mtitle">${lv.isBreak?"☕ Break":"Nível"} adicionado (posição ${at+1})</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:14px;line-height:1.4">Esta alteração vale só para esta etapa ou para todas as estruturas de blinds futuras?</div>
+        <button class="btn by fw mb10" id="blv-scope-future">Todas as estruturas futuras</button>
+        <button class="btn fw" id="blv-scope-once">Pontual (só esta etapa)</button></div></div>`;
+      host.appendChild(box);
+      const done = (once)=>{ if(once) BLV_ONCE.add(lv); else { BLV_ONCE.delete(lv); BLV_FUTURE = true; } box.remove(); };
+      box.querySelector("#blv-scope-once").addEventListener("click",()=>done(true));
+      box.querySelector("#blv-scope-future").addEventListener("click",()=>done(false));
+    };
+    document.getElementById("blv-add-blind")?.addEventListener("click",()=>addLevel(false));
+    document.getElementById("blv-add-break")?.addEventListener("click",()=>addLevel(true));
+
+    // Mover ▲ ▼ (troca com o vizinho; o nível movido continua sob o dedo)
+    const move = (i, dir)=>{
+      readBlindEditor();
+      const j = i+dir;
+      if(i<0 || j<0 || i>=BLV_DRAFT.length || j>=BLV_DRAFT.length) return;
+      [BLV_DRAFT[i], BLV_DRAFT[j]] = [BLV_DRAFT[j], BLV_DRAFT[i]];
+      const marked = checkedBlindRows().map(k=> k===i ? j : k===j ? i : k);
+      redrawBlindEditor(s, {followFrom:i, follow:j, checked:marked});
+    };
+    document.querySelectorAll("[data-blv-up]").forEach(btn=>btn.addEventListener("click",()=>move(parseInt(btn.dataset.blvUp),-1)));
+    document.querySelectorAll("[data-blv-down]").forEach(btn=>btn.addEventListener("click",()=>move(parseInt(btn.dataset.blvDown),+1)));
+
     document.querySelectorAll("[data-blv-del]").forEach(btn=>{
       btn.addEventListener("click",()=>{
-        const levels=getBlindLevels(s); levels.splice(parseInt(btn.dataset.blvDel),1);
-        s.blindLevels=levels; closeAdminModal();
-        document.querySelectorAll("[data-clk='edit']")[0]?.click();
+        readBlindEditor();
+        const i = parseInt(btn.dataset.blvDel);
+        const marked = checkedBlindRows().filter(k=>k!==i).map(k=> k>i ? k-1 : k);
+        BLV_DRAFT.splice(i,1);
+        redrawBlindEditor(s, {checked:marked});
       });
     });
     document.getElementById("blv-bulk-apply")?.addEventListener("click",()=>{
+      readBlindEditor();
       const dur=(parseInt(document.getElementById("blv-bulk-dur")?.value)||15)*60;
-      const levels=getBlindLevels(s);
-      document.querySelectorAll(".blv-chk:checked").forEach(chk=>{
-        const i=parseInt(chk.dataset.blv); if(levels[i]) levels[i].dur=dur;
-      });
-      s.blindLevels=levels; closeAdminModal();
-      document.querySelectorAll("[data-clk='edit']")[0]?.click();
+      const marked = checkedBlindRows();
+      marked.forEach(i=>{ if(BLV_DRAFT[i]) BLV_DRAFT[i].dur=dur; });
+      redrawBlindEditor(s, {checked:marked});
     });
     document.getElementById("blv-save")?.addEventListener("click", async()=>{
-      const levels=getBlindLevels(s);
-      document.querySelectorAll("[data-blv-sb]").forEach(inp=>{const i=parseInt(inp.dataset.blvSb);if(levels[i])levels[i].sb=parseInt(inp.value)||0;});
-      document.querySelectorAll("[data-blv-bb]").forEach(inp=>{const i=parseInt(inp.dataset.blvBb);if(levels[i])levels[i].bb=parseInt(inp.value)||0;});
-      document.querySelectorAll("[data-blv-ante]").forEach(inp=>{const i=parseInt(inp.dataset.blvAnte);if(levels[i])levels[i].ante=parseInt(inp.value)||0;});
-      document.querySelectorAll("[data-blv-dur]").forEach(inp=>{const i=parseInt(inp.dataset.blvDur);if(levels[i])levels[i].dur=(parseInt(inp.value)||15)*60;});
-      s.blindLevels=levels;
-      await saveClockState(s); closeAdminModal(); render();
-      showToast("Estrutura de blinds salva ✓","green");
+      readBlindEditor();
+      if(!BLV_DRAFT || !BLV_DRAFT.length){ showToast("A estrutura precisa ter pelo menos 1 nível","red"); return; }
+      const draft = BLV_DRAFT;
+      // Etapa primeiro (não perde nada se o modelo falhar); depois o modelo, sem os níveis "pontuais"
+      s.blindLevels = draft;
+      BLV_DRAFT = null;
+      await saveClockState(s);
+      let tplMsg = "";
+      const wantTpl = BLV_FUTURE; BLV_FUTURE = false;
+      if(wantTpl){
+        try{
+          const tpl = JSON.parse(JSON.stringify(draft.filter(l=>!BLV_ONCE.has(l))));
+          await setDoc(doc(db,"clocks",tplDocId()),{levels:tpl, updatedAt:serverTimestamp()});
+          tplMsg = " · modelo futuro atualizado";
+        }catch(e){ showToast("Etapa salva, mas o modelo futuro falhou: "+e.message,"red"); }
+      }
+      closeAdminModal(); render();
+      showToast("Estrutura de blinds salva ✓"+tplMsg,"green");
     });
   }
 
