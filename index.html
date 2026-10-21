@@ -3291,6 +3291,14 @@ function renderNav(){
   <div class="more-menu${MENU_OPEN?" open":""}" id="more-menu">
     <div class="more-menu-handle"></div>
     <div class="more-menu-title">Menu</div>
+    <div class="more-item${TAB==="ranking"&&STATS_VIEW?" active-item":""}" data-more-stats>
+      <span class="more-item-icon">${ICON_STATS}</span>
+      <div class="more-item-info">
+        <div class="more-item-label">Estatísticas</div>
+        <div class="more-item-sub">Evolução no ranking, mesas finais e mais</div>
+      </div>
+      ${TAB==="ranking"&&STATS_VIEW?'<div class="more-item-dot"></div>':""}
+    </div>
     ${MORE_TABS().map(t=>`
     <div class="more-item${TAB===t.id?" active-item":""}" data-more-tab="${t.id}">
       <span class="more-item-icon">${t.icon}</span>
@@ -3486,6 +3494,7 @@ function renderHomeDesktop(){
     <div class="home-top">${heroCard}${geralTop.length?renderFTPrizeBanner():""}</div>
     <div class="home-grid" style="margin-bottom:16px">${colNL}${colKO}</div>
     <div class="home-grid">${colGeral}${colHOF}</div>
+    ${geralTop.length?renderStatsBanner():""}
   </div>`;
 }
 
@@ -3547,6 +3556,7 @@ function renderHome(){
         <div class="rv" style="font-size:19px">${r.total}<span style="font-size:10px;color:var(--muted);margin-left:2px">pts</span></div>
       </div>`).join("")}</div>
     </div>`:""}
+    ${geralTop.length?renderStatsBanner():""}
   </div></div>`;
 }
 
@@ -6922,6 +6932,7 @@ function bindEvents(){
     document.getElementById("menu-backdrop")?.classList.toggle("open",MENU_OPEN);
     document.getElementById("btn-more")?.classList.toggle("menu-open",MENU_OPEN);
   });
+  document.querySelectorAll("[data-more-stats]").forEach(el=>{el.addEventListener("click",()=>{TAB="ranking";STATS_VIEW=true;FT_PRIZE_VIEW=false;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();window.scrollTo(0,0);});});
   document.querySelectorAll("[data-more-tab]").forEach(el=>{el.addEventListener("click",()=>{TAB=el.dataset.moreTab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();window.scrollTo(0,0);});});
   document.getElementById("menu-backdrop")?.addEventListener("click",()=>{
     MENU_OPEN=false;
@@ -8227,7 +8238,7 @@ function bindEvents(){
   document.getElementById("btn-ft-prize")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; render(); });
   document.getElementById("btn-ft-prize-home")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; TAB="ranking"; render(); });
   document.getElementById("btn-ft-prize-back")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=false; render(); });
-  document.getElementById("btn-stats-open")?.addEventListener("click",()=>{ STATS_VIEW=true; FT_PRIZE_VIEW=false; render(); window.scrollTo(0,0); });
+  document.getElementById("btn-stats-open")?.addEventListener("click",()=>{ TAB="ranking"; STATS_VIEW=true; FT_PRIZE_VIEW=false; render(); window.scrollTo(0,0); });
   document.getElementById("btn-stats-back")?.addEventListener("click",()=>{ STATS_VIEW=false; render(); });
   if(document.getElementById("stx-chart-card")) statsRefresh();
 
