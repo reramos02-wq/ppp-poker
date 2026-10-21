@@ -6370,7 +6370,10 @@ function openStageModal(stage=null){
   const st0 = stage ? textToStruct(stage) : textToStruct(DEFAULT_RULES[defType]);
   const fin0 = stage && stage.finance ? stage.finance : null;
   const kd = stKoDefaults();
-  const ko0 = { value: Number(fin0&&fin0.koValue)||kd.value, per: Number(fin0&&fin0.koPer)||kd.per };
+  // Etapa PKO já existente: usa o que ela realmente usa no financeiro (o padrão das regras só vale para etapas novas), senão editar mudaria o KO de uma etapa antiga
+  const ko0 = stage && stage.type==="knockout"
+    ? { value: Number(fin0&&fin0.koValue)||DEFAULT_KO_VALUE, per: Number(fin0&&fin0.koPer)||DEFAULT_KO_PER_ENTRY }
+    : { value: Number(fin0&&fin0.koValue)||kd.value, per: Number(fin0&&fin0.koPer)||kd.per };
   document.getElementById("admin-modal").innerHTML=`
   <div class="ov" id="sm-ov">
     <div class="modal" style="max-height:90vh;overflow-y:auto">
@@ -6430,7 +6433,8 @@ function openStageModal(stage=null){
       buyin:txt.buyin, rebuy:txt.rebuy, addon:txt.addon, timechip:txt.timechip,
       season:ACTIVE_SEASON
     };
-    const applyKO = s => { if(type==="knockout"){ const fin=getFinanceData(s); fin.koValue=ko.value; fin.koPer=ko.per; } return s; };
+    // Só mexe no financeiro quando preciso: etapa sem dados financeiros e com o KO padrão continua sem eles (o app já usa esse padrão), então nada é "congelado" sem querer
+    const applyKO = s => { if(type!=="knockout") return s; if(!s.finance && ko.value===DEFAULT_KO_VALUE && ko.per===DEFAULT_KO_PER_ENTRY) return s; const fin=getFinanceData(s); fin.koValue=ko.value; fin.koPer=ko.per; return s; };
     if(stage){ DB.stages=DB.stages.map(s=>s.id===stage.id?applyKO({...s,...data}):s); }
     else { DB.stages=[...DB.stages,applyKO({id:mkId(),...data,status:"upcoming",inscriptions:[],results:[]})].sort((a,b)=>a.date.localeCompare(b.date)); }
     save(); closeAdminModal(); render();

@@ -38,4 +38,20 @@ assert.match(f.structValidate({...ok,buyin:{v:NaN,k:20}},'nlholdem',null),/núme
 assert.match(f.structValidate({...ok,tc:{on:true,k:0,lvl:1}},'nlholdem',null),/Time chip/);
 assert.match(f.structValidate(f.textToStruct(KO),'knockout',{value:0,per:4}),/KO/);
 assert.equal(f.structValidate(f.textToStruct(KO),'knockout',{value:25,per:4}),'');
+// 6) conciliação: variações de textos antigos mantêm exatamente os mesmos valores lidos pelo financeiro
+const LEGACY = [
+  {buyin:'R$ 150 (20k fichas)', rebuy:'R$ 100 (20k) / R$ 180 (40k)', addon:'R$ 150 (40k fichas)', timechip:'5k início 1º nível'},
+  {buyin:'R$ 1.500,50 (100k fichas)', rebuy:'R$ 1.000 (100k)', addon:'', timechip:''},
+  {buyin:'R$ 12,5 (1,5k fichas)', rebuy:'R$ 10 (1,5k+1KO) / R$ 20 (3k+1KO)', addon:'R$ 5 (1k fichas)', timechip:'2,5k início 3º nível'},
+  {buyin:'R$ 200 (20k fichas + 1 KO)', rebuy:'R$ 200 (20k+1KO) / R$ 300 (40k+1KO)', addon:'R$ 200 (40k fichas)', timechip:'—'},
+];
+for (const r of LEGACY) for (const type of ['nlholdem','knockout']) {
+  const re = J(f.structToText(f.textToStruct(r), type));
+  assert.deepEqual(J(f.getBuyinValues(re)), J(f.getBuyinValues(r)), 'valores financeiros: '+r.buyin);
+  assert.equal(f.parseChips(re.buyin), f.parseChips(r.buyin), 'fichas buy-in');
+  assert.equal(f.parseChips(String(re.rebuy).split('/')[0]), f.parseChips(String(r.rebuy).split('/')[0]), 'fichas RS');
+  assert.equal(f.parseChips(re.addon), f.parseChips(r.addon), 'fichas add-on');
+  const mk = x => ({...x, inscriptions:['a','b','c'], buyinData:[{uid:'a',rs:2,rd:1,addon:true},{uid:'b',rs:1}]});
+  assert.equal(f.calcAvgStack(mk(re)), f.calcAvgStack(mk(r)), 'stack médio');
+}
 console.log('ESTRUTURA OK');
