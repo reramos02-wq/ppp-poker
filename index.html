@@ -787,6 +787,18 @@ html:not(.pl) .hsv{font-size:32px;}
 .stx-bar b:first-child{border-radius:99px 0 0 99px;}
 .stx-bar b:last-child{border-radius:0 99px 99px 0;}
 .stx-bar b:only-child{border-radius:99px;}
+.stf-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.stf-l{grid-column:1/-1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+.stf-l i{font-style:normal;text-transform:none;letter-spacing:0;opacity:.7;font-weight:400;}
+.stf-w{position:relative;}
+.stf-w .inp{width:100%;box-sizing:border-box;}
+.stf-pre{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;}
+.stf-suf{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;white-space:nowrap;}
+.stf-hp{padding-left:36px!important;}
+.stf-hs{padding-right:84px!important;}
+.stf-prev{margin:4px 0 14px;padding:10px 12px;border-radius:10px;background:var(--bg-dark);border:1px dashed var(--border2);font-size:12.5px;line-height:1.6;color:var(--muted);}
+.stf-prev b{color:#fff;font-weight:600;}
+.stf-pt{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;}
 .stx-mvl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px;}
 .ftpill{align-self:center;margin-left:6px;font-family:var(--f-d);font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#FFD25E;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.28);border-radius:999px;padding:1px 7px;line-height:1.5;white-space:nowrap;}
 .home-top{padding:0;}
@@ -1142,9 +1154,10 @@ const RK = "ppp_rules_v1";
 
 const DEFAULT_RULES_SEED = {
   nlholdem:{buyin:"R$ 150 (20k fichas)",rebuy:"R$ 100 (20k) / R$ 180 (40k)",addon:"R$ 150 (40k fichas)",timechip:"5k início 1º nível"},
-  knockout:{buyin:"R$ 200 (20k fichas + 1 KO)",rebuy:"R$ 200 (20k+1KO) / R$ 300 (40k+1KO)",addon:"R$ 200 (40k fichas)",timechip:"—"}
+  knockout:{buyin:"R$ 200 (20k fichas + KO)",rebuy:"R$ 200 (20k+KO) / R$ 300 (40k+KO)",addon:"R$ 200 (40k fichas)",timechip:"—",koValue:25,koPer:4}
 };
 let DEFAULT_RULES = JSON.parse(localStorage.getItem(RK)||"null") || JSON.parse(JSON.stringify(DEFAULT_RULES_SEED));
+function saveRules(){ try{ localStorage.setItem(RK, JSON.stringify(DEFAULT_RULES)); }catch(e){} }
 
 const mkId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
@@ -1316,6 +1329,50 @@ const parseChips = str => {
   if(m2) return parsePtNum(m2[1]);
   return 0;
 };
+
+// Nome exibido do formato (o valor interno continua "knockout" para não quebrar etapas já salvas)
+const typeName = t => t==="knockout" ? "Progressive Knockout (PKO)" : "NL Hold'em";
+const typeLbl  = t => (t==="knockout" ? "🥊 " : "🃏 ") + typeName(t);
+// ── ESTRUTURA (início) ── buy-in, rebuys, add-on e time chip entram como NÚMEROS e viram o texto padronizado que o financeiro lê.
+// Ninguém mais digita o texto à mão; ao abrir uma etapa antiga, o texto é lido de volta para os campos.
+const stFmtMoney = v => { v = Number(v)||0; return Number.isInteger(v) ? String(v) : String(+v.toFixed(2)).replace(".",","); };
+const stFmtK = v => String(+(Number(v)||0).toFixed(2)).replace(".",",");
+function stTypeIsPKO(type){ return type==="knockout"; }
+// st = {buyin:{v,k}, rs:{v,k}, rd:{v,k}, addon:{v,k}, tc:{on,k,lvl}}  (v = R$, k = fichas em milhares)
+function structToText(st, type){
+  const ko = stTypeIsPKO(type) ? "+KO" : "";
+  const buyin = `R$ ${stFmtMoney(st.buyin.v)} (${stFmtK(st.buyin.k)}k fichas${ko?" + KO":""})`;
+  const part = o => `R$ ${stFmtMoney(o.v)} (${stFmtK(o.k)}k${ko})`;
+  const rebuy = st.rs.v>0 ? (st.rd.v>0 ? `${part(st.rs)} / ${part(st.rd)}` : part(st.rs)) : "—";
+  const addon = st.addon.v>0 ? `R$ ${stFmtMoney(st.addon.v)} (${stFmtK(st.addon.k)}k fichas)` : "—";
+  const timechip = st.tc.on ? `${stFmtK(st.tc.k)}k início ${Math.max(1,Math.round(st.tc.lvl))}º nível` : "—";
+  return {buyin, rebuy, addon, timechip};
+}
+function textToStruct(r){
+  r = r || {};
+  const one = t => ({v:parseBRL(t), k:parseChips(t)/1000});
+  const parts = String(r.rebuy||"").split("/").map(x=>x.trim());
+  const rs = one(parts[0]||""), rd = parts[1] ? one(parts[1]) : {v:0,k:0};
+  const tcTxt = String(r.timechip||"");
+  const m = tcTxt.match(/(\d+(?:[.,]\d+)?)\s*k/i), lv = tcTxt.match(/(\d+)\s*[º°o]\s*n[ií]vel/i);
+  const tc = m ? {on:true, k:parsePtNum(m[1]), lvl: lv ? Number(lv[1]) : 1} : {on:false, k:0, lvl:1};
+  return {buyin:one(r.buyin), rs, rd, addon:one(r.addon), tc};
+}
+// Valida a estrutura: devolve a mensagem do 1º problema, ou "" se estiver tudo certo.
+function structValidate(st, type, ko){
+  const bad = n => !Number.isFinite(n) || n<0;
+  const all = [st.buyin.v,st.buyin.k,st.rs.v,st.rs.k,st.rd.v,st.rd.k,st.addon.v,st.addon.k,st.tc.k,st.tc.lvl];
+  if(all.some(bad)) return "Preencha os campos só com números (sem letras nem valores negativos).";
+  if(!(st.buyin.v>0) || !(st.buyin.k>0)) return "Buy-in: informe o valor e as fichas.";
+  if(st.rs.v>0 && !(st.rs.k>0)) return "Rebuy simples: informe as fichas.";
+  if(st.rd.v>0 && !(st.rs.v>0)) return "Rebuy duplo: preencha também o rebuy simples.";
+  if(st.rd.v>0 && !(st.rd.k>0)) return "Rebuy duplo: informe as fichas.";
+  if(st.addon.v>0 && !(st.addon.k>0)) return "Add-on: informe as fichas.";
+  if(st.tc.on && (!(st.tc.k>0) || !(st.tc.lvl>=1))) return "Time chip: informe as fichas e o nível.";
+  if(stTypeIsPKO(type) && ko){ if(!(ko.value>0)) return "Valor por KO: informe um valor maior que zero."; if(!(ko.per>=1)) return "KOs por entrada: informe 1 ou mais."; }
+  return "";
+}
+// ── ESTRUTURA (fim) ──
 
 // Default blind structure (per level: sb, bb, ante, duration in seconds)
 // ante=0 means no ante; isBreak=true means it's a break period
@@ -2301,7 +2358,7 @@ function calcHOF(){
 // ── SHARE MODAL ──────────────────────────────────────────────────────────────
 function openShareModal(stage){
   const ins  = stage.inscriptions||[];
-  const tipo = stage.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout";
+  const tipo = typeLbl(stage.type);
 
   const wrap = document.getElementById("result-modal");
   wrap.innerHTML="";
@@ -3439,7 +3496,7 @@ function renderHomeDesktop(){
           ${isLive(next)?'<span class="live-badge"><span class="live-dot"></span>LIVE RANKING</span>':""}
         </div>
         <div style="font-size:13px;color:var(--muted);margin-top:6px">${fmtD(next.date)}${next.time?" às <b style='color:#fff'>"+next.time+"</b>":""} · ${next.location||"A confirmar"}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:2px">${next.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px">${typeLbl(next.type)}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:36px;color:var(--yellow);line-height:1">${(next.inscriptions||[]).length}</div>
@@ -3459,7 +3516,7 @@ function renderHomeDesktop(){
   </div>`;
 
   const colKO = `<div class="home-col">
-    ${koTop.length ? secHdr("🥊","Ranking Knockout","ranking")+"<div class='rl'>"+koTop.map((r,i)=>rrRow(r,i,"🥊 "+r.ko+" KO","knockout")).join("")+"</div>" : ""}
+    ${koTop.length ? secHdr("🥊","Ranking PKO","ranking")+"<div class='rl'>"+koTop.map((r,i)=>rrRow(r,i,"🥊 "+r.ko+" KO","knockout")).join("")+"</div>" : ""}
   </div>`;
 
   // Row 2: Geral + HOF
@@ -3530,7 +3587,7 @@ function renderHome(){
       </div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff">${next.name}</div>
       <div style="font-size:13px;color:var(--muted);margin-top:3px">${fmtD(next.date)}${next.time?" às "+next.time:""}${next.location?" · "+next.location:""}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:2px">${next.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">${typeLbl(next.type)}</div>
       <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:13px;font-weight:600;color:${isLive(next)?'var(--red)':'#fff'}">${(next.inscriptions||[]).length} inscrito${(next.inscriptions||[]).length!==1?"s":""}</span>
         <span style="font-size:11px;color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1.5px;text-transform:uppercase">Ver etapa →</span>
@@ -3555,7 +3612,7 @@ function renderHome(){
       </div>`).join("")}</div>
     </div>`:""}
     ${koTop.length?`<div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Líderes Knockout<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🥊 Líderes PKO<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${koTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
         <div class="ri"><div class="rn">${r.p.nickname}${movementBadge(r.p.uid,"knockout")}</div><div class="rm">🥊 ${r.ko} KO</div></div>
@@ -3739,7 +3796,7 @@ function statsChartInner(){
     <div class="tabs" style="margin-bottom:8px">
       <button class="tb${STATS_TYPE==="geral"?" on":""}" data-stx-type="geral">Geral</button>
       <button class="tb${STATS_TYPE==="nlholdem"?" on":""}" data-stx-type="nlholdem">NL Hold'em</button>
-      <button class="tb${STATS_TYPE==="knockout"?" on":""}" data-stx-type="knockout">Knockout</button>
+      <button class="tb${STATS_TYPE==="knockout"?" on":""}" data-stx-type="knockout">PKO</button>
     </div>
     <div class="tabs" style="margin:0 0 10px;width:max-content;max-width:100%"><button class="tb${STATS_MODE==="pos"?" on":""}" data-stx-mode="pos">Posição</button><button class="tb${STATS_MODE==="pts"?" on":""}" data-stx-mode="pts">Pontos</button></div>
     <div class="stx-picks">${tops.map(n=>`<button class="stx-pick" data-stx-pick="${n}">Top ${n}</button>`).join("")}${CURRENT_USER_UID?`<button class="stx-pick" data-stx-pick="me">Eu</button>`:""}<button class="stx-pick clr" data-stx-pick="none">Limpar</button></div>
@@ -3838,7 +3895,7 @@ function renderRanking(){
   <div class="tabs">
     <button class="tb${RANK_TAB==="geral"?" on":""}" data-rtab="geral">🏅 Geral</button>
     <button class="tb${RANK_TAB==="nlholdem"?" on":""}" data-rtab="nlholdem">🃏 NL Hold'em</button>
-    <button class="tb${RANK_TAB==="knockout"?" on":""}" data-rtab="knockout">🥊 Knockout</button>
+    <button class="tb${RANK_TAB==="knockout"?" on":""}" data-rtab="knockout">🥊 PKO</button>
   </div>
   <button id="btn-ft-prize" class="btn bo fw" style="margin-bottom:14px;border-color:#FFD700;color:#FFD700;font-size:13px">🏆 Premiação Final de Temporada</button>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
@@ -3885,7 +3942,7 @@ function renderStages(){
       <div class="sgh" style="pointer-events:none">
         <div style="flex:1">
           <div class="sgn">${s.name}${s.isFinal?" 🏆":""}</div>
-          <div class="sgm">${fmtD(s.date)}${s.time?" às "+s.time:""}${s.location?" · "+s.location:""}<br/>${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}${s.isFinal?" · Mesa Final":""}</div>
+          <div class="sgm">${fmtD(s.date)}${s.time?" às "+s.time:""}${s.location?" · "+s.location:""}<br/>${typeLbl(s.type)}${s.isFinal?" · Mesa Final":""}</div>
         </div>
         <div class="sgr">
           <span class="badge ${badgeCls}">${badgeLbl}</span>
@@ -3906,7 +3963,7 @@ function renderStageDetail(sid){
   const live = isLive(s);
   const badgeCls = s.isFinal?"bfin":s.status==="finished"?"bdone":live?"":"bnext";
   const badgeLbl = s.isFinal?"🏆 Final":s.status==="finished"?"Encerrada":isNext?"Próxima":"Futura";
-  const tipo = s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout";
+  const tipo = typeLbl(s.type);
 
   return `<div class="sec">
     <!-- Back button -->
@@ -3956,6 +4013,10 @@ function renderStageDetail(sid){
       ${s.timechip?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
         <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">⏳ Time Chip</span>
         <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.timechip}</span>
+      </div>`:""}
+      ${s.type==="knockout"?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #1c1c1c">
+        <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">🥊 Bounty (KO)</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${fmtBRL(Number(s.finance&&s.finance.koValue)||DEFAULT_KO_VALUE)} por KO · ${Number(s.finance&&s.finance.koPer)||DEFAULT_KO_PER_ENTRY} por entrada</span>
       </div>`:""}
     </div>`:""}
 
@@ -4122,7 +4183,7 @@ function renderStageDetail(sid){
 
         <!-- Podium -->
         <div id="podium-export" style="background:linear-gradient(180deg,#1a1a1a 0%,var(--surface) 100%);padding-bottom:0">
-          <div style="text-align:center;padding:16px 0 0;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;letter-spacing:3px;color:var(--muted);text-transform:uppercase">${s.name} · ${s.type==="nlholdem"?"NL Hold'em":"Knockout"} · ${fmtD(s.date)}</div>
+          <div style="text-align:center;padding:16px 0 0;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;letter-spacing:3px;color:var(--muted);text-transform:uppercase">${s.name} · ${s.type==="knockout"?"PKO":"NL Hold'em"} · ${fmtD(s.date)}</div>
           <div class="podium-wrap">
             ${podiumSlot(podiumOrder[0],"p2")}
             ${podiumSlot(podiumOrder[1],"p1")}
@@ -4325,12 +4386,12 @@ function showProfile(uid, filter){
       <div class="tabs" style="margin-bottom:12px">
         <button class="tb${PROFILE_FILTER==="geral"?" on":""}" data-pfilter="geral" data-uid="${uid}">Geral</button>
         <button class="tb${PROFILE_FILTER==="nlholdem"?" on":""}" data-pfilter="nlholdem" data-uid="${uid}">🃏 NLH</button>
-        <button class="tb${PROFILE_FILTER==="knockout"?" on":""}" data-pfilter="knockout" data-uid="${uid}">🥊 KO</button>
+        <button class="tb${PROFILE_FILTER==="knockout"?" on":""}" data-pfilter="knockout" data-uid="${uid}">🥊 PKO</button>
       </div>
 
       <!-- History list -->
       ${hist.length?`
-      <div class="lbl" style="margin-bottom:8px">Histórico ${PROFILE_FILTER==="geral"?"":PROFILE_FILTER==="nlholdem"?"NL Hold'em":"Knockout"} (${hist.length})</div>
+      <div class="lbl" style="margin-bottom:8px">Histórico ${PROFILE_FILTER==="geral"?"":PROFILE_FILTER==="nlholdem"?"NL Hold'em":"PKO"} (${hist.length})</div>
       ${hist.map(st=>{
         const r=(st.results||[]).find(r=>r.playerId===uid);
         const badge = st.isFinal?"🏆":st.type==="nlholdem"?"🃏":"🥊";
@@ -4348,7 +4409,7 @@ function showProfile(uid, filter){
             <div style="font-size:11px;color:var(--muted)">${r.points} pts</div>
           </div>
         </div>`;}).join("")}
-      `:`<div style="color:var(--muted);font-size:13px;padding:12px 0">Nenhuma etapa ${PROFILE_FILTER==="geral"?"":PROFILE_FILTER==="nlholdem"?"NL Hold'em":"Knockout"} encontrada.</div>`}
+      `:`<div style="color:var(--muted);font-size:13px;padding:12px 0">Nenhuma etapa ${PROFILE_FILTER==="geral"?"":PROFILE_FILTER==="nlholdem"?"NL Hold'em":"PKO"} encontrada.</div>`}
 
       <div class="mt16"><button class="btn bo fw" id="close-profile">Fechar</button></div>
     </div>
@@ -4377,30 +4438,28 @@ function openEditRulesModal(){
   box.addEventListener("click",e=>e.stopPropagation());
   ov.addEventListener("click",e=>{if(e.target===ov) wrap.innerHTML="";});
   ov.appendChild(box);
-  function field(id,lbl,val,ph){return `<div class="fr"><label class="lbl">${lbl}</label><input class="inp" id="${id}" value="${val||""}" placeholder="${ph}"/></div>`;}
+  const kd = stKoDefaults();
   box.innerHTML=`
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">✏️ Editar Regras Padrão</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Valores usados como padrão ao criar novas etapas.</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Valores usados como padrão ao criar novas etapas. Só números: o texto das regras é gerado automaticamente.</div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">🃏 NL Hold'em</div>
-    ${field("er-nl-bi","Buy-in",DEFAULT_RULES.nlholdem.buyin,"Ex: R$ 150 (20k)")}
-    ${field("er-nl-rb","Rebuy",DEFAULT_RULES.nlholdem.rebuy,"Ex: R$ 100 (20k) / R$ 180 (40k)")}
-    ${field("er-nl-ao","Add-on",DEFAULT_RULES.nlholdem.addon,"Ex: R$ 150 (40k)")}
-    ${field("er-nl-tc","Time Chip",DEFAULT_RULES.nlholdem.timechip,"Ex: 5k início 1º nível")}
+    ${stFields("er-nl", textToStruct(DEFAULT_RULES.nlholdem), "nlholdem", kd)}
     <div style="height:1px;background:var(--border);margin:10px 0 14px"></div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">🥊 Knockout</div>
-    ${field("er-ko-bi","Buy-in",DEFAULT_RULES.knockout.buyin,"Ex: R$ 200 (20k + 1 KO)")}
-    ${field("er-ko-rb","Rebuy",DEFAULT_RULES.knockout.rebuy,"Ex: R$ 200 (20k+1KO) / R$ 300 (40k+1KO)")}
-    ${field("er-ko-ao","Add-on",DEFAULT_RULES.knockout.addon,"Ex: R$ 200 (40k)")}
-    ${field("er-ko-tc","Time Chip",DEFAULT_RULES.knockout.timechip,"Ex: —")}
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:var(--yellow);text-transform:uppercase;margin-bottom:10px">🥊 Progressive Knockout (PKO)</div>
+    ${stFields("er-ko", textToStruct(DEFAULT_RULES.knockout), "knockout", kd)}
     <div class="row g8" style="margin-top:14px">
       <button class="btn by fw" id="er-save">✓ Salvar</button>
       <button class="btn bo" id="er-cancel">Cancelar</button>
     </div>`;
+  stWire("er-nl", ()=>"nlholdem"); stWire("er-ko", ()=>"knockout");
   box.querySelector("#er-cancel").addEventListener("click",()=>{ wrap.innerHTML=""; });
   box.querySelector("#er-save").addEventListener("click",()=>{
-    DEFAULT_RULES.nlholdem={buyin:document.getElementById("er-nl-bi").value.trim(),rebuy:document.getElementById("er-nl-rb").value.trim(),addon:document.getElementById("er-nl-ao").value.trim(),timechip:document.getElementById("er-nl-tc").value.trim()};
-    DEFAULT_RULES.knockout={buyin:document.getElementById("er-ko-bi").value.trim(),rebuy:document.getElementById("er-ko-rb").value.trim(),addon:document.getElementById("er-ko-ao").value.trim(),timechip:document.getElementById("er-ko-tc").value.trim()};
-    saveRules(); // fire and forget - rules are non-critical
+    const nl=stRead("er-nl"), ko=stRead("er-ko");
+    const err = structValidate(nl.st,"nlholdem",null) || structValidate(ko.st,"knockout",ko.ko);
+    if(err){ showToast((structValidate(nl.st,"nlholdem",null)?"NL Hold'em: ":"PKO: ")+err,"red"); return; }
+    DEFAULT_RULES.nlholdem = structToText(nl.st,"nlholdem");
+    DEFAULT_RULES.knockout = {...structToText(ko.st,"knockout"), koValue:ko.ko.value, koPer:ko.ko.per};
+    saveRules();
     wrap.innerHTML="";
     render();
   });
@@ -4417,8 +4476,8 @@ function renderRules(){
     <div style="margin-top:12px;font-size:13px;color:var(--muted);line-height:1.7">O ranking final é a soma das melhores etapas. A pior performance é descartada quando o jogador tiver mais de 4 participações.</div>
   </div>`;
   const koR=`<div class="card cy">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:var(--yellow);margin-bottom:10px">PPP KO — Knockout</div>
-    ${[["Etapas","12 etapas na temporada"],["Buy-in",ko.buyin||"—"],["Rebuy",ko.rebuy||"—"],["Add-on",ko.addon||"—"],["Time Chip",ko.timechip||"—"]].map(([k,v])=>`
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:var(--yellow);margin-bottom:10px">PPP PKO — Progressive Knockout</div>
+    ${[["Etapas","12 etapas na temporada"],["Buy-in",ko.buyin||"—"],["Rebuy",ko.rebuy||"—"],["Add-on",ko.addon||"—"],["Time Chip",ko.timechip||"—"],["Bounty (KO)",`R$ ${stFmtMoney(Number(ko.koValue)||DEFAULT_KO_VALUE)} por KO · ${stFmtMoney(Number(ko.koPer)||DEFAULT_KO_PER_ENTRY)} por entrada`]].map(([k,v])=>`
     <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e1e1e;font-size:14px;gap:10px">
       <span style="color:var(--muted);flex-shrink:0">${k}</span><span style="color:#fff;font-weight:600;text-align:right">${v}</span>
     </div>`).join("")}
@@ -4443,7 +4502,7 @@ function renderRules(){
   </div><div class="dv"></div>
   <div class="tabs">
     <button class="tb${RULES_TAB==="nlholdem"?" on":""}" data-rtab2="nlholdem">🃏 NL Ranking</button>
-    <button class="tb${RULES_TAB==="knockout"?" on":""}" data-rtab2="knockout">🥊 PPP KO</button>
+    <button class="tb${RULES_TAB==="knockout"?" on":""}" data-rtab2="knockout">🥊 PPP PKO</button>
   </div>
   <div class="tabs">
     <button class="tb${RULES_VIEW==="rules"?" on":""}" data-rview="rules">Regras</button>
@@ -4501,7 +4560,7 @@ function renderAdminStages(){
             ${s.name}${s.isFinal?" 🏆":""}
           </div>
           <div style="font-size:12px;color:var(--muted);margin-top:3px">
-            ${fmtD(s.date)}${s.time?" às "+s.time:""} · ${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}${s.location?" · "+s.location:""}
+            ${fmtD(s.date)}${s.time?" às "+s.time:""} · ${typeLbl(s.type)}${s.location?" · "+s.location:""}
           </div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">
             ${(s.inscriptions||[]).length} inscrito${(s.inscriptions||[]).length!==1?"s":""}
@@ -5440,7 +5499,7 @@ function renderAdminStageDetail(s){
             ${s.location?" · 🏠 "+s.location:""}
           </div>
           <div style="font-size:13px;color:var(--muted);margin-top:2px">
-            ${s.type==="nlholdem"?"🃏 NL Hold'em":"🥊 Knockout"}
+            ${typeLbl(s.type)}
             ${s.buyin?" · Buy-in: "+s.buyin:""}
           </div>
         </div>
@@ -5533,7 +5592,7 @@ function renderAdminResults(){
   return `${up.length===0?'<div class="empty">Nenhuma etapa pendente.</div>':''}
   ${up.map(s=>`<div class="card cy">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.name}</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:10px">${s.date} · ${s.type==="nlholdem"?"NL Hold'em":"Knockout"} · ${(s.inscriptions||[]).length} inscritos</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:10px">${s.date} · ${typeName(s.type)} · ${(s.inscriptions||[]).length} inscritos</div>
     <button class="btn by sm" data-launch="${s.id}">▶ Lançar Resultado</button>
   </div>`).join("")}
   ${dn.length?`<div class="lbl" style="margin-top:14px;margin-bottom:8px">Encerradas</div>
@@ -5938,7 +5997,7 @@ function renderFTPrize(){
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:600;color:#fff">${s.name}</div>
-          <div style="font-size:11px;color:var(--muted)">${fmtD(s.date)} · ${isNLH?"NL Hold'em":"Knockout"}</div>
+          <div style="font-size:11px;color:var(--muted)">${fmtD(s.date)} · ${isNLH?"NL Hold'em":"PKO"}</div>
           ${isOverridden?`<div style="font-size:10px;color:var(--yellow);margin-top:2px">✏️ Valor editado (auto: ${fmtBRL(auto)})</div>`:""}
         </div>
         ${IS_ADMIN?`
@@ -6256,10 +6315,62 @@ async function runFixDupes(){
   toolsLog(`✅ ${before} → ${cleaned.length} jogadores (${before-cleaned.length} removidos)`, "ok");
 }
 
+// ── CAMPOS DE ESTRUTURA (UI) ── usados na etapa e nas regras padrão; só aceitam números
+const stKoDefaults = () => ({ value: Number((DEFAULT_RULES.knockout||{}).koValue)||DEFAULT_KO_VALUE, per: Number((DEFAULT_RULES.knockout||{}).koPer)||DEFAULT_KO_PER_ENTRY });
+function stInput(id, val, pre, suf){
+  const v = (Number(val)||0) > 0 ? val : "";
+  return `<div class="stf-w">${pre?`<span class="stf-pre">${pre}</span>`:""}<input class="inp${pre?" stf-hp":""}${suf?" stf-hs":""}" id="${id}" type="number" inputmode="decimal" step="any" min="0" value="${v}"/>${suf?`<span class="stf-suf">${suf}</span>`:""}</div>`;
+}
+function stFields(p, st, type, ko){
+  const row = (key,lbl,o,opt) => `<div class="stf-row"><div class="stf-l">${lbl}${opt?` <i>${opt}</i>`:""}</div>${stInput(`${p}-${key}-v`,o.v,"R$","")}${stInput(`${p}-${key}-k`,o.k,"","mil fichas")}</div>`;
+  return `<div class="stf" id="${p}-box">
+    ${row("bi","Buy-in",st.buyin)}
+    ${row("rs","Rebuy simples (RS)",st.rs,"deixe vazio se não houver")}
+    ${row("rd","Rebuy duplo (RD)",st.rd,"deixe vazio se não houver")}
+    ${row("ao","Add-on",st.addon,"deixe vazio se não houver")}
+    <div class="stf-row"><div class="stf-l">Time chip</div>
+      <select class="inp" id="${p}-tc-on" style="grid-column:1/-1"><option value="0"${st.tc.on?"":" selected"}>Sem time chip</option><option value="1"${st.tc.on?" selected":""}>Com time chip</option></select></div>
+    <div class="stf-row" id="${p}-tc-row"${st.tc.on?"":' style="display:none"'}><div class="stf-l">Time chip: fichas e nível em que entra</div>${stInput(`${p}-tc-k`,st.tc.k,"","mil fichas")}${stInput(`${p}-tc-l`,st.tc.lvl,"","º nível")}</div>
+    <div class="stf-row" id="${p}-ko-row"${stTypeIsPKO(type)?"":' style="display:none"'}><div class="stf-l">Bounty (KO)</div>${stInput(`${p}-ko-v`,ko.value,"R$","por KO")}${stInput(`${p}-ko-n`,ko.per,"","KOs/entrada")}</div>
+    <div class="stf-prev" id="${p}-prev"></div>
+  </div>`;
+}
+function stRead(p){
+  const g = id => { const e=document.getElementById(p+"-"+id); const v=e?parseFloat(String(e.value).replace(",",".")):NaN; return Number.isFinite(v)?v:0; };
+  const on = (document.getElementById(p+"-tc-on")||{}).value==="1";
+  return { st:{ buyin:{v:g("bi-v"),k:g("bi-k")}, rs:{v:g("rs-v"),k:g("rs-k")}, rd:{v:g("rd-v"),k:g("rd-k")}, addon:{v:g("ao-v"),k:g("ao-k")}, tc:{on, k:on?g("tc-k"):0, lvl:on?g("tc-l"):1} }, ko:{ value:g("ko-v"), per:g("ko-n") } };
+}
+function stSet(p, st, ko){
+  const set = (id,v) => { const e=document.getElementById(p+"-"+id); if(e) e.value = (Number(v)||0)>0 ? v : ""; };
+  set("bi-v",st.buyin.v); set("bi-k",st.buyin.k); set("rs-v",st.rs.v); set("rs-k",st.rs.k); set("rd-v",st.rd.v); set("rd-k",st.rd.k);
+  set("ao-v",st.addon.v); set("ao-k",st.addon.k); set("tc-k",st.tc.k); set("tc-l",st.tc.lvl);
+  const on=document.getElementById(p+"-tc-on"); if(on) on.value = st.tc.on?"1":"0";
+  if(ko){ set("ko-v",ko.value); set("ko-n",ko.per); }
+}
+// Mostra, ao vivo, o texto que os jogadores vão ver (e o erro, se houver)
+function stRefresh(p, type){
+  const r = stRead(p), tcr = document.getElementById(p+"-tc-row"), kor = document.getElementById(p+"-ko-row"), pv = document.getElementById(p+"-prev");
+  if(tcr) tcr.style.display = r.st.tc.on ? "" : "none";
+  if(kor) kor.style.display = stTypeIsPKO(type) ? "" : "none";
+  if(!pv) return;
+  const err = structValidate(r.st, type, r.ko), t = structToText(r.st, type);
+  pv.innerHTML = err ? `<span style="color:var(--red)">⚠ ${err}</span>` :
+    `<div class="stf-pt">Como os jogadores vão ver</div><div>Buy-in: <b>${t.buyin}</b></div><div>Rebuy: <b>${t.rebuy}</b></div><div>Add-on: <b>${t.addon}</b></div><div>Time chip: <b>${t.timechip}</b></div>${stTypeIsPKO(type)?`<div>Bounty: <b>R$ ${stFmtMoney(r.ko.value)} por KO · ${stFmtMoney(r.ko.per)} por entrada</b></div>`:""}`;
+}
+function stWire(p, getType){
+  const box = document.getElementById(p+"-box"); if(!box) return;
+  const go = () => stRefresh(p, getType());
+  box.addEventListener("input", go); box.addEventListener("change", go); go();
+}
+
 // ── STAGE MODAL ───────────────────────────────────────────────────────────────
 function openStageModal(stage=null){
-  const defR=DEFAULT_RULES["nlholdem"]||{};
-  const f = stage||{name:"",date:"",time:"",location:"",address:"",type:"nlholdem",isFinal:false,buyin:defR.buyin||"",rebuy:defR.rebuy||"",addon:defR.addon||"",timechip:defR.timechip||""};
+  const defType = "nlholdem";
+  const f = stage||{name:"",date:"",time:"",location:"",address:"",type:defType,isFinal:false};
+  const st0 = stage ? textToStruct(stage) : textToStruct(DEFAULT_RULES[defType]);
+  const fin0 = stage && stage.finance ? stage.finance : null;
+  const kd = stKoDefaults();
+  const ko0 = { value: Number(fin0&&fin0.koValue)||kd.value, per: Number(fin0&&fin0.koPer)||kd.per };
   document.getElementById("admin-modal").innerHTML=`
   <div class="ov" id="sm-ov">
     <div class="modal" style="max-height:90vh;overflow-y:auto">
@@ -6274,17 +6385,12 @@ function openStageModal(stage=null){
       <div class="fr"><label class="lbl">Formato</label>
         <select class="inp" id="sf-t">
           <option value="nlholdem"${f.type==="nlholdem"?" selected":""}>🃏 NL Hold'em</option>
-          <option value="knockout"${f.type==="knockout"?" selected":""}>🥊 Knockout</option>
+          <option value="knockout"${f.type==="knockout"?" selected":""}>🥊 Progressive Knockout (PKO)</option>
         </select>
       </div>
       <div class="sep"></div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Regras do Torneio</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div><label class="lbl">Buy-in</label><input class="inp" id="sf-bi" value="${f.buyin||""}" placeholder="Ex: R$ 150 (20k)"/></div>
-        <div><label class="lbl">Time Chip</label><input class="inp" id="sf-tc" value="${f.timechip||""}" placeholder="Ex: 5k início 1º nível"/></div>
-      </div>
-      <div class="fr"><label class="lbl">Rebuy</label><input class="inp" id="sf-rb" value="${f.rebuy||""}" placeholder="Ex: R$ 100 (20k) / R$ 180 (40k)"/></div>
-      <div class="fr"><label class="lbl">Add-on</label><input class="inp" id="sf-ao" value="${f.addon||""}" placeholder="Ex: R$ 150 (40k)"/></div>
+      ${stFields("sf", st0, f.type, ko0)}
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;margin-bottom:14px">
         <input type="checkbox" id="sf-f"${f.isFinal?" checked":""} style="width:16px;height:16px;accent-color:var(--yellow)"/>
         <label for="sf-f" style="color:var(--text);font-size:14px;cursor:pointer">🏆 É uma Mesa Final?</label>
@@ -6295,17 +6401,14 @@ function openStageModal(stage=null){
       </div>
     </div>
   </div>`;
-  // Auto-fill rules when format changes
+  const getType = () => document.getElementById("sf-t").value;
+  stWire("sf", getType);
+  // Ao trocar o formato, carrega os valores padrão dele, a menos que os campos já tenham sido personalizados
   document.getElementById("sf-t").addEventListener("change",function(){
-    const t=this.value, r=DEFAULT_RULES[t]||{};
-    const map={bi:"buyin",rb:"rebuy",ao:"addon",tc:"timechip"};
-    Object.entries(map).forEach(([k,field])=>{
-      const el=document.getElementById("sf-"+k);
-      const cur=(el.value||"").trim();
-      const prevNL=(DEFAULT_RULES.nlholdem[field]||"");
-      const prevKO=(DEFAULT_RULES.knockout[field]||"");
-      if(!cur||cur===prevNL||cur===prevKO) el.value=r[field]||"";
-    });
+    const t=this.value, prev=t==="nlholdem"?"knockout":"nlholdem";
+    const cur = JSON.stringify(stRead("sf").st), isDef = ty => cur===JSON.stringify(textToStruct(DEFAULT_RULES[ty]));
+    if(isDef(prev) || isDef(t)) stSet("sf", textToStruct(DEFAULT_RULES[t]), stKoDefaults());
+    stRefresh("sf", t);
   });
   document.getElementById("sm-ov").addEventListener("click",e=>{if(e.target===document.getElementById("sm-ov"))closeAdminModal();});
   document.getElementById("cancel-stage").addEventListener("click",closeAdminModal);
@@ -6313,21 +6416,23 @@ function openStageModal(stage=null){
     const name=document.getElementById("sf-n").value.trim();
     const date=document.getElementById("sf-d").value;
     if(!name||!date)return;
+    const type=getType(), {st,ko}=stRead("sf");
+    const err=structValidate(st,type,ko);
+    if(err){ showToast(err,"red"); return; }
+    const txt=structToText(st,type);
     const data={
       name,date,
       time:document.getElementById("sf-h").value,
       location:document.getElementById("sf-l").value.trim(),
       address:document.getElementById("sf-a").value.trim(),
-      type:document.getElementById("sf-t").value,
+      type,
       isFinal:document.getElementById("sf-f").checked,
-      buyin:document.getElementById("sf-bi").value.trim(),
-      rebuy:document.getElementById("sf-rb").value.trim(),
-      addon:document.getElementById("sf-ao").value.trim(),
-      timechip:document.getElementById("sf-tc").value.trim(),
+      buyin:txt.buyin, rebuy:txt.rebuy, addon:txt.addon, timechip:txt.timechip,
       season:ACTIVE_SEASON
     };
-    if(stage){ DB.stages=DB.stages.map(s=>s.id===stage.id?{...s,...data}:s); }
-    else { DB.stages=[...DB.stages,{id:mkId(),...data,status:"upcoming",inscriptions:[],results:[]}].sort((a,b)=>a.date.localeCompare(b.date)); }
+    const applyKO = s => { if(type==="knockout"){ const fin=getFinanceData(s); fin.koValue=ko.value; fin.koPer=ko.per; } return s; };
+    if(stage){ DB.stages=DB.stages.map(s=>s.id===stage.id?applyKO({...s,...data}):s); }
+    else { DB.stages=[...DB.stages,applyKO({id:mkId(),...data,status:"upcoming",inscriptions:[],results:[]})].sort((a,b)=>a.date.localeCompare(b.date)); }
     save(); closeAdminModal(); render();
   });
 }
