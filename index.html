@@ -1026,19 +1026,30 @@ const pcls = i => i===0?"rp1":i===1?"rp2":i===2?"rp3":"rpx";
 
 // ── BUY-IN MANAGEMENT HELPERS ────────────────────────────────────────────────
 // Extract first R$ amount from strings like "R$ 150 (20k fichas)"
+// Número no formato brasileiro: "1.500,50" → 1500.5 · "1.500" → 1500 · "12,5" → 12.5 · "100" → 100
+const parsePtNum = (s) => {
+  s = String(s||"").trim();
+  if(!s) return 0;
+  let n;
+  if(s.includes(",")) n = s.replace(/\./g,"").replace(",",".");          // vírgula = decimal; pontos = milhar
+  else if(/^\d{1,3}(\.\d{3})+$/.test(s)) n = s.replace(/\./g,"");      // só pontos de milhar
+  else n = s;
+  const v = parseFloat(n);
+  return Number.isFinite(v) ? v : 0;
+};
 const parseBRL = str => {
   if(!str) return 0;
   const m = String(str).match(/R\$\s*([\d.,]+)/);
-  return m ? parseFloat(m[1].replace(",",".")) : 0;
+  return m ? parsePtNum(m[1]) : 0;
 };
 
 // Parse chip count from strings like "R$ 150 (20k fichas)" → 20000
 const parseChips = str => {
   if(!str) return 0;
   const m = String(str).match(/\((\d+(?:[.,]\d+)?)k/i);
-  if(m) return parseFloat(m[1].replace(",","."))*1000;
-  const m2 = String(str).match(/(\d+(?:[.,]\d+)?)\s*fichas/i);
-  if(m2) return parseFloat(m2[1].replace(",","."));
+  if(m) return parsePtNum(m[1])*1000;
+  const m2 = String(str).match(/(\d+(?:[.,]\d+)*)\s*fichas/i);
+  if(m2) return parsePtNum(m2[1]);
   return 0;
 };
 
@@ -1258,6 +1269,11 @@ function getBuyinValues(s){
   const rd = parseBRL(rebuyParts[1]||rebuyParts[0]);
   return {buyin, rs, rd, addon};
 }
+// Total pago por um jogador no torneio (buy-in + rebuys + add-on). Números sempre válidos (nunca NaN).
+function entradaJogador(vals, rec){
+  const rs = Number(rec && rec.rs)||0, rd = Number(rec && rec.rd)||0;
+  return (Number(vals.buyin)||0) + rs*(Number(vals.rs)||0) + rd*(Number(vals.rd)||0) + ((rec && rec.addon) ? (Number(vals.addon)||0) : 0);
+}
 // Get or init a player's buy-in record for a stage
 function getBuyinRecord(s, uid){
   const records = s.buyinData || [];
@@ -1302,7 +1318,7 @@ function calcArrecadado(s){
   const ins = s.inscriptions||[];
   return ins.reduce((sum,uid)=>{
     const rec = getBuyinRecord(s, uid);
-    return sum + vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+    return sum + entradaJogador(vals, rec);
   }, 0);
 }
 
@@ -1325,9 +1341,9 @@ function calcPotFinal(s){
 function calcTaxaFT(s){
   const potFinal = calcPotFinal(s);
   if(s.type==="knockout"){
-    return (potFinal - calcKOFromEntries(s)) * 0.15;
+    return Math.max(0, potFinal - calcKOFromEntries(s)) * 0.15;
   }
-  return potFinal * 0.15;
+  return Math.max(0, potFinal) * 0.15;
 }
 
 // FT Prize pool contribution per stage.
@@ -1429,13 +1445,13 @@ function calcPremiacao(s){
   const potLiquido = calcPotLiquido(s);
   // caixinhaTorneio is derived from per-position caixinhas (or the manual field in auto mode)
   const caixinhaTorneio = calcCaixinhaTorneioTotal(s);
-  const totalAPremiar = potLiquido - caixinhaTorneio;
+  const totalAPremiar = Math.max(0, potLiquido - caixinhaTorneio);   // nunca prêmio negativo
   const numPlayers = (s.inscriptions||[]).length;
   const autoPcts = getITMPercents(numPlayers, s.type);
 
   if(fin.prizeOverrides && fin.prizeOverrides.length){
     return fin.prizeOverrides.map((o,i)=>{
-      const value = o.value !== undefined ? o.value : totalAPremiar * ((o.pct||0)/100);
+      const value = (o.value !== undefined && o.value !== null && o.value !== "") ? (Number(o.value)||0) : totalAPremiar * ((Number(o.pct)||0)/100);
       const caixinha = Number(o.caixinha)||0;
       return {
         position: i+1,
@@ -1448,7 +1464,7 @@ function calcPremiacao(s){
   return autoPcts.map((pct,i)=>({
     position: i+1,
     pct,
-    value: totalAPremiar * (pct/100),
+    value: Math.round(totalAPremiar * (pct/100) * 100) / 100,   // centavos
     caixinha: 0
   }));
 }
@@ -1908,12 +1924,12 @@ function calcFinancialRanking(){
     // Torneio entries and prizes
     ins.forEach(uid=>{
       const rec = getBuyinRecord(s, uid);
-      const entrada = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+      const entrada = entradaJogador(vals, rec);
       const result = results.find(r=>r.playerId===uid);
       const prize = result ? (premios.find(p=>p.position===result.position)?.value||0) : 0;
       const row = ensurePlayer(uid);
       row.entradas += entrada;
-      row.premios += prize;
+      row.premios += prize + (s.type==="knockout" ? calcKOEarnings(s, uid) : 0);   // PKO: prêmio + bounties (igual ao Resumo)
     });
 
     // Cash game entries and cashouts
@@ -3138,7 +3154,7 @@ function renderStageDetail(sid){
         if(!live || !iAmIn || !CURRENT_USER_UID) return "";
         const vals = getBuyinValues(s);
         const rec  = getBuyinRecord(s, CURRENT_USER_UID);
-        const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+        const total = entradaJogador(vals, rec);
         const rows = [
           {label:"Buy-in", qty:"", value: vals.buyin, show: true},
           {label:"Rebuy Simples", qty:`× ${rec.rs}`, value: rec.rs*vals.rs, show: rec.rs>0},
@@ -3936,7 +3952,7 @@ function renderBuyinEntradas(s){
   const playerRows = ins.map((uid,i)=>{
     const pl = getP(uid)||{name:uid,nickname:"?"};
     const rec = getBuyinRecord(s, uid);
-    const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+    const total = entradaJogador(vals, rec);
     return `<div data-bi-player="${uid}" style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer">
       <div style="color:var(--muted);font-size:12px;width:22px;text-align:center;flex-shrink:0">${i+1}</div>
       ${AV(uid)}
@@ -4271,7 +4287,7 @@ function renderBuyinGeral(s){
     const pl = getP(uid)||{name:uid,nickname:"?"};
     const isCashOnly = !ins.includes(uid);
     const rec = isCashOnly ? {rs:0,rd:0,addon:false,paid:false} : getBuyinRecord(s, uid);
-    const totalTorneio = isCashOnly ? 0 : vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+    const totalTorneio = isCashOnly ? 0 : entradaJogador(vals, rec);
     const result = results.find(r=>r.playerId===uid);
     const prize = result ? (premios.find(p=>p.position===result.position)?.value || 0) : 0;
     const koEarnings = isPKO ? calcKOEarnings(s, uid) : 0;
@@ -4347,7 +4363,7 @@ function renderBuyinPlayer(s){
   const uid  = BUYIN_PLAYER;
   const pl   = getP(uid)||{name:uid,nickname:"?"};
   const rec  = getBuyinRecord(s, uid);
-  const total = vals.buyin + rec.rs*vals.rs + rec.rd*vals.rd + (rec.addon?vals.addon:0);
+  const total = entradaJogador(vals, rec);
 
   return `<div class="sec">
     <button id="btn-bi-player-back" class="btn bo mb10" style="font-size:12px">‹ Voltar à lista</button>
@@ -5539,8 +5555,8 @@ function openCashEntryModal(s, uid, onConfirm){
   setTimeout(()=>input?.focus(), 100);
   document.getElementById("cg-entry-cancel").addEventListener("click", closeAdminModal);
   document.getElementById("cg-entry-ok").addEventListener("click",()=>{
-    const value = parseFloat(input.value)||0;
-    if(value<=0){ showToast("Informe um valor maior que zero.","red"); return; }
+    const value = Math.round((parseFloat(input.value)||0)*100)/100;
+    if(!(value>0)){ showToast("Informe um valor maior que zero.","red"); return; }
     // Step 2: big confirmation button
     el.innerHTML = `
     <div class="ov" id="cg-entry-confirm-ov" style="z-index:1200">
@@ -5578,7 +5594,8 @@ function openCashEntryEditModal(s, uid, entryIdx, onConfirm){
   </div>`;
   document.getElementById("cg-edit-cancel").addEventListener("click", closeAdminModal);
   document.getElementById("cg-edit-ok").addEventListener("click",()=>{
-    const value = parseFloat(document.getElementById("cg-edit-value").value)||0;
+    const value = Math.round((parseFloat(document.getElementById("cg-edit-value").value)||0)*100)/100;
+    if(!(value>0)){ showToast("Informe um valor maior que zero.","red"); return; }   // 0/negativo distorceria o saldo
     closeAdminModal();
     onConfirm(value);
   });
@@ -5609,7 +5626,7 @@ function openCashOutModal(s, uid, onConfirm){
   setTimeout(()=>input?.focus(), 100);
   document.getElementById("cg-cashout-cancel").addEventListener("click", closeAdminModal);
   document.getElementById("cg-cashout-ok").addEventListener("click",()=>{
-    const value = parseFloat(input.value);
+    const value = Math.round(parseFloat(input.value)*100)/100;
     if(isNaN(value) || value<0){ showToast("Informe um valor válido.","red"); return; }
     const saldo = value - totalEntries;
     // Double confirmation
@@ -6145,13 +6162,8 @@ function bindEvents(){
   async function saveCashGameData(){
     const s = DB.stages.find(x=>x.id===CASHGAME_MGMT);
     if(s) syncCashGameHistory(s);
-    try{
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        stages: sanitizeStages(DB.stages),
-        players: sanitizePlayers(DB.players),
-        updatedAt: serverTimestamp()
-      });
-    } catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
+    try{ await commitDB(); }
+    catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
   }
 
   document.querySelectorAll("[data-cashgame-mgmt]").forEach(btn=>{
@@ -6782,12 +6794,8 @@ function bindEvents(){
   async function saveBuyinData(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT);
     if(!s) return;
-    try{
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        stages: sanitizeStages(DB.stages),
-        updatedAt: serverTimestamp()
-      });
-    } catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
+    try{ await commitDB(); }
+    catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
   }
 
   // Add-on toggle
@@ -6929,12 +6937,8 @@ function bindEvents(){
 
   // ── CUSTOS TAB EVENTS ───────────────────────────────────────────────────────
   async function saveFinanceData(){
-    try{
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        stages: sanitizeStages(DB.stages),
-        updatedAt: serverTimestamp()
-      });
-    } catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
+    try{ await commitDB(); }
+    catch(e){ showToast("Erro ao salvar: "+e.message,"red"); }
   }
 
   document.getElementById("bi-floor-name")?.addEventListener("change", async function(){
