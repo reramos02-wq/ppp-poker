@@ -3614,10 +3614,10 @@ function statsBuild(stages, players, season, type){
 function statsExtras(stages, players, season){
   const fin = statsOrder(stages, season).filter(s=>s.status==="finished" && (s.results||[]).length>0);
   const m = {};
-  players.forEach(p=>{ m[p.uid] = {uid:p.uid, played:0, wins:0, p2:0, p3:0, ft:0, ko:0}; });
+  players.forEach(p=>{ m[p.uid] = {uid:p.uid, played:0, wins:0, p2:0, p3:0, ft:0, ko:0, pts:0}; });
   fin.forEach(s=>(s.results||[]).forEach(r=>{
-    const o = m[r.playerId] || (m[r.playerId] = {uid:r.playerId, played:0, wins:0, p2:0, p3:0, ft:0, ko:0});
-    o.played++; if(r.position===1) o.wins++; if(r.position===2) o.p2++; if(r.position===3) o.p3++;
+    const o = m[r.playerId] || (m[r.playerId] = {uid:r.playerId, played:0, wins:0, p2:0, p3:0, ft:0, ko:0, pts:0});
+    o.played++; o.pts += getPts(r.position); if(r.position===1) o.wins++; if(r.position===2) o.p2++; if(r.position===3) o.p3++;
     if(r.position<=9) o.ft++; o.ko += Number(r.knockouts)||0;
   }));
   const rows = Object.values(m).filter(o=>o.played>0);
@@ -3810,6 +3810,7 @@ function renderStats(){
   const ft = by("ft").map(o=>({uid:o.uid, v:o.ft, o}));
   const pod = rows.map(o=>({uid:o.uid, v:o.wins*3+o.p2*2+o.p3, seg:[o.wins,o.p2,o.p3], o})).filter(i=>i.o.wins+i.o.p2+i.o.p3>0).sort((a,b)=>b.v-a.v);
   const ko = by("ko").filter(o=>o.ko>0).map(o=>({uid:o.uid, v:o.ko, o}));
+  const efi = rows.map(o=>({uid:o.uid, v:o.pts/o.played, o})).sort((a,b)=>b.v-a.v||b.o.pts-a.o.pts||a.o.played-b.o.played);
   const pres = by("played").map(o=>({uid:o.uid, v:o.played, o}));
   const mv = (m,txt)=> m ? `<div class="stx-row" data-profile="${m.uid}">${AV(m.uid)}<span class="stx-n">${statsNick(m.uid)}</span><span class="stx-val" style="flex:1;text-align:right;color:${m.d>0?"var(--green)":"var(--red)"}">${m.d>0?"▲":"▼"} ${Math.abs(m.d)} posiç${Math.abs(m.d)>1?"ões":"ão"} · E${m.i+1}</span></div>` : `<div style="font-size:13px;color:var(--muted)">${txt}</div>`;
   return `<div class="sec">
@@ -3822,6 +3823,7 @@ function renderStats(){
       <div class="stx-mvl">Maior subida</div>${mv(X.rise,"Ainda sem subidas.")}<div class="stx-mvl">Maior queda</div>${mv(X.fall,"Ainda sem quedas.")}</div>
     ${ko.length?`<div class="stx-card"><div class="stx-h">Knockouts</div><div class="stx-sub">Total na temporada (só estatística, não soma pontos)</div>${statsBars(ko,i=>`${i.o.ko} KO${i.o.ko!==1?"s":""}`,"ko")}</div>`:""}
     <div class="stx-card"><div class="stx-h">Presença</div><div class="stx-sub">Etapas jogadas</div>${statsBars(pres,i=>`${i.o.played} de ${tot} · ${Math.round(i.o.played/Math.max(tot,1)*100)}%`,"pres")}</div>
+    <div class="stx-card"><div class="stx-h">Índice de eficiência</div><div class="stx-sub">Média de pontos por etapa jogada: quem mais pontua com menos participações</div>${statsBars(efi,i=>`${i.v.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})} pts · ${i.o.played} etapa${i.o.played!==1?"s":""}`,"efi")}</div>
   </div>`;
 }
 

@@ -53,3 +53,12 @@ const E = f.statsBuild(ctx.DB.stages, P, '2026', 'geral'); assert.equal(E.doneCo
 const block = h.slice(h.indexOf('// ── STATS (início)'), h.indexOf('function renderRanking()'));
 for (const bad of ['fmtBRL','R$','premia','Premia','buyin','.finance','getFTContribution','calcPot','calcArrec','entradaJogador','saldo']) assert.ok(!block.includes(bad), 'financeiro vazou: '+bad);
 console.log('STATS OK');
+// eficiência: soma de pontos por jogador / etapas jogadas
+{
+  ctx.DB.stages = [{id:'a',name:'A',type:'nlholdem',date:'2026-01-01',status:'finished',results:[{playerId:'u0',position:1},{playerId:'u1',position:2}]},
+                   {id:'b',name:'B',type:'nlholdem',date:'2026-02-01',status:'finished',results:[{playerId:'u1',position:1},{playerId:'u2',position:12}]}];
+  const X2 = f.statsExtras(ctx.DB.stages, P, '2026'); const m = Object.fromEntries(X2.rows.map(o=>[o.uid,o]));
+  assert.equal(m.u0.pts, 25); assert.equal(m.u1.pts, 25+18); assert.equal(m.u1.played, 2); assert.equal(m.u2.pts, 2);
+  assert.equal(m.u1.pts/m.u1.played, 21.5);
+}
+console.log('EFICIENCIA OK');
