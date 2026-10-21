@@ -1,6 +1,12 @@
 // Rodar:  node clock-core.test.mjs
 import assert from 'node:assert/strict';
-import { derive, applyAction, normalizeState, IDLE } from './clock-core.js';
+import { derive as _derive, applyAction as _apply, normalizeState, IDLE, TRANSITION_MS } from './clock-core.js';
+
+// Os testes "clássicos" abaixo medem as regras do relógio SEM a pausa de 2s entre níveis (gapMs 0),
+// para provar que nada mais mudou. A pausa tem testes próprios mais abaixo (gapMs padrão = 2000).
+const NOGAP = { gapMs: 0 };
+const derive = (l, st, n, o = NOGAP) => _derive(l, st, n, o);
+const applyAction = (l, st, a, n, o = NOGAP) => _apply(l, st, a, n, o);
 
 const MIN = 60000;
 const L = (m, extra = {}) => ({ sb: 100, bb: 200, ante: 0, dur: m * 60, isBreak: false, ...extra });
@@ -13,12 +19,12 @@ let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log('  ok  ' + name); };
 // simula o ciclo Firestore: o estado sempre passa por JSON
 const persist = (s) => JSON.parse(JSON.stringify(s));
-const act = (state, action, now, levels = LEVELS) => {
-  const patch = applyAction(levels, state, action, now);
+const act = (state, action, now, levels = LEVELS, opts = NOGAP) => {
+  const patch = applyAction(levels, state, action, now, opts);
   return patch ? persist(patch) : state;
 };
 const secs = (v) => Math.ceil(v.remainingMs / 1000);
-const view = (state, now, levels = LEVELS) => derive(levels, state, now);
+const view = (state, now, levels = LEVELS, opts = NOGAP) => derive(levels, state, now, opts);
 
 test('parado: mostra o nível 1 com tempo cheio', () => {
   const v = view(IDLE, T0);
@@ -235,17 +241,107 @@ test('primeiro nível sendo break: start já conta (não há break "à frente")'
   assert.equal(secs(derive(LV, s, T0 + MIN)), 240);
 });
 
+
+// ───────────────────────── PAUSA DE 2s ENTRE NÍVEIS ─────────────────────────
+const G = {}; // opts vazio → usa TRANSITION_MS (o valor real do app)
+const gview = (state, now, levels = LEVELS) => _derive(levels, state, now, G);
+const gact = (state, action, now, levels = LEVELS) => { const p = _apply(levels, state, action, now, G); return p ? persist(p) : state; };
+
+test('pausa: TRANSITION_MS é 2000 e é o padrão do app', () => {
+  assert.equal(TRANSITION_MS, 2000);
+});
+
+test('pausa: ao zerar, segura 00:00 por 2s no mesmo nível e só então muda', () => {
+  const s = gact(IDLE, { type: 'start' }, T0);
+  let v = gview(s, T0 + 15 * MIN - 1);
+  assert.equal(v.idx, 0); assert.equal(v.holding, false); assert.equal(secs(v), 1);
+  v = gview(s, T0 + 15 * MIN);                       // zerou
+  assert.equal(v.idx, 0); assert.equal(v.holding, true); assert.equal(v.remainingMs, 0); assert.equal(v.running, true);
+  v = gview(s, T0 + 15 * MIN + 1999);                // ainda segurando
+  assert.equal(v.idx, 0); assert.equal(v.holding, true); assert.equal(v.remainingMs, 0);
+  v = gview(s, T0 + 15 * MIN + 2000);                // nível 2 começa com tempo cheio
+  assert.equal(v.idx, 1); assert.equal(v.holding, false); assert.equal(secs(v), 900); assert.equal(v.running, true);
+});
+
+test('pausa: cada nível continua tendo exatamente `dur` de jogo (a pausa só soma 2s por troca)', () => {
+  const s = gact(IDLE, { type: 'start' }, T0);
+  // nível 2 começa em 15min+2s e acaba (zera) em 30min+2s
+  assert.equal(gview(s, T0 + 15 * MIN + 2000).idx, 1);
+  assert.equal(secs(gview(s, T0 + 30 * MIN + 1999)), 1);
+  assert.equal(gview(s, T0 + 30 * MIN + 2000).holding, true);
+  // o break (nível 3) começa em 30min + 4s: antes disso ainda é o nível 2 segurando 00:00
+  assert.equal(gview(s, T0 + 30 * MIN + 3999).idx, 1);
+  const atBreak = gview(s, T0 + 30 * MIN + 4000);
+  assert.equal(atBreak.idx, 2); assert.equal(atBreak.waiting, true); assert.equal(atBreak.running, false); assert.equal(secs(atBreak), 600);
+});
+
+test('pausa + break: libera o break, conta 10min, segura 2s no 00:00 e o jogo segue', () => {
+  let s = gact(IDLE, { type: 'start' }, T0);
+  const arrive = T0 + 30 * MIN + 4000;
+  s = gact(s, { type: 'start' }, arrive + 5000);     // admin libera 5s depois
+  assert.equal(secs(gview(s, arrive + 5000)), 600);
+  assert.equal(secs(gview(s, arrive + 5000 + 10 * MIN - 1)), 1);
+  const z = gview(s, arrive + 5000 + 10 * MIN);
+  assert.equal(z.idx, 2); assert.equal(z.holding, true); assert.equal(z.remainingMs, 0);
+  const n = gview(s, arrive + 5000 + 10 * MIN + 2000);
+  assert.equal(n.idx, 3); assert.equal(secs(n), 900); assert.equal(n.running, true);
+});
+
+test('pausa: último nível zera e o torneio termina na hora (sem 2s extras)', () => {
+  const s = { status: 'paused', elapsedMs: 0, startedAtMs: null };
+  const lv = [L(1), L(1)];
+  const run = gact(s, { type: 'start' }, T0, lv);                 // nível1: 0–60s, pausa 60–62s, nível2: 62–122s
+  assert.equal(gview(run, T0 + 62_000, lv).idx, 1);
+  const end = gview(run, T0 + 122_000, lv);
+  assert.equal(end.finished, true); assert.equal(end.holding, false); assert.equal(end.running, false); assert.equal(secs(end), 0);
+  assert.equal(gview(run, T0 + 121_999, lv).finished, false);
+});
+
+test('pausa: pausar e retomar durante os 2s segura corretamente (sem pular nem repetir)', () => {
+  let s = gact(IDLE, { type: 'start' }, T0);
+  s = gact(s, { type: 'pause' }, T0 + 15 * MIN + 500);            // 0,5s dentro da pausa
+  let v = gview(s, T0 + 99 * MIN);
+  assert.equal(v.idx, 0); assert.equal(v.holding, true); assert.equal(v.running, false); assert.equal(v.remainingMs, 0);
+  s = gact(s, { type: 'start' }, T0 + 100 * MIN);
+  assert.equal(gview(s, T0 + 100 * MIN + 1499).idx, 0);           // faltavam 1,5s
+  assert.equal(gview(s, T0 + 100 * MIN + 1500).idx, 1);
+});
+
+test('pausa: next/prev/setRemaining continuam corretos com a pausa ligada', () => {
+  let s = gact(IDLE, { type: 'start' }, T0);
+  s = gact(s, { type: 'next' }, T0 + 3 * MIN);                    // início do nível 2
+  assert.equal(gview(s, T0 + 3 * MIN).idx, 1); assert.equal(secs(gview(s, T0 + 3 * MIN)), 900);
+  s = gact(s, { type: 'setRemaining', remainingMs: 90_000 }, T0 + 4 * MIN);
+  assert.equal(secs(gview(s, T0 + 4 * MIN)), 90);
+  assert.equal(gview(s, T0 + 4 * MIN + 90_000).holding, true);    // zerou → segura
+  s = gact(s, { type: 'prev' }, T0 + 4 * MIN + 90_500);           // voltar durante a pausa → início do nível 1
+  assert.equal(gview(s, T0 + 4 * MIN + 90_500).idx, 0); assert.equal(secs(gview(s, T0 + 4 * MIN + 90_500)), 900);
+  // setRemaining(0) leva direto a "zerou" → segura 2s
+  let z = gact(IDLE, { type: 'start' }, T0);
+  z = gact(z, { type: 'setRemaining', remainingMs: 0 }, T0 + MIN);
+  assert.equal(gview(z, T0 + MIN).holding, true); assert.equal(gview(z, T0 + MIN + 2000).idx, 1);
+});
+
+test('pausa: sem a pausa (gapMs 0) o comportamento antigo é idêntico', () => {
+  const s = persist(_apply(LEVELS, IDLE, { type: 'start' }, T0, { gapMs: 0 }));
+  const v = _derive(LEVELS, s, T0 + 15 * MIN, { gapMs: 0 });
+  assert.equal(v.idx, 1); assert.equal(v.holding, false); assert.equal(secs(v), 900);
+});
+
 // ── Teste de propriedade: sequências aleatórias contra um oráculo independente ──
-function fuzz(levels, runs, seed0) {
+function fuzz(levels, runs, seed0, gap = 0) {
   let seed = seed0;
+  const opts = { gapMs: gap };
   const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
   const durs = levels.map((l) => l.dur * 1000);
+  const last = durs.length - 1;
+  const eff = durs.map((d, i) => d + (i < last ? gap : 0));          // duração do nível + pausa depois dele
   const isBrk = levels.map((l) => !!l.isBreak);
-  const starts = durs.map((_, i) => durs.slice(0, i).reduce((a, b) => a + b, 0));
-  const total = durs.reduce((a, b) => a + b, 0);
+  const starts = eff.map((_, i) => eff.slice(0, i).reduce((a, b) => a + b, 0));
+  const total = eff.reduce((a, b) => a + b, 0);
   const oracle = (elapsed) => {
-    for (let i = 0; i < durs.length; i++) if (elapsed < starts[i] + durs[i]) return { idx: i, rem: starts[i] + durs[i] - elapsed };
-    return { idx: durs.length - 1, rem: 0 };
+    for (let i = 0; i < durs.length; i++) if (elapsed < starts[i] + eff[i]) return { idx: i, rem: Math.max(0, starts[i] + durs[i] - elapsed) };
+    return { idx: last, rem: 0 };
   };
 
   for (let run = 0; run < runs; run++) {
@@ -261,12 +357,13 @@ function fuzz(levels, runs, seed0) {
         if (mEl >= total) mRunning = false;
       }
 
-      const v = derive(levels, state, now);
+      const v = derive(levels, state, now, opts);
       const o = oracle(mEl);
       const where = `run=${run} step=${step}`;
       assert.equal(v.idx, o.idx, 'idx ' + where);
       assert.equal(v.remainingMs, o.rem, 'rem ' + where);
       assert.equal(v.running, mRunning, 'running ' + where);
+      assert.equal(v.holding, mEl < total && mEl >= starts[o.idx] + durs[o.idx], 'holding ' + where);
       const wantWaiting = !mRunning && mEl < total && isBrk[o.idx] && mEl === starts[o.idx];
       assert.equal(v.waiting, wantWaiting, 'waiting ' + where);
 
@@ -279,7 +376,7 @@ function fuzz(levels, runs, seed0) {
       else if (r < 0.88) action = { type: 'setRemaining', remainingMs: Math.floor(rnd() * 20 * MIN) };
       else action = { type: 'reset' };
 
-      state = act(state, action, now, levels);
+      state = act(state, action, now, levels, opts);
 
       const idx = oracle(mEl).idx;
       const reposition = (target) => {
@@ -297,7 +394,11 @@ function fuzz(levels, runs, seed0) {
 }
 
 test('fuzz A: 20.000 torneios (1 break) batem com o oráculo', () => fuzz(LEVELS, 20000, 12345));
+test('fuzz C: 20.000 torneios com a pausa de 2s (1 break) batem com o oráculo', () => fuzz(LEVELS, 20000, 24680, 2000));
 test('fuzz B: 20.000 torneios (2 breaks, break no início do 2º bloco) batem com o oráculo', () =>
   fuzz([L(10), BRK(5), L(10), L(10), BRK(5), L(10), BRK(3)], 20000, 987654));
+
+test('fuzz D: 20.000 torneios com a pausa de 2s (3 breaks, níveis curtos) batem com o oráculo', () =>
+  fuzz([L(10), BRK(5), L(10), L(1), BRK(5), L(10), BRK(3)], 20000, 135790, 2000));
 
 console.log(`\n${passed} grupos de teste passaram.`);
