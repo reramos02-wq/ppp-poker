@@ -1193,7 +1193,7 @@ function clockBeeps(n, freq){
   }catch(e){}
 }
 const playWarnBeep    = ()=> clockBeeps(1, 880);   // entrou no último minuto do nível
-const playLevelUpBeep = ()=> clockBeeps(4, 1320);  // zerou e o nível mudou (bip quádruplo)
+const playLevelUpBeep = ()=> clockBeeps(4, 1320);  // zerou (bip quádruplo); o nível troca 2s depois
 
 // Wake Lock: o navegador solta o lock quando a aba fica oculta → pede de novo ao voltar
 function clockWakeLock(){
@@ -6281,16 +6281,19 @@ function bindEvents(){
       // a tela inteira, pois rótulo de round, blinds e botões mudam.
       const shown = window._clkRendered;
       if(shown && (shown.idx !== v.idx || shown.running !== v.running || shown.waiting !== v.waiting)){
-        // bip quádruplo: o relógio estava rodando e zerou (nível mudou, chegou no break ou acabou o torneio)
-        if(shown.running && (v.idx > shown.idx || v.finished)) playLevelUpBeep();
+        // bip quádruplo no último nível: o relógio estava rodando e o torneio acabou
+        // (nas trocas de nível o bip toca ao ZERAR — mais abaixo — e a troca vem 2s depois)
+        if(shown.running && v.finished) playLevelUpBeep();
         render();
         return;
       }
 
-      // bip simples ao ENTRAR no último minuto (só se a gente viu o tempo cruzar 60s rodando)
       const prev = window._clkPrev;
+      // bip quádruplo ao ZERAR: o tempo do nível acabou e o relógio segura 00:00 por 2s antes de trocar
+      if(prev && prev.idx===v.idx && v.running && v.holding && !prev.holding) playLevelUpBeep();
+      // bip simples ao ENTRAR no último minuto (só se a gente viu o tempo cruzar 60s rodando)
       if(prev && prev.idx===v.idx && v.running && v.durMs>60000 && prev.rem>60000 && v.remainingMs<=60000 && v.remainingMs>0) playWarnBeep();
-      window._clkPrev = {idx:v.idx, rem:v.remainingMs};
+      window._clkPrev = {idx:v.idx, rem:v.remainingMs, holding:v.holding};
 
       const {mm,ss,rem,total} = clockRemaining(v);
       if(rem !== lastSec){

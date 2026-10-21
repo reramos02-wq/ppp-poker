@@ -37,12 +37,23 @@ export function normalizeState(raw) {
   return { status: r.status === 'idle' || !r.status ? 'idle' : 'paused', elapsedMs, startedAtMs: null };
 }
 
-export function buildTimeline(levels) {
+// PAUSA ENTRE NÍVEIS: quando o tempo de um nível zera, o relógio segura "00:00" por
+// TRANSITION_MS antes de mostrar o nível seguinte (dá tempo de ver o zero e ouvir o bip).
+// Essa pausa conta como tempo de torneio (o relógio segue "rodando"), mas não existe depois
+// do último nível. O tempo de jogo de cada nível continua sendo exatamente `dur`.
+export const TRANSITION_MS = 2000;
+
+function gapOf(opts) {
+  return opts && Number.isFinite(opts.gapMs) ? Math.max(0, opts.gapMs) : TRANSITION_MS;
+}
+
+export function buildTimeline(levels, gapMs = TRANSITION_MS) {
   let t = 0;
-  return levels.map((level) => {
+  return levels.map((level, i) => {
     const durMs = (level.dur > 0 ? level.dur : DEFAULT_DUR_S) * 1000;
-    const row = { level, startMs: t, endMs: t + durMs, durMs };
-    t += durMs;
+    const holdMs = i < levels.length - 1 ? gapMs : 0;
+    const row = { level, startMs: t, durMs, holdMs, countEndMs: t + durMs, endMs: t + durMs + holdMs };
+    t += durMs + holdMs;
     return row;
   });
 }
@@ -70,9 +81,9 @@ function indexAt(tl, elapsedMs) {
 }
 
 // O que a tela mostra. Chamada por TODOS os aparelhos a cada frame.
-export function derive(levels, rawState, now) {
+export function derive(levels, rawState, now, opts) {
   const state = normalizeState(rawState);
-  const tl = buildTimeline(levels);
+  const tl = buildTimeline(levels, gapOf(opts));
   const totalMs = totalOf(tl);
   const { el, blocked } = position(state, now, tl);
   const finished = totalMs > 0 && el >= totalMs;
@@ -84,9 +95,11 @@ export function derive(levels, rawState, now) {
     level: row.level,
     next: tl[idx + 1] ? tl[idx + 1].level : null,
     durMs: row.durMs,
-    remainingMs: finished ? 0 : row.endMs - el,
+    remainingMs: finished ? 0 : Math.max(0, row.countEndMs - el),
     running,
     finished,
+    // segurando "00:00" entre dois níveis (a pausa de TRANSITION_MS)
+    holding: !finished && el >= row.countEndMs,
     // parado no início de um break, esperando o admin iniciar a contagem
     waiting: !finished && !running && row.level.isBreak && el === row.startMs,
     status: finished ? 'finished' : running ? 'running' : state.status === 'idle' ? 'idle' : 'paused',
@@ -96,9 +109,9 @@ export function derive(levels, rawState, now) {
 // Ações do admin. Devolve o novo estado a gravar, ou null se não há o que fazer.
 //   { type: 'start' | 'pause' | 'next' | 'prev' | 'reset' }
 //   { type: 'setRemaining', remainingMs }   (corrige o tempo do round atual)
-export function applyAction(levels, rawState, action, now) {
+export function applyAction(levels, rawState, action, now, opts) {
   const state = normalizeState(rawState);
-  const tl = buildTimeline(levels);
+  const tl = buildTimeline(levels, gapOf(opts));
   const totalMs = totalOf(tl);
   const { el, blocked } = position(state, now, tl);
   const finished = totalMs > 0 && el >= totalMs;
@@ -133,7 +146,7 @@ export function applyAction(levels, rawState, action, now) {
 
     case 'setRemaining': {
       const rem = Math.min(Math.max(0, Number(action.remainingMs) || 0), tl[idx].durMs);
-      return reposition(tl[idx].endMs - rem);
+      return reposition(tl[idx].countEndMs - rem);
     }
 
     case 'reset':
