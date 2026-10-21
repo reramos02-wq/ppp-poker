@@ -1603,6 +1603,33 @@ function sanitizePlayers(players){
 
 // Recursively strip undefined values — Firestore rejects any undefined field,
 // including inside nested arrays/objects like stage.draft or stage.results
+// Defesa contra HTML/JS injetado em nomes, endereços etc. (o app monta telas com innerHTML).
+// Tudo que chega do Firestore passa por aqui: < > " ' ` viram caracteres visualmente parecidos e inofensivos;
+// campos de link/foto só aceitam http(s)/data:image e têm as aspas codificadas.
+const SAFE_KEEP_KEYS = new Set(["id","uid","email","status","type","date","time"]);
+function neutralizeText(s){
+  return s.replace(/</g,"‹").replace(/>/g,"›").replace(/"/g,"”").replace(/'/g,"’").replace(/`/g,"´");
+}
+function neutralizeUrl(s){
+  if(!s) return s;
+  if(!/^(https?:\/\/|data:image\/|blob:)/i.test(s.trim())) return "";
+  return s.trim().replace(/"/g,"%22").replace(/'/g,"%27").replace(/</g,"%3C").replace(/>/g,"%3E").replace(/`/g,"%60").replace(/\s/g,"%20");
+}
+function sanitizeIncoming(v, key){
+  if(typeof v === "string"){
+    if(key && SAFE_KEEP_KEYS.has(key)) return v.replace(/[<>"'`]/g,"");
+    if(key && /photo|url|link|image|img/i.test(key)) return neutralizeUrl(v);
+    return neutralizeText(v);
+  }
+  if(Array.isArray(v)) return v.map(x=>sanitizeIncoming(x, key));
+  if(v && typeof v === "object" && !(v instanceof Date) && typeof v.toMillis !== "function"){
+    const o = {};
+    for(const k of Object.keys(v)) o[k] = sanitizeIncoming(v[k], k);
+    return o;
+  }
+  return v;
+}
+
 function deepSanitize(value){
   if(value === undefined) return null; // arrays can't have holes — use null instead of dropping
   if(Array.isArray(value)) return value.map(deepSanitize);
@@ -6114,12 +6141,21 @@ function bindEvents(){
   });
 
   // ── CLOCK HANDLERS ──────────────────────────────────────────────────────────
+  // Grava SÓ a estrutura de blinds desta etapa, sobre a versão mais recente do documento (transação):
+  // inscrições/resultados feitos por outras pessoas enquanto o editor estava aberto não são sobrescritos.
   async function saveClockState(s){
     try{
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        stages: sanitizeStages(DB.stages), updatedAt: serverTimestamp()
+      const ref = doc(db,"seasons",ACTIVE_SEASON);
+      await runTransaction(db, async (tx)=>{
+        const snap = await tx.get(ref);
+        const stages = snap.exists() ? (snap.data().stages||[]) : [];
+        const i = stages.findIndex(x=>x.id===s.id);
+        if(i<0) throw new Error("etapa não encontrada no servidor");
+        stages[i] = {...stages[i], blindLevels: deepSanitize(s.blindLevels)};
+        tx.update(ref,{stages: stages.map(deepSanitize), updatedAt: serverTimestamp()});
       });
-    } catch(e){ showToast("Erro: "+e.message,"red"); }
+      return true;
+    } catch(e){ showToast("Erro ao salvar blinds: "+e.message,"red"); return false; }
   }
 
   // Generic double-confirmation modal for all clock actions
@@ -6392,8 +6428,10 @@ function bindEvents(){
       }
       BLV_DRAFT = null;
       // Etapa primeiro (não perde nada se o modelo falhar); depois o modelo
+      const prevLevels = s.blindLevels;
       s.blindLevels = draft;
-      await saveClockState(s);
+      const okStage = await saveClockState(s);
+      if(!okStage){ s.blindLevels = prevLevels; BLV_DRAFT = draft; return; }   // não fecha o editor, não muda o relógio local: nada se perde
       let tplMsg = "";
       if(tpl){
         try{
@@ -7737,8 +7775,8 @@ function startListeners(user){
       dbg("15. Firestore snapshot recebido, exists=" + snap.exists());
       if(snap.exists()){
         const data = snap.data();
-        DB.players = data.players || [];
-        DB.admins  = data.admins  || [];
+        DB.players = sanitizeIncoming(data.players || [], "players");
+        DB.admins  = (data.admins || []).map(a=> typeof a==="string" ? a.replace(/[<>"'`]/g,"") : a);
         // If admin is editing a result, preserve local draft to avoid overwrite
         const editingStageId = resultStage ? resultStage.id : null;
         // If admin has the financial management screen open for a stage,
@@ -7746,7 +7784,7 @@ function startListeners(user){
         // typed) aren't wiped out by the snapshot echo of our own save.
         const editingFinanceId = BUYIN_MGMT;
         // (O estado do relógio não vive mais neste documento — ver coleção "clocks".)
-        DB.stages = (data.stages||[]).map(s=>{
+        DB.stages = sanitizeIncoming(data.stages||[], "stages").map(s=>{
           const local = DB.stages.find(x=>x.id===s.id);
           if(s.id===editingStageId && local){
             return {...s, draft: local.draft};
