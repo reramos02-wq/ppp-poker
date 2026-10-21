@@ -45,7 +45,14 @@ self.addEventListener("notificationclick", (event) => {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsArr) => {
       const existing = clientsArr.find((c) => c.url.includes(self.location.origin));
       if (existing) {
-        return existing.focus();
+        // Foca a janela já aberta e, se a notificação trouxe um link específico (≠ "/"),
+        // leva o app até ele. Sem link, só foca (não recarrega o app nem perde o estado).
+        const target = new URL(url, self.location.origin).href;
+        const wantsNav = url && url !== "/" && existing.url !== target;
+        return existing.focus().then((c) => {
+          const w = c || existing;
+          if (wantsNav && w.navigate) return w.navigate(target).catch(() => self.clients.openWindow(target));
+        });
       }
       return self.clients.openWindow(url);
     })
