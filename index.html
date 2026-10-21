@@ -4850,7 +4850,7 @@ function renderClock(){
 
 // Rascunho da estrutura enquanto o editor está aberto. Mexer na ordem/valores NÃO altera o relógio
 // em andamento nem grava nada: só o botão Salvar aplica (e o Cancelar descarta).
-let BLV_DRAFT = null; let BLV_ONCE = new WeakSet(); let BLV_FUTURE = false;   // ONCE = níveis pontuais · FUTURE = alguma inserção valeu para as estruturas futuras
+let BLV_DRAFT = null; let BLV_ONCE = new WeakSet(); let BLV_ADDED = new WeakSet(); let BLV_ORIG = null, BLV_ORIG_IDX = null;   // ONCE = inseridos só nesta etapa · ADDED = inseridos nesta edição · ORIG = estrutura de quando o editor abriu
 const BLV_COLS = "22px 1fr 1fr 1fr 58px 26px 28px";
 
 function renderBlindEditor(s){
@@ -6250,7 +6250,7 @@ function bindEvents(){
   bindClkBtn("edit", ()=>{
     const s=DB.stages.find(x=>x.id===CLOCK_STAGE_ID); if(!s) return;
     const el=document.getElementById("admin-modal"); if(!el) return;
-    BLV_DRAFT = JSON.parse(JSON.stringify(getBlindLevels(s))); BLV_ONCE = new WeakSet(); BLV_FUTURE = false;
+    BLV_DRAFT = JSON.parse(JSON.stringify(getBlindLevels(s))); BLV_ONCE = new WeakSet(); BLV_ADDED = new WeakSet(); BLV_ORIG = JSON.parse(JSON.stringify(BLV_DRAFT)); BLV_ORIG_IDX = new Map(BLV_DRAFT.map((l,i)=>[l,i]));
     el.innerHTML=`<div class="ov" style="z-index:1200;align-items:flex-start;padding:16px;overflow-y:auto"><div class="modal" style="max-width:500px;width:100%">${renderBlindEditor(s)}</div></div>`;
     bindBlindEditorEvents(s);
   });
@@ -6288,7 +6288,7 @@ function bindEvents(){
   }
 
   function bindBlindEditorEvents(s){
-    document.getElementById("blv-cancel")?.addEventListener("click", ()=>{ BLV_DRAFT=null; BLV_FUTURE=false; closeAdminModal(); });
+    document.getElementById("blv-cancel")?.addEventListener("click", ()=>{ BLV_DRAFT=null; closeAdminModal(); });
 
     // Inserir: logo abaixo da última linha marcada; sem marcação, no fim (comportamento de antes)
     const addLevel = (isBreak)=>{
@@ -6296,11 +6296,24 @@ function bindEvents(){
       const marked = checkedBlindRows();
       const at = marked.length ? Math.max(...marked)+1 : BLV_DRAFT.length;
       const lv = {sb:0,bb:0,ante:0,dur:900,isBreak};
-      BLV_DRAFT.splice(at, 0, lv);
+      BLV_DRAFT.splice(at, 0, lv); BLV_ADDED.add(lv);
       redrawBlindEditor(s, {follow:at, checked:[]});
       if(!isBreak) document.querySelector(`[data-blv-sb="${at}"]`)?.focus({preventScroll:true});
       askScope(lv, at);
     };
+    // Ao salvar com exclusões/edições/reordenação de níveis existentes: true = futuras · false = pontual · null = voltar
+    const askChangeScope = ()=>new Promise((resolve)=>{
+      const host = document.getElementById("admin-modal"); if(!host){ resolve(null); return; }
+      const box = document.createElement("div");
+      box.innerHTML = `<div class="ov" style="z-index:1300;align-items:center;padding:16px"><div class="modal" style="max-width:420px;width:100%">
+        <div class="mtitle">Alterações nos níveis existentes</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:14px;line-height:1.4">Você editou, excluiu ou moveu níveis. Isso vale só para esta etapa ou para todas as estruturas de blinds futuras?</div>
+        <button class="btn by fw mb10" data-sc="f">Todas as estruturas futuras</button>
+        <button class="btn fw mb10" data-sc="o">Pontual (só esta etapa)</button>
+        <button class="btn fw" data-sc="b">Voltar ao editor</button></div></div>`;
+      host.appendChild(box);
+      box.querySelectorAll("[data-sc]").forEach(b=>b.addEventListener("click",()=>{ const v=b.dataset.sc; box.remove(); resolve(v==="f"?true:v==="o"?false:null); }));
+    });
     // Pergunta a cada nível inserido: só nesta etapa (pontual) ou também nas estruturas futuras
     const askScope = (lv, at)=>{
       const host = document.getElementById("admin-modal"); if(!host) return;
@@ -6312,7 +6325,7 @@ function bindEvents(){
         <button class="btn by fw mb10" id="blv-scope-future">Todas as estruturas futuras</button>
         <button class="btn fw" id="blv-scope-once">Pontual (só esta etapa)</button></div></div>`;
       host.appendChild(box);
-      const done = (once)=>{ if(once) BLV_ONCE.add(lv); else { BLV_ONCE.delete(lv); BLV_FUTURE = true; } box.remove(); };
+      const done = (once)=>{ if(once) BLV_ONCE.add(lv); else BLV_ONCE.delete(lv); box.remove(); };
       box.querySelector("#blv-scope-once").addEventListener("click",()=>done(true));
       box.querySelector("#blv-scope-future").addEventListener("click",()=>done(false));
     };
@@ -6351,16 +6364,40 @@ function bindEvents(){
       readBlindEditor();
       if(!BLV_DRAFT || !BLV_DRAFT.length){ showToast("A estrutura precisa ter pelo menos 1 nível","red"); return; }
       const draft = BLV_DRAFT;
-      // Etapa primeiro (não perde nada se o modelo falhar); depois o modelo, sem os níveis "pontuais"
-      s.blindLevels = draft;
+      const norm = (l)=>[l.sb,l.bb,l.ante,l.dur,!!l.isBreak];
+      // Houve exclusão, edição ou mudança de ordem em níveis que já existiam? Então pergunta o alcance.
+      const kept = draft.filter(l=>!BLV_ADDED.has(l));
+      const changedOther = JSON.stringify(kept.map(norm)) !== JSON.stringify(BLV_ORIG.map(norm));
+      let otherFuture = false;
+      if(changedOther){
+        const ans = await askChangeScope();
+        if(ans===null) return;           // voltou ao editor
+        otherFuture = ans;
+      }
+      const futureAdds = draft.filter(l=>BLV_ADDED.has(l) && !BLV_ONCE.has(l));
+      // Modelo das etapas futuras
+      let tpl = null;
+      if(!changedOther || otherFuture){
+        if(otherFuture || futureAdds.length) tpl = draft.filter(l=>!BLV_ADDED.has(l) || !BLV_ONCE.has(l));
+      } else if(futureAdds.length){
+        // alterações nos existentes foram pontuais: modelo = estrutura original + só os níveis novos "futuros"
+        const anchors = new Map();   // índice do original → novos inseridos logo depois (-1 = início)
+        let anchor = -1;
+        draft.forEach(l=>{
+          if(BLV_ORIG_IDX.has(l)) anchor = BLV_ORIG_IDX.get(l);
+          else if(BLV_ADDED.has(l) && !BLV_ONCE.has(l)){ if(!anchors.has(anchor)) anchors.set(anchor,[]); anchors.get(anchor).push(l); }
+        });
+        tpl = [...(anchors.get(-1)||[])];
+        BLV_ORIG.forEach((o,k)=>{ tpl.push(o, ...(anchors.get(k)||[])); });
+      }
       BLV_DRAFT = null;
+      // Etapa primeiro (não perde nada se o modelo falhar); depois o modelo
+      s.blindLevels = draft;
       await saveClockState(s);
       let tplMsg = "";
-      const wantTpl = BLV_FUTURE; BLV_FUTURE = false;
-      if(wantTpl){
+      if(tpl){
         try{
-          const tpl = JSON.parse(JSON.stringify(draft.filter(l=>!BLV_ONCE.has(l))));
-          await setDoc(doc(db,"clocks",tplDocId()),{levels:tpl, updatedAt:serverTimestamp()});
+          await setDoc(doc(db,"clocks",tplDocId()),{levels:JSON.parse(JSON.stringify(tpl)), updatedAt:serverTimestamp()});
           tplMsg = " · modelo futuro atualizado";
         }catch(e){ showToast("Etapa salva, mas o modelo futuro falhou: "+e.message,"red"); }
       }
