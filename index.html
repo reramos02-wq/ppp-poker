@@ -711,6 +711,30 @@ html:not(.pl) .hsv{font-size:32px;}
 
 /* ── movimento respeitando preferência do sistema ── */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
+
+/* ── ajustes finos: banner da premiação, pontos lado a lado, sidebar sem logo repetido ── */
+.ft-prize{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:13px 16px;margin-bottom:14px;cursor:pointer;color:inherit;font:inherit;
+  border:1px solid rgba(255,210,94,.42);border-radius:var(--r);background:linear-gradient(135deg,rgba(248,183,11,.17),rgba(248,183,11,.04));transition:transform .12s var(--ease),border-color .15s;}
+.ft-prize:active{transform:scale(.985);}
+.ft-prize:hover{border-color:rgba(255,210,94,.7);}
+.ft-prize-ic{font-size:22px;line-height:1;flex-shrink:0;}
+.ft-prize-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.ft-prize-t{font-family:var(--f-d);font-weight:800;font-size:13.5px;letter-spacing:.03em;text-transform:uppercase;color:#FFD25E;line-height:1.2;}
+.ft-prize-s{font-size:11.5px;color:var(--muted);}
+.ft-prize-v{font-family:var(--f-d);font-weight:800;font-size:19px;color:#FFD25E;white-space:nowrap;flex-shrink:0;font-variant-numeric:tabular-nums;}
+.rvw{display:flex;align-items:baseline;justify-content:flex-end;gap:4px;white-space:nowrap;flex-shrink:0;}
+.rvw .rv{line-height:1;}
+.rvl{text-transform:lowercase;font-size:11px;letter-spacing:.02em;font-weight:600;color:var(--muted);}
+.ftpill{align-self:center;margin-left:6px;font-family:var(--f-d);font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#FFD25E;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.28);border-radius:999px;padding:1px 7px;line-height:1.5;white-space:nowrap;}
+.home-top{padding:0;}
+html:not(.pl) .home-top{padding:20px 28px 0;}
+html:not(.pl) .home-top .card{margin-bottom:14px;}
+html:not(.pl) .sb-title .pk{font-family:var(--f-d);font-weight:800;font-size:18px;letter-spacing:.3em;margin-left:0;color:#fff;}
+html:not(.pl) .sb-logo{padding:20px 18px 16px;gap:12px;}
+
+.ft-legend{display:flex;align-items:center;gap:8px;font-family:var(--f-d);font-weight:600;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#FFD25E;margin:0 2px 8px;}
+.ft-dot{width:3px;height:14px;border-radius:2px;background:#FFD700;}
+@media (min-width:768px) and (max-width:1023px){html:not(.pl) .home-grid{grid-template-columns:1fr;}}
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
     
@@ -1463,7 +1487,7 @@ function setBuyinRecord(s, record){
   if(idx>=0) s.buyinData[idx] = record;
   else s.buyinData.push(record);
 }
-const fmtBRL = v => "R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:2});
+const fmtBRL = v => { const n = Number(v||0); return "R$ "+n.toLocaleString("pt-BR",{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2}); };
 
 // ── FINANCEIRO — Custos, Pot, Premiação (ITM) ───────────────────────────────
 
@@ -3039,9 +3063,9 @@ function renderSidebar(){
   ];
   return `<aside class="sidebar">
     <div class="sb-logo" data-goto="home" style="cursor:pointer">
-      ${LOGO(44)}
+      ${LOGO(52)}
       <div>
-        <div class="sb-title"><span class="p1">P</span><span class="p2">P</span><span class="p3">P</span> <span class="pk">POKER</span></div>
+        <div class="sb-title"><span class="pk">POKER</span></div>
         ${IS_ADMIN?'<div class="sb-sub">Admin</div>':""}
       </div>
     </div>
@@ -3291,6 +3315,16 @@ function renderClockBanner(){
   }).join("");
 }
 
+// Banner "Premiação final de temporada" (pote acumulado) — usado no celular e no tablet/desktop
+function renderFTPrizeBanner(){
+  const pot = DB.stages.filter(s=>s.status==="finished"&&!s.isFinal).reduce((sum,s)=>sum+getFTContribution(s),0);
+  return `<button id="btn-ft-prize-home" class="ft-prize">
+    <span class="ft-prize-ic">🏆</span>
+    <span class="ft-prize-tx"><span class="ft-prize-t">Premiação final de temporada</span><span class="ft-prize-s">Pot acumulado da temporada ${ACTIVE_SEASON}</span></span>
+    <span class="ft-prize-v">${fmtBRL(pot)}</span>
+  </button>`;
+}
+
 function renderHomeDesktop(){
   const next  = getNextStage();
   const done  = DB.stages.filter(s=>s.status==="finished");
@@ -3319,7 +3353,7 @@ function renderHomeDesktop(){
     `<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
       <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
       <div class="ri"><div class="rn">${r.p.nickname}${movementBadge(r.p.uid,type||"geral")}</div><div class="rm">${sub}</div></div>
-      <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
+      <div class="rvw"><span class="rv">${r.total}</span><span class="rvl">pts</span></div>
     </div>`;
 
   // Next stage — full width card
@@ -3391,7 +3425,7 @@ function renderHomeDesktop(){
 
   return `<div>
     ${heroHtml}
-    ${heroCard}
+    <div class="home-top">${heroCard}${geralTop.length?renderFTPrizeBanner():""}</div>
     <div class="home-grid" style="margin-bottom:16px">${colNL}${colKO}</div>
     <div class="home-grid">${colGeral}${colHOF}</div>
   </div>`;
@@ -3431,16 +3465,7 @@ function renderHome(){
       ${isLive(next)?`<div style="margin-top:8px;overflow-x:auto;white-space:nowrap;padding-bottom:4px">${(next.inscriptions||[]).map(uid=>{const pl=getP(uid)||{name:'?',nickname:'?'};return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 8px 3px 3px;margin-right:4px;font-size:11px;color:#fff;white-space:nowrap">'+AV(uid)+pl.nickname+'</span>';}).join('')}</div>`:""}
     </div>`:""}
     ${geralTop.length?`<div class="mb10">
-      <button id="btn-ft-prize-home" style="width:100%;background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(255,215,0,0.05));border:1px solid #FFD700;border-radius:6px;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:22px;color:#FFD700">🏆</span>
-          <div style="text-align:left">
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;color:#FFD700;letter-spacing:1px">PREMIAÇÃO FINAL DE TEMPORADA</div>
-            <div style="font-size:11px;color:var(--muted)">Pot acumulado da temporada 2026</div>
-          </div>
-        </div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:#FFD700">${fmtBRL(DB.stages.filter(s=>s.status==="finished"&&!s.isFinal).reduce((sum,s)=>sum+getFTContribution(s),0))}</div>
-      </button>
+      ${renderFTPrizeBanner()}
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">🏅 Líderes Ranking Geral<span data-goto="ranking" style="font-size:10px;color:var(--yellow);cursor:pointer;letter-spacing:1px">Ver tudo →</span></div>
       <div class="rl">${geralTop.map((r,i)=>`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer">
         <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
@@ -3482,14 +3507,14 @@ function renderRanking(){
   </div>
   <button id="btn-ft-prize" class="btn bo fw" style="margin-bottom:14px;border-color:#FFD700;color:#FFD700;font-size:13px">🏆 Premiação Final de Temporada</button>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
+  ${isGeral&&list.length?`<div class="ft-legend"><span class="ft-dot"></span>Mesa final · top 9 do ranking geral</div>`:""}
   <div class="rl">${list.map((r,i)=>{const isFinalTable=isGeral&&i<9;return`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer${isFinalTable?";border-left:3px solid #FFD700;background:rgba(255,215,0,0.04)":""}">
-    ${isFinalTable?`<div style="position:absolute;right:8px;top:4px;font-size:9px;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;color:#FFD700;text-transform:uppercase;opacity:0.7">Mesa Final</div>`:""}
     <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
     <div class="ri">
       <div class="rn">${r.p.nickname}${movementBadge(r.p.uid,RANK_TAB)}</div>
       <div class="rm">${r.stages} etapa${r.stages!==1?"s":""}${isKO?` · 🥊 ${r.ko}`:""}${isGeral&&r.ko>0?` · 🥊 ${r.ko}`:""}${isGeral?` <span style="font-size:10px;color:var(--muted)">(🃏${r.nlPts} + 🥊${r.koPts})</span>`:""}</div>
     </div>
-    <div><div class="rv">${r.total}</div><div class="rvl">pts</div></div>
+    <div class="rvw"><span class="rv">${r.total}</span><span class="rvl">pts</span></div>
   </div>`}).join("")}</div>
   </div>`;
 }
