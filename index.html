@@ -1154,7 +1154,7 @@ const RK = "ppp_rules_v1";
 
 const DEFAULT_RULES_SEED = {
   nlholdem:{buyin:"R$ 150 (20k fichas)",rebuy:"R$ 100 (20k) / R$ 180 (40k)",addon:"R$ 150 (40k fichas)",timechip:"5k início 1º nível"},
-  knockout:{buyin:"R$ 200 (20k fichas + KO)",rebuy:"R$ 200 (20k+KO) / R$ 300 (40k+KO)",addon:"R$ 200 (40k fichas)",timechip:"—",koValue:25,koPer:4}
+  knockout:{buyin:"R$ 200 (20k fichas + 4 KOs)",rebuy:"R$ 200 (20k+4KO) / R$ 300 (40k+4KO)",addon:"R$ 200 (40k fichas)",timechip:"—",koValue:25,koPer:4}
 };
 let DEFAULT_RULES = JSON.parse(localStorage.getItem(RK)||"null") || JSON.parse(JSON.stringify(DEFAULT_RULES_SEED));
 function saveRules(){ try{ localStorage.setItem(RK, JSON.stringify(DEFAULT_RULES)); }catch(e){} }
@@ -1339,10 +1339,13 @@ const stFmtMoney = v => { v = Number(v)||0; return Number.isInteger(v) ? String(
 const stFmtK = v => String(+(Number(v)||0).toFixed(2)).replace(".",",");
 function stTypeIsPKO(type){ return type==="knockout"; }
 // st = {buyin:{v,k}, rs:{v,k}, rd:{v,k}, addon:{v,k}, tc:{on,k,lvl}}  (v = R$, k = fichas em milhares)
-function structToText(st, type){
-  const ko = stTypeIsPKO(type) ? "+KO" : "";
-  const buyin = `R$ ${stFmtMoney(st.buyin.v)} (${stFmtK(st.buyin.k)}k fichas${ko?" + KO":""})`;
-  const part = o => `R$ ${stFmtMoney(o.v)} (${stFmtK(o.k)}k${ko})`;
+// per = KOs por entrada (só PKO): entra no texto das regras, ex.: "20k fichas + 4 KOs" e "20k+4KO"
+function structToText(st, type, per){
+  const isKO = stTypeIsPKO(type), n = Math.round(Number(per)||0);
+  const tagBuy = !isKO ? "" : n>0 ? ` + ${n} KO${n>1?"s":""}` : " + KO";
+  const tagRe  = !isKO ? "" : n>0 ? `+${n}KO` : "+KO";
+  const buyin = `R$ ${stFmtMoney(st.buyin.v)} (${stFmtK(st.buyin.k)}k fichas${tagBuy})`;
+  const part = o => `R$ ${stFmtMoney(o.v)} (${stFmtK(o.k)}k${tagRe})`;
   const rebuy = st.rs.v>0 ? (st.rd.v>0 ? `${part(st.rs)} / ${part(st.rd)}` : part(st.rs)) : "—";
   const addon = st.addon.v>0 ? `R$ ${stFmtMoney(st.addon.v)} (${stFmtK(st.addon.k)}k fichas)` : "—";
   const timechip = st.tc.on ? `${stFmtK(st.tc.k)}k início ${Math.max(1,Math.round(st.tc.lvl))}º nível` : "—";
@@ -1371,6 +1374,14 @@ function structValidate(st, type, ko){
   if(st.tc.on && (!(st.tc.k>0) || !(st.tc.lvl>=1))) return "Time chip: informe as fichas e o nível.";
   if(stTypeIsPKO(type) && ko){ if(!(ko.value>0)) return "Valor por KO: informe um valor maior que zero."; if(!(ko.per>=1)) return "KOs por entrada: informe 1 ou mais."; }
   return "";
+}
+// Texto de regras exibido: nas etapas PKO, acompanha os KOs por entrada que valem no financeiro (também para etapas antigas, sem alterar o que está salvo)
+function stageStructText(s){
+  const raw = {buyin:s.buyin||"", rebuy:s.rebuy||"", addon:s.addon||"", timechip:s.timechip||""};
+  if(!stTypeIsPKO(s.type)) return raw;
+  const st = textToStruct(raw);
+  if(structValidate(st, s.type, null)) return raw;      // texto antigo fora do padrão: mostra como está
+  return structToText(st, s.type, Number(s.finance&&s.finance.koPer)||DEFAULT_KO_PER_ENTRY);
 }
 // ── ESTRUTURA (fim) ──
 
@@ -2431,10 +2442,10 @@ function openShareModal(stage){
         struct.innerHTML = `
           <div style="font-family:Arial,sans-serif;font-weight:700;font-size:10px;color:#F5A800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">ESTRUTURA</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
-            ${stage.buyin?`<div style="font-size:11px;color:#aaa">💵 Buy-in</div><div style="font-size:11px;color:#fff;text-align:right">${stage.buyin}</div>`:''}
-            ${stage.rebuy?`<div style="font-size:11px;color:#aaa">🔄 Rebuy</div><div style="font-size:11px;color:#fff;text-align:right">${stage.rebuy}</div>`:''}
-            ${stage.addon?`<div style="font-size:11px;color:#aaa">💰 Add-on</div><div style="font-size:11px;color:#fff;text-align:right">${stage.addon}</div>`:''}
-            ${stage.timechip?`<div style="font-size:11px;color:#aaa">⏳ Time Chip</div><div style="font-size:11px;color:#fff;text-align:right">${stage.timechip}</div>`:''}
+            ${stage.buyin?`<div style="font-size:11px;color:#aaa">💵 Buy-in</div><div style="font-size:11px;color:#fff;text-align:right">${stageStructText(stage).buyin}</div>`:''}
+            ${stage.rebuy?`<div style="font-size:11px;color:#aaa">🔄 Rebuy</div><div style="font-size:11px;color:#fff;text-align:right">${stageStructText(stage).rebuy}</div>`:''}
+            ${stage.addon?`<div style="font-size:11px;color:#aaa">💰 Add-on</div><div style="font-size:11px;color:#fff;text-align:right">${stageStructText(stage).addon}</div>`:''}
+            ${stage.timechip?`<div style="font-size:11px;color:#aaa">⏳ Time Chip</div><div style="font-size:11px;color:#fff;text-align:right">${stageStructText(stage).timechip}</div>`:''}
           </div>`;
         el.appendChild(struct);
       }
@@ -4000,19 +4011,19 @@ function renderStageDetail(sid){
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:var(--yellow);text-transform:uppercase;margin-bottom:12px">Estrutura do Torneio</div>
       ${s.buyin?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1c1c1c">
         <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">💵 Buy-in</span>
-        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.buyin}</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${stageStructText(s).buyin}</span>
       </div>`:""}
       ${s.rebuy?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1c1c1c">
         <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">💸 Rebuy</span>
-        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.rebuy}</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${stageStructText(s).rebuy}</span>
       </div>`:""}
       ${s.addon?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1c1c1c">
         <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">💰 Add-on</span>
-        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.addon}</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${stageStructText(s).addon}</span>
       </div>`:""}
       ${s.timechip?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
         <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">⏳ Time Chip</span>
-        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${s.timechip}</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#fff">${stageStructText(s).timechip}</span>
       </div>`:""}
       ${s.type==="knockout"?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #1c1c1c">
         <span style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px">🥊 Bounty (KO)</span>
@@ -4458,7 +4469,7 @@ function openEditRulesModal(){
     const err = structValidate(nl.st,"nlholdem",null) || structValidate(ko.st,"knockout",ko.ko);
     if(err){ showToast((structValidate(nl.st,"nlholdem",null)?"NL Hold'em: ":"PKO: ")+err,"red"); return; }
     DEFAULT_RULES.nlholdem = structToText(nl.st,"nlholdem");
-    DEFAULT_RULES.knockout = {...structToText(ko.st,"knockout"), koValue:ko.ko.value, koPer:ko.ko.per};
+    DEFAULT_RULES.knockout = {...structToText(ko.st,"knockout",ko.ko.per), koValue:ko.ko.value, koPer:ko.ko.per};
     saveRules();
     wrap.innerHTML="";
     render();
@@ -4467,6 +4478,7 @@ function openEditRulesModal(){
 
 function renderRules(){
   const nl=DEFAULT_RULES.nlholdem; const ko=DEFAULT_RULES.knockout;
+  const koT=stageStructText({...ko, type:"knockout", finance:{koPer:ko.koPer}});
   const nlR=`<div class="card cy">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:var(--yellow);margin-bottom:10px">PPP RANKING — NL Hold'em</div>
     ${[["Etapas","12 etapas na temporada"],["Buy-in",nl.buyin||"—"],["Rebuy",nl.rebuy||"—"],["Add-on",nl.addon||"—"],["Time Chip",nl.timechip||"—"]].map(([k,v])=>`
@@ -4477,7 +4489,7 @@ function renderRules(){
   </div>`;
   const koR=`<div class="card cy">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:var(--yellow);margin-bottom:10px">PPP PKO — Progressive Knockout</div>
-    ${[["Etapas","12 etapas na temporada"],["Buy-in",ko.buyin||"—"],["Rebuy",ko.rebuy||"—"],["Add-on",ko.addon||"—"],["Time Chip",ko.timechip||"—"],["Bounty (KO)",`R$ ${stFmtMoney(Number(ko.koValue)||DEFAULT_KO_VALUE)} por KO · ${stFmtMoney(Number(ko.koPer)||DEFAULT_KO_PER_ENTRY)} por entrada`]].map(([k,v])=>`
+    ${[["Etapas","12 etapas na temporada"],["Buy-in",koT.buyin||"—"],["Rebuy",koT.rebuy||"—"],["Add-on",koT.addon||"—"],["Time Chip",koT.timechip||"—"],["Bounty (KO)",`R$ ${stFmtMoney(Number(ko.koValue)||DEFAULT_KO_VALUE)} por KO · ${stFmtMoney(Number(ko.koPer)||DEFAULT_KO_PER_ENTRY)} por entrada`]].map(([k,v])=>`
     <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e1e1e;font-size:14px;gap:10px">
       <span style="color:var(--muted);flex-shrink:0">${k}</span><span style="color:#fff;font-weight:600;text-align:right">${v}</span>
     </div>`).join("")}
@@ -6353,7 +6365,7 @@ function stRefresh(p, type){
   if(tcr) tcr.style.display = r.st.tc.on ? "" : "none";
   if(kor) kor.style.display = stTypeIsPKO(type) ? "" : "none";
   if(!pv) return;
-  const err = structValidate(r.st, type, r.ko), t = structToText(r.st, type);
+  const err = structValidate(r.st, type, r.ko), t = structToText(r.st, type, r.ko.per);
   pv.innerHTML = err ? `<span style="color:var(--red)">⚠ ${err}</span>` :
     `<div class="stf-pt">Como os jogadores vão ver</div><div>Buy-in: <b>${t.buyin}</b></div><div>Rebuy: <b>${t.rebuy}</b></div><div>Add-on: <b>${t.addon}</b></div><div>Time chip: <b>${t.timechip}</b></div>${stTypeIsPKO(type)?`<div>Bounty: <b>R$ ${stFmtMoney(r.ko.value)} por KO · ${stFmtMoney(r.ko.per)} por entrada</b></div>`:""}`;
 }
@@ -6422,7 +6434,7 @@ function openStageModal(stage=null){
     const type=getType(), {st,ko}=stRead("sf");
     const err=structValidate(st,type,ko);
     if(err){ showToast(err,"red"); return; }
-    const txt=structToText(st,type);
+    const txt=structToText(st,type,ko.per);
     const data={
       name,date,
       time:document.getElementById("sf-h").value,
