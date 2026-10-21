@@ -13,7 +13,7 @@
 <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <link rel="manifest" href="/manifest.webmanifest"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
 :root{--bg:#1a1a1a;--bg-dark:#0e0e0e;--surface:#222;--surface2:#2c2c2c;--border:#333;--border2:#3e3e3e;--yellow:#F5A800;--yl:#FFD166;--gray:#808080;--text:#dedede;--muted:#666;--green:#2ecc71;--red:#e74c3c;--blue:#3498db;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -567,6 +567,150 @@ var _authTimeout = setTimeout(function(){
 .pi{width:1.1em;height:1.1em;vertical-align:-.17em;display:inline-block;flex-shrink:0;--cut:#222}
 .pi-spade{color:#fff}
 .by .pi,.tb.on .pi{--cut:var(--yellow)}.br .pi{--cut:var(--red)}.bd .pi,.bo .pi{--cut:#222}
+</style>
+<style id="ui-refresh">
+/* ═══ UI REFRESH ═══ camada de acabamento por cima do CSS base (remover este bloco volta ao visual anterior) */
+:root{
+  --bg-dark:#0b0b0d; --bg:#111114; --surface:#18181c; --surface2:#212126;
+  --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.14);
+  --yellow:#F8B70B; --yl:#FFD25E; --text:#e8e8ec; --muted:#8d8d98;
+  --r:12px; --ease:cubic-bezier(.2,.7,.2,1);
+  --f-d:'Archivo','Barlow',system-ui,sans-serif;
+  --nav-h:56px;
+}
+html{color-scheme:dark;scrollbar-width:thin;scrollbar-color:#2a2a30 transparent;}
+::selection{background:rgba(248,183,11,.35);color:#fff;}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#2a2a30;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
+body{background:var(--bg-dark);text-rendering:optimizeLegibility;}
+.pi{--cut:var(--surface);}
+.bd .pi,.bo .pi{--cut:var(--surface);}
+:focus-visible{outline:2px solid var(--yellow);outline-offset:2px;border-radius:6px;}
+button,[data-goto],[data-detail],.more-item,.sgh,.pcrd{-webkit-user-select:none;user-select:none;}
+
+/* ── tipografia ── */
+.st,.mtitle,.login-title,.topbar-title,.tb-title,.hfr,.sgn,.more-item-label,.sb-season{font-family:var(--f-d);}
+.st{font-weight:800;font-size:27px;letter-spacing:.005em;line-height:1.08;}
+.mtitle{font-weight:800;font-size:19px;letter-spacing:.01em;}
+.sgn{font-weight:700;font-size:16.5px;letter-spacing:.005em;}
+.ss{color:var(--muted);font-size:13.5px;}
+.hsv,.rv,.psv,.rpos,.podium-pts,.podium-base,.hfr,.rvl{font-family:var(--f-d);font-variant-numeric:tabular-nums;}
+.hsv{font-weight:800;font-size:27px;letter-spacing:-.01em;}
+.rv{font-weight:800;font-size:21px;letter-spacing:-.01em;}
+.psv{font-weight:800;}
+.rpos{font-weight:800;}
+.lbl,.badge,.pill,.rbdg,.atag,.hfbdg,.tb,.ltb,.btn,.nl,.hpsub,.hsl,.psl,.sb-lbl,.more-menu-title,.live-badge{font-family:var(--f-d);}
+.lbl{font-weight:600;letter-spacing:.09em;font-size:10.5px;}
+.hsl,.psl,.rvl{letter-spacing:.09em;font-weight:600;}
+.hpsub{letter-spacing:.32em;font-size:11px;font-weight:500;}
+.dv{width:28px;height:3px;border-radius:3px;margin-bottom:18px;}
+
+/* ── cabeçalho e navegação: vidro escuro + fio de ouro em degradê (sem barras amarelas chapadas) ── */
+.hdr{background:rgba(11,11,13,.8);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border-bottom:1px solid var(--border);position:sticky;}
+.hdr::after,html:not(.pl) .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(248,183,11,.65) 18%,rgba(248,183,11,.65) 82%,transparent);pointer-events:none;}
+html:not(.pl) .topbar{background:rgba(11,11,13,.8);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);}
+html:not(.pl) .topbar-title,.tb-title{font-weight:800;font-size:20px;letter-spacing:.02em;}
+.nav{background:rgba(11,11,13,.86);-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0px);}
+.nb,.nb-more{border-top:none;margin-top:0;padding:8px 2px 8px;gap:4px;color:var(--muted);transition:color .18s var(--ease);}
+.nb .ni,.nb-more .more-icon{width:56px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;transition:background .2s var(--ease),transform .15s var(--ease);}
+.more-icon{flex-direction:column;gap:3px;}
+.nb.on .ni,.nb-more.on .more-icon,.nb-more.menu-open .more-icon{background:rgba(248,183,11,.16);}
+.nb:active .ni,.nb-more:active .more-icon{transform:scale(.92);}
+.nb.on,.nb-more.on,.nb-more.menu-open{border-top:none;color:var(--yellow);}
+.nl{font-size:10.5px;font-weight:600;letter-spacing:.02em;text-transform:none;}
+.more-menu{bottom:var(--nav-h);border-radius:20px 20px 0 0;background:rgba(24,24,28,.96);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--border);box-shadow:0 -24px 48px -24px rgba(0,0,0,.8);transition:transform .3s var(--ease),visibility 0s linear .3s;visibility:hidden;}
+.more-menu.open{visibility:visible;transition:transform .3s var(--ease),visibility 0s;}
+.more-menu-backdrop.open{background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);}
+.more-menu-handle{width:38px;height:4px;background:var(--border2);margin:10px auto 4px;}
+.more-menu-title{font-weight:600;letter-spacing:.14em;padding:6px 20px 8px;}
+.more-item{border-top:1px solid var(--border);padding:13px 20px;gap:14px;transition:background .15s;}
+.more-item-icon{width:38px;height:38px;border-radius:11px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:18px;}
+.more-item-label{font-weight:700;font-size:15.5px;letter-spacing:.005em;}
+.more-item-sub{font-size:12.5px;}
+.more-item.active-item{background:rgba(248,183,11,.07);}
+.more-item.active-item .more-item-icon{background:rgba(248,183,11,.16);color:var(--yellow);}
+.more-item.install .more-item-icon{background:var(--yellow);color:#111;}
+.more-item.install .more-item-label{color:var(--yellow);}
+
+/* ── superfícies: cartões com relevo suave, cantos maiores, sem listras laterais chapadas ── */
+.card,.rl,.sgc,.pcrd,.hfc,.hst,.ps,.tabs,.login-tabs{border-radius:var(--r);}
+.card,.rl,.sgc,.pcrd,.hfc,.hst,.ps{
+  background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,0) 60%),var(--surface);
+  border:1px solid var(--border);
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 10px 24px -16px rgba(0,0,0,.7);
+}
+.card{padding:15px;}
+.cy,.cg,.cr{border-left:1px solid var(--border);position:relative;}
+.cy::before,.cg::before,.cr::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:0 3px 3px 0;background:var(--yellow);}
+.cg::before{background:var(--green);}.cr::before{background:var(--red);}
+.hst{border-top:1px solid var(--border);padding:12px 8px;}
+.hst .hsv{color:#fff;}
+.hero{background:radial-gradient(120% 90% at 0% 0%,rgba(248,183,11,.07),transparent 55%),var(--bg-dark);border-bottom:1px solid var(--border);}
+.rr{border-bottom:1px solid var(--border);transition:background .15s;}
+.rr:active,.sgh:active,.pcrd:active{background:var(--surface2);}
+.rr:first-child{background:linear-gradient(90deg,rgba(248,183,11,.08),transparent 60%);}
+.av{border:1.5px solid var(--border2);}
+.avxl{border:2px solid var(--yellow);}
+.pcrd{transition:transform .15s var(--ease),border-color .15s;}
+.pcrd:active{transform:scale(.98);}
+.sgc{transition:border-color .2s;}
+.sgh{padding:14px;}
+.sgb{border-top:1px solid var(--border);}
+.sep{background:var(--border);}
+.resrow,.ptable td{border-bottom:1px solid var(--border);}
+.ptable th{background:var(--surface2);font-weight:600;letter-spacing:.08em;}
+.empty{color:var(--muted);}
+
+/* ── tabs (controle segmentado) ── */
+.tabs,.login-tabs{background:var(--bg-dark);border:1px solid var(--border);padding:3px;gap:3px;overflow:hidden;}
+.tb,.ltb{border-radius:9px;background:transparent;color:var(--muted);font-weight:700;letter-spacing:.05em;transition:background .18s var(--ease),color .18s;}
+.tb.on,.ltb.on{background:var(--yellow);color:#111;box-shadow:0 4px 12px -4px rgba(248,183,11,.5);}
+
+/* ── selos / badges em pílula, mais calmos ── */
+.badge,.pill,.rbdg,.hfbdg,.atag,.live-badge{border-radius:999px;padding-left:9px;padding-right:9px;letter-spacing:.07em;font-weight:700;}
+.atag{padding:3px 9px;}
+.hbdg{border-radius:999px;font-family:var(--f-d);}
+
+/* ── botões e campos ── */
+.btn{border-radius:10px;font-weight:700;letter-spacing:.06em;font-size:13px;transition:transform .12s var(--ease),filter .15s,background .15s,border-color .15s,box-shadow .15s;}
+.btn:active{transform:scale(.97);}
+.by{background:var(--yellow);color:#111;box-shadow:0 6px 16px -8px rgba(248,183,11,.7),0 1px 0 rgba(255,255,255,.35) inset;}
+.by:hover{filter:brightness(1.07);}
+.bo{border:1px solid var(--border2);background:rgba(255,255,255,.02);}
+.bo:hover{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.05);}
+.bd{border-radius:10px;}
+.sm{padding:6px 12px;}
+.inp{background:var(--bg-dark);border:1px solid var(--border2);border-radius:10px;padding:10px 13px;transition:border-color .15s,box-shadow .15s;}
+.inp:focus{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(248,183,11,.16);}
+.inp::placeholder{color:#5f5f69;}
+.google-btn{border-radius:10px;}
+
+/* ── modais ── */
+.ov{background:rgba(5,5,7,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+.modal{border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:20px 20px 0 0;box-shadow:0 -20px 60px -20px rgba(0,0,0,.9);animation:sheetUp .32s var(--ease) both;}
+@keyframes sheetUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+html:not(.pl) .modal{border-radius:18px;}
+.login-box{border-radius:18px;}
+@media(min-width:768px){.login-box{border-top:1px solid var(--border2);border-radius:18px;}}
+.err-msg{border-radius:10px;}
+
+/* ── barra lateral (tablet/desktop) ── */
+html:not(.pl) .sidebar{border-right:1px solid var(--border);background:linear-gradient(180deg,#0e0e11,#0b0b0d);}
+html:not(.pl) .sb-item{border-left:none;border-radius:10px;margin:2px 12px;width:calc(100% - 24px);padding:10px 12px;font-family:var(--f-d);font-weight:600;font-size:14px;letter-spacing:.01em;transition:background .15s,color .15s;}
+html:not(.pl) .sb-item:hover{background:rgba(255,255,255,.05);color:var(--text);}
+html:not(.pl) .sb-item.on,html:not(.pl) .sb-item.active{background:rgba(248,183,11,.13);color:var(--yellow);border-left:none;}
+html:not(.pl) .sb-item .sb-icon,html:not(.pl) .sb-item-icon{width:22px;}
+html:not(.pl) .rr:hover,html:not(.pl) .sgh:hover{background:var(--surface2);}
+html:not(.pl) .pcrd:hover{border-color:rgba(248,183,11,.5);transform:translateY(-1px);}
+html:not(.pl) .hst{padding:16px 10px;}
+html:not(.pl) .hsv{font-size:32px;}
+.sb-install{margin:10px 12px 0;}
+
+/* ── pódio ── */
+.podium-base{border-radius:8px 8px 0 0;}
+.podium-photo{border-width:2px;}
+
+/* ── movimento respeitando preferência do sistema ── */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
     
@@ -2573,6 +2717,7 @@ function render(){
     dbg("render() OK");
     bindEvents();
     navSync();
+    syncNavH();
   } catch(e) {
     dbg("ERRO render(): " + e.message);
     document.getElementById("app").innerHTML =
@@ -2909,6 +3054,7 @@ function renderSidebar(){
         ${item.tab==="admin"?`<span class="atag" style="margin-left:auto">ADMIN</span>`:""}
       </button>`).join("")}
     </nav>
+    ${canInstall()?`<button class="btn bo sm sb-install" id="btn-install-app" style="display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% - 24px)">${ICON_INSTALL} Instalar app</button>`:""}
     <div style="margin-top:auto;padding:16px 12px;font-size:11px;color:var(--muted)">
       <div style="font-weight:600;color:var(--text)">Temporada ${ACTIVE_SEASON}</div>
       <div>${DB.players.length} jogadores · ${DB.stages.filter(s=>s.status==="finished").length} etapas</div>
@@ -3003,6 +3149,50 @@ const MORE_TABS_BASE = [
 ];
 const MORE_TABS = () => IS_ADMIN ? MORE_TABS_BASE : MORE_TABS_BASE.filter(t=>t.id!=="admin");
 const MORE_IDS = () => MORE_TABS_BASE.map(t=>t.id);
+
+// ── INSTALAR COMO APP (PWA) ──────────────────────────────────────────────────
+// Android/Chrome/Edge/desktop: o navegador avisa (beforeinstallprompt) e instalamos com um toque.
+// iPhone/iPad (Safari): não existe esse aviso; o caminho é Compartilhar → Adicionar à Tela de Início, então mostramos o passo a passo.
+let INSTALL_EVT = null;
+const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+const IS_MOBILE_UA = IS_IOS || /android|mobile/i.test(navigator.userAgent);
+const IS_STANDALONE = () => { try{ return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches || navigator.standalone===true; }catch(e){ return false; } };
+const canInstall = () => !IS_STANDALONE() && (!!INSTALL_EVT || IS_MOBILE_UA);
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); INSTALL_EVT = e; if(CURRENT_USER && !document.querySelector(".ov")) render(); });
+window.addEventListener("appinstalled", ()=>{ INSTALL_EVT = null; try{ showToast("PPP Poker instalado!","green"); }catch(_){} render(); });
+const ICON_INSTALL = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 8v6m0 0l-2.5-2.5M12 14l2.5-2.5"/><path d="M10.5 18.5h3"/></svg>`;
+
+function openInstallHelp(){
+  const wrap = document.getElementById("result-modal"); if(!wrap) return;
+  const steps = IS_IOS
+    ? ['Toque no botão <b>Compartilhar</b> <span style="display:inline-block;border:1px solid var(--border2);border-radius:6px;padding:0 6px">⬆︎</span> na barra do Safari.',
+       'Role a lista e toque em <b>Adicionar à Tela de Início</b>.',
+       'Confirme em <b>Adicionar</b>. O ícone do PPP aparece na sua tela, e o app abre em tela cheia.']
+    : ['Abra o menu do navegador (<b>⋮</b>, no canto superior).',
+       'Toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.',
+       'Confirme. O ícone do PPP aparece na sua tela, e o app abre em tela cheia.'];
+  wrap.innerHTML = `<div class="ov ov-center" id="install-ov"><div class="modal" style="max-width:420px">
+    <div class="mtitle">Instalar PPP Poker</div>
+    <div style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Use como um app de verdade: tela cheia, ícone na tela inicial e abertura mais rápida.</div>
+    <ol style="margin:0 0 14px 18px;padding:0;display:grid;gap:10px;font-size:14px;line-height:1.45">${steps.map(s=>`<li>${s}</li>`).join("")}</ol>
+    ${IS_IOS?`<div style="font-size:12.5px;color:var(--muted);background:var(--bg-dark);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">No iPhone, use o <b style="color:var(--text)">Safari</b>. As notificações só funcionam depois de instalar o app e abri-lo pelo ícone.</div>`:""}
+    <button class="btn by fw" id="install-close">Entendi</button>
+  </div></div>`;
+  const close = ()=>{ wrap.innerHTML=""; };
+  wrap.querySelector("#install-close").addEventListener("click", close);
+  wrap.querySelector("#install-ov").addEventListener("click", e=>{ if(e.target.id==="install-ov") close(); });
+}
+async function installApp(){
+  if(INSTALL_EVT){
+    const ev = INSTALL_EVT; INSTALL_EVT = null;      // o aviso só pode ser usado uma vez
+    try{ await ev.prompt(); await ev.userChoice; }catch(_){ openInstallHelp(); return; }
+    render();
+    return;
+  }
+  openInstallHelp();
+}
+function syncNavH(){ const n = document.querySelector(".nav"); if(n) document.documentElement.style.setProperty("--nav-h", n.offsetHeight+"px"); }
+window.addEventListener("resize", syncNavH);
 // MENU_OPEN declared in global state above
 
 function renderNav(){
@@ -3029,6 +3219,14 @@ function renderNav(){
       </div>
       ${TAB===t.id?'<div class="more-item-dot"></div>':""}
     </div>`).join("")}
+    ${canInstall()?`
+    <div class="more-item install" id="btn-install-app">
+      <span class="more-item-icon">${ICON_INSTALL}</span>
+      <div class="more-item-info">
+        <div class="more-item-label">Instalar PPP Poker</div>
+        <div class="more-item-sub">Tela cheia, ícone na tela inicial${IS_IOS?"":" e abertura rápida"}</div>
+      </div>
+    </div>`:""}
     <div class="more-safe"></div>
   </div>
 
@@ -6380,6 +6578,13 @@ function bindEvents(){
     else window.enableNotifications();
   });
   document.querySelectorAll("[data-tab]").forEach(btn=>{btn.addEventListener("click",()=>{TAB=btn.dataset.tab;EXPANDED=null;STAGE_DETAIL=null;MENU_OPEN=false;render();window.scrollTo(0,0);});});
+  document.getElementById("btn-install-app")?.addEventListener("click",()=>{
+    MENU_OPEN=false;
+    document.getElementById("more-menu")?.classList.remove("open");
+    document.getElementById("menu-backdrop")?.classList.remove("open");
+    document.getElementById("btn-more")?.classList.remove("menu-open");
+    installApp();
+  });
   document.getElementById("btn-more")?.addEventListener("click",e=>{
     e.stopPropagation();MENU_OPEN=!MENU_OPEN;
     document.getElementById("more-menu")?.classList.toggle("open",MENU_OPEN);
