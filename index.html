@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -189,13 +189,13 @@ select.inp{appearance:none;}
 
 /* ── RESPONSIVE: TABLET & DESKTOP (≥768px) ── */
 @media(min-width:768px){
-  body{background:var(--bg);}
+  html:not(.pl) body{background:var(--bg);}
 
   /* Layout shell */
-  #app{max-width:100%;padding-bottom:0;display:flex;min-height:100vh;}
+  html:not(.pl) #app{max-width:100%;padding-bottom:0;display:flex;min-height:100vh;}
 
   /* Sidebar */
-  .sidebar{
+  html:not(.pl) .sidebar{
     width:240px;flex-shrink:0;
     background:var(--bg-dark);
     border-right:2px solid var(--yellow);
@@ -203,20 +203,20 @@ select.inp{appearance:none;}
     display:flex;flex-direction:column;
     z-index:200;overflow-y:auto;
   }
-  .sb-logo{
+  html:not(.pl) .sb-logo{
     display:flex;align-items:center;gap:10px;
     padding:20px 18px 16px;
     border-bottom:1px solid var(--border);
   }
-  .sb-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;line-height:1;}
-  .sb-title .p1{color:#fff;font-size:22px;}
-  .sb-title .p2{color:#808080;font-size:22px;}
-  .sb-title .p3{color:#F5A800;font-size:22px;}
-  .sb-title .pk{color:#fff;font-size:15px;letter-spacing:2px;margin-left:4px;}
-  .sb-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-top:2px;}
-  .sb-nav{flex:1;padding:12px 0;}
-  .sb-section-label{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:10px 18px 6px;}
-  .sb-item{
+  html:not(.pl) .sb-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;line-height:1;}
+  html:not(.pl) .sb-title .p1{color:#fff;font-size:22px;}
+  html:not(.pl) .sb-title .p2{color:#808080;font-size:22px;}
+  html:not(.pl) .sb-title .p3{color:#F5A800;font-size:22px;}
+  html:not(.pl) .sb-title .pk{color:#fff;font-size:15px;letter-spacing:2px;margin-left:4px;}
+  html:not(.pl) .sb-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-top:2px;}
+  html:not(.pl) .sb-nav{flex:1;padding:12px 0;}
+  html:not(.pl) .sb-section-label{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:10px 18px 6px;}
+  html:not(.pl) .sb-item{
     display:flex;align-items:center;gap:12px;
     padding:11px 18px;cursor:pointer;
     border:none;background:none;width:100%;text-align:left;
@@ -224,81 +224,81 @@ select.inp{appearance:none;}
     font-size:15px;font-weight:700;letter-spacing:.5px;
     transition:all .15s;border-left:3px solid transparent;
   }
-  .sb-item:hover{color:var(--text);background:var(--surface);}
-  .sb-item.on{color:var(--yellow);background:rgba(245,168,0,.06);border-left-color:var(--yellow);}
-  .sb-item-icon{font-size:18px;width:24px;text-align:center;flex-shrink:0;}
-  .sb-badge{
+  html:not(.pl) .sb-item:hover{color:var(--text);background:var(--surface);}
+  html:not(.pl) .sb-item.on{color:var(--yellow);background:rgba(245,168,0,.06);border-left-color:var(--yellow);}
+  html:not(.pl) .sb-item-icon{font-size:18px;width:24px;text-align:center;flex-shrink:0;}
+  html:not(.pl) .sb-badge{
     margin-left:auto;background:var(--red);color:#fff;
     font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:1px;text-transform:uppercase;border-radius:2px;
   }
-  .sb-footer{
+  html:not(.pl) .sb-footer{
     padding:14px 18px;border-top:1px solid var(--border);
     font-size:11px;color:var(--muted);line-height:1.6;
   }
-  .sb-season{
+  html:not(.pl) .sb-season{
     font-family:'Barlow Condensed',sans-serif;font-size:13px;
     font-weight:700;color:var(--yellow);letter-spacing:1px;
     margin-bottom:2px;
   }
 
   /* Main content area */
-  .main-wrap{
+  html:not(.pl) .main-wrap{
     margin-left:240px;flex:1;
     max-width:960px;
     min-height:100vh;
   }
 
   /* Top bar (replaces mobile header) */
-  .topbar{
+  html:not(.pl) .topbar{
     background:var(--bg-dark);border-bottom:1px solid var(--border);
     padding:12px 28px;
     display:flex;align-items:center;justify-content:space-between;
     position:sticky;top:0;z-index:100;
   }
-  .topbar-title{
+  html:not(.pl) .topbar-title{
     font-family:'Barlow Condensed',sans-serif;font-weight:900;
     font-size:22px;color:#fff;letter-spacing:1px;text-transform:uppercase;
   }
-  .topbar-title .ac{color:var(--yellow);}
-  .topbar-right{display:flex;align-items:center;gap:10px;}
+  html:not(.pl) .topbar-title .ac{color:var(--yellow);}
+  html:not(.pl) .topbar-right{display:flex;align-items:center;gap:10px;}
 
   /* Content padding */
-  .sec{padding:24px 28px;}
-  .hero{padding:32px 28px 28px;}
+  html:not(.pl) .sec{padding:24px 28px;}
+  html:not(.pl) .hero{padding:32px 28px 28px;}
 
   /* Hide mobile nav, show sidebar */
-  .nav{display:none;}
-  .more-menu{display:none;}
-  .more-menu-backdrop{display:none;}
-  .hdr{display:none;}
+  html:not(.pl) .nav{display:none;}
+  html:not(.pl) .more-menu{display:none;}
+  html:not(.pl) .more-menu-backdrop{display:none;}
+  html:not(.pl) .hdr{display:none;}
 
   /* Home 2-column grid */
-  .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:24px 28px;}
-  .home-col{min-width:0;}
+  html:not(.pl) .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:24px 28px;}
+  html:not(.pl) .home-col{min-width:0;}
 
   /* Hero on desktop */
-  .hppp{font-size:64px;}
-  .hsts{gap:14px;}
-  .hst{padding:14px 10px;}
-  .hsv{font-size:28px;}
+  html:not(.pl) .hppp{font-size:64px;}
+  html:not(.pl) .hsts{gap:14px;}
+  html:not(.pl) .hst{padding:14px 10px;}
+  html:not(.pl) .hsv{font-size:28px;}
 
   /* Players grid - more columns */
-  .pgrid{grid-template-columns:repeat(3,1fr);}
+  html:not(.pl) .pgrid{grid-template-columns:repeat(3,1fr);}
 
   /* Wider modal */
-  .ov{align-items:center;}
-  .modal{max-width:560px;border-radius:6px;max-height:80vh;}
+  html:not(.pl) .ov{align-items:center;}
+  html:not(.pl) .modal{max-width:560px;border-radius:6px;max-height:80vh;}
 
   /* Rank rows hover */
-  .rr:hover{background:var(--surface2);cursor:default;}
-  .sgh:hover{background:var(--surface2);}
-  .pcrd:hover{border-color:var(--yellow);}
+  html:not(.pl) .rr:hover{background:var(--surface2);cursor:default;}
+  html:not(.pl) .sgh:hover{background:var(--surface2);}
+  html:not(.pl) .pcrd:hover{border-color:var(--yellow);}
 }
 
 @media(min-width:1200px){
-  .sidebar{width:260px;}
-  .main-wrap{margin-left:260px;max-width:1100px;}
-  .pgrid{grid-template-columns:repeat(4,1fr);}
+  html:not(.pl) .sidebar{width:260px;}
+  html:not(.pl) .main-wrap{margin-left:260px;max-width:1100px;}
+  html:not(.pl) .pgrid{grid-template-columns:repeat(4,1fr);}
 }
 
 /* LOGIN SCREEN */
@@ -309,6 +309,7 @@ select.inp{appearance:none;}
   .login-box{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:40px;max-width:440px;box-shadow:0 24px 60px rgba(0,0,0,.5);}
   .login-box .login-logo{margin-bottom:28px;}
   .login-box .login-title{font-size:32px;}
+  .login-wrap{overflow-y:auto;}
 }
 .login-logo{text-align:center;margin-bottom:32px;}
 .login-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;color:#fff;letter-spacing:1px;margin-bottom:4px;text-transform:uppercase;}
@@ -346,6 +347,20 @@ select.inp{appearance:none;}
 .podium-base.p3{height:42px;background:linear-gradient(180deg,rgba(205,127,50,.15) 0%,rgba(205,127,50,.05) 100%);border:1px solid rgba(205,127,50,.2);border-bottom:none}
 
 .sb-lbl{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;padding:10px 20px 0;}
+/* Zoom por pinça liberado: evita o zoom automático do iOS ao focar campos (ele só ocorre com fonte < 16px)
+   e o zoom por toque duplo em botões (ação rápida do admin) sem bloquear o zoom por pinça. */
+html{touch-action:manipulation;}
+@media (pointer:coarse){ input,select,textarea{font-size:16px!important;} }
+
+/* Celular deitado (largura de tablet, altura baixa): layout de celular com barra inferior mais baixa */
+@media (orientation:landscape) and (max-height:499px){
+  .hdr{padding:6px 16px;}
+  .nav .ni{font-size:15px;}
+  .nl{font-size:8px;}
+  #app{padding-bottom:58px;max-width:720px;}
+  .nav{max-width:720px;}
+}
+
 /* ── TOQUE E LEITURA (celular/tablet) ───────────────────────────────────────────
    Alvos de toque de pelo menos ~40px (Apple recomenda 44, Android 48) e rótulos não menores que 10px. */
 .rvl,.psl,.hsl{font-size:10px;}
@@ -1833,7 +1848,9 @@ function showToast(msg, color){
   clearTimeout(t._timer);
   t._timer=setTimeout(function(){t.style.opacity='0';},2500);
 }
-const IS_DESKTOP = () => window.innerWidth >= 768;   // igual ao CSS (min-width:768px): em 768px exatos (iPad 9.7"/mini) antes o JS montava o layout de celular com CSS de tablet e sumia a navegação
+// Celular deitado (lado curto da tela < 500px) usa o layout de celular com barra inferior: a barra lateral comia 240px de largura e sobrava pouca altura.
+const IS_PHONE_LAND = () => window.innerWidth >= 768 && Math.min(screen.width||9999, screen.height||9999) < 500;
+const IS_DESKTOP = () => window.innerWidth >= 768 && !IS_PHONE_LAND();   // igual ao CSS (min-width:768px): em 768px exatos (iPad 9.7"/mini) antes o JS montava o layout de celular com CSS de tablet e sumia a navegação
 
 function getP(uid){ return DB.players.find(p=>p.uid===uid); }
 
@@ -2498,6 +2515,7 @@ function render(){
       bindProfileSetup();
       return;
     }
+    document.documentElement.classList.toggle("pl", IS_PHONE_LAND());
     dbg("render() TAB="+TAB+" desktop="+IS_DESKTOP());
     let html = "";
     if(IS_DESKTOP()){
