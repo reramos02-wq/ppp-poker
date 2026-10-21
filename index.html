@@ -781,6 +781,12 @@ html:not(.pl) .hsv{font-size:32px;}
 .stx-chips{max-height:92px;overflow-y:auto;}
 .stx-chip em{font-style:normal;opacity:.55;margin-left:2px;}
 .stx-none{font-size:13px;color:var(--muted);padding:10px 12px;}
+.stx-more{display:block;width:100%;margin-top:6px;padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.stx-more:active{transform:scale(.985);}
+.stx-bar{display:flex;}
+.stx-bar b:first-child{border-radius:99px 0 0 99px;}
+.stx-bar b:last-child{border-radius:0 99px 99px 0;}
+.stx-bar b:only-child{border-radius:99px;}
 .stx-mvl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px;}
 .ftpill{align-self:center;margin-left:6px;font-family:var(--f-d);font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#FFD25E;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.28);border-radius:999px;padding:1px 7px;line-height:1.5;white-space:nowrap;}
 .home-top{padding:0;}
@@ -3780,17 +3786,29 @@ function statsWire(box){
   const inp = box.querySelector("#stx-q");
   if(inp){ inp.oninput = ()=>{ STATS_Q = inp.value; statsDyn(); }; inp.onfocus = ()=>{ if(!STATS_OPEN){ STATS_OPEN=true; statsDyn(); } }; }
 }
-function statsBars(items, fmt){
+let STATS_EXP = {}, STATS_FN = {};
+const STATS_MEDAL = ["#FFD700","#C4CBD6","#CD7F32"];   // ouro, prata, bronze
+function statsRowsHtml(key){
+  const f = STATS_FN[key]; if(!f) return "";
+  const {items, fmt, seg} = f, open = !!STATS_EXP[key], list = open ? items : items.slice(0,10);
   if(!items.length) return '<div style="font-size:13px;color:var(--muted)">Ainda sem dados.</div>';
-  const mx = Math.max(1, ...items.map(i=>i.v));
-  return items.map(i=>`<div class="stx-row" data-profile="${i.uid}">${AV(i.uid)}<span class="stx-n">${statsNick(i.uid)}</span><span class="stx-bar"><b style="width:${Math.round(i.v/mx*100)}%"></b></span><span class="stx-val">${fmt(i)}</span></div>`).join("");
+  const mx = Math.max(1, ...items.map(i=>seg ? i.seg[0]+i.seg[1]+i.seg[2] : i.v));
+  const bar = i => seg
+    ? `<span class="stx-bar">${i.seg.map((n,k)=>n?`<b style="width:${n/mx*100}%;background:${STATS_MEDAL[k]}"></b>`:"").join("")}</span>`
+    : `<span class="stx-bar"><b style="width:${Math.round(i.v/mx*100)}%"></b></span>`;
+  return list.map(i=>`<div class="stx-row" data-profile="${i.uid}">${AV(i.uid)}<span class="stx-n">${statsNick(i.uid)}</span>${bar(i)}<span class="stx-val">${fmt(i)}</span></div>`).join("") +
+    (items.length>10 ? `<button class="stx-more" data-stx-exp="${key}">${open ? "Reduzir lista" : `Ver todos (${items.length})`}</button>` : "");
+}
+function statsBars(items, fmt, key, seg){
+  STATS_FN[key] = {items, fmt, seg};
+  return `<div id="stx-l-${key}">${statsRowsHtml(key)}</div>`;
 }
 function renderStats(){
   const X = statsExtras(DB.stages, DB.players, ACTIVE_SEASON);
   const rows = X.rows, tot = X.total;
   const by = (k)=>rows.slice().sort((a,b)=>b[k]-a[k]||b.played-a.played);
   const ft = by("ft").map(o=>({uid:o.uid, v:o.ft, o}));
-  const pod = rows.map(o=>({uid:o.uid, v:o.wins*3+o.p2*2+o.p3, o})).filter(i=>i.o.wins+i.o.p2+i.o.p3>0).sort((a,b)=>b.v-a.v);
+  const pod = rows.map(o=>({uid:o.uid, v:o.wins*3+o.p2*2+o.p3, seg:[o.wins,o.p2,o.p3], o})).filter(i=>i.o.wins+i.o.p2+i.o.p3>0).sort((a,b)=>b.v-a.v);
   const ko = by("ko").filter(o=>o.ko>0).map(o=>({uid:o.uid, v:o.ko, o}));
   const pres = by("played").map(o=>({uid:o.uid, v:o.played, o}));
   const mv = (m,txt)=> m ? `<div class="stx-row" data-profile="${m.uid}">${AV(m.uid)}<span class="stx-n">${statsNick(m.uid)}</span><span class="stx-val" style="flex:1;text-align:right;color:${m.d>0?"var(--green)":"var(--red)"}">${m.d>0?"▲":"▼"} ${Math.abs(m.d)} posiç${Math.abs(m.d)>1?"ões":"ão"} · E${m.i+1}</span></div>` : `<div style="font-size:13px;color:var(--muted)">${txt}</div>`;
@@ -3798,12 +3816,12 @@ function renderStats(){
     <button id="btn-stats-back" class="btn bo mb10" style="font-size:12px">‹ Voltar</button>
     <div class="st">Estatís<span class="ac">ticas</span></div><div class="ss">Temporada ${ACTIVE_SEASON} · atualiza a cada etapa concluída</div><div class="dv"></div>
     <div class="stx-card" id="stx-chart-card"></div>
-    <div class="stx-card"><div class="stx-h">Mesas finais</div><div class="stx-sub">Vezes no top 9 da etapa (de ${tot} etapa${tot!==1?"s":""})</div>${statsBars(ft,i=>`${i.o.ft} de ${i.o.played} · ${Math.round(i.o.ft/i.o.played*100)}%`)}</div>
-    <div class="stx-card"><div class="stx-h">Vitórias e pódios</div><div class="stx-sub">1º · 2º · 3º lugares</div>${statsBars(pod,i=>`${i.o.wins} · ${i.o.p2} · ${i.o.p3}`)}</div>
+    <div class="stx-card"><div class="stx-h">Mesas finais</div><div class="stx-sub">Vezes no top 9 da etapa (de ${tot} etapa${tot!==1?"s":""})</div>${statsBars(ft,i=>`${i.o.ft} de ${i.o.played} · ${Math.round(i.o.ft/i.o.played*100)}%`,"ft")}</div>
+    <div class="stx-card"><div class="stx-h">Vitórias e pódios</div><div class="stx-sub">1º · 2º · 3º lugares</div>${statsBars(pod,i=>`<span style="color:${STATS_MEDAL[0]}">${i.o.wins}</span> · <span style="color:${STATS_MEDAL[1]}">${i.o.p2}</span> · <span style="color:${STATS_MEDAL[2]}">${i.o.p3}</span>`,"pod",true)}</div>
     <div class="stx-card"><div class="stx-h">Maiores variações</div><div class="stx-sub">Entre duas etapas seguidas no ranking geral</div>
       <div class="stx-mvl">Maior subida</div>${mv(X.rise,"Ainda sem subidas.")}<div class="stx-mvl">Maior queda</div>${mv(X.fall,"Ainda sem quedas.")}</div>
-    ${ko.length?`<div class="stx-card"><div class="stx-h">Knockouts</div><div class="stx-sub">Total na temporada (só estatística, não soma pontos)</div>${statsBars(ko,i=>`${i.o.ko} KO${i.o.ko!==1?"s":""}`)}</div>`:""}
-    <div class="stx-card"><div class="stx-h">Presença</div><div class="stx-sub">Etapas jogadas</div>${statsBars(pres,i=>`${i.o.played} de ${tot} · ${Math.round(i.o.played/Math.max(tot,1)*100)}%`)}</div>
+    ${ko.length?`<div class="stx-card"><div class="stx-h">Knockouts</div><div class="stx-sub">Total na temporada (só estatística, não soma pontos)</div>${statsBars(ko,i=>`${i.o.ko} KO${i.o.ko!==1?"s":""}`,"ko")}</div>`:""}
+    <div class="stx-card"><div class="stx-h">Presença</div><div class="stx-sub">Etapas jogadas</div>${statsBars(pres,i=>`${i.o.played} de ${tot} · ${Math.round(i.o.played/Math.max(tot,1)*100)}%`,"pres")}</div>
   </div>`;
 }
 
@@ -8240,6 +8258,10 @@ function bindEvents(){
   document.getElementById("btn-ft-prize-back")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=false; render(); });
   document.getElementById("btn-stats-open")?.addEventListener("click",()=>{ TAB="ranking"; STATS_VIEW=true; FT_PRIZE_VIEW=false; render(); window.scrollTo(0,0); });
   document.getElementById("btn-stats-back")?.addEventListener("click",()=>{ STATS_VIEW=false; render(); });
+  document.querySelectorAll("[id^=stx-l-]").forEach(box=>box.addEventListener("click",e=>{
+    const b=e.target.closest("[data-stx-exp]"); if(!b) return; e.stopPropagation();
+    const k=b.dataset.stxExp; STATS_EXP[k]=!STATS_EXP[k]; box.innerHTML=statsRowsHtml(k);
+  }));
   if(document.getElementById("stx-chart-card")) statsRefresh();
 
   // FT Prize: admin inline edit per stage — saves to stage.ftContribution
