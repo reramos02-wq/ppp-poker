@@ -1741,6 +1741,23 @@ async function saveStages(){
   }
 }
 
+// Nome/apelido: tira espaços sobrando, "|" (separador interno do cadastro) e caracteres de controle; limita o tamanho.
+function cleanName(s, max){
+  return String(s||"").replace(/[\u0000-\u001f\u007f|]/g," ").replace(/\s+/g," ").trim().slice(0, max||60);
+}
+// Troca um uid por outro em TUDO que a etapa guarda (inscrições, resultados, buy-ins, cash game, rascunhos…),
+// tanto em valores quanto em chaves de objetos. Devolve novo objeto; não altera o original.
+function remapUidDeep(v, oldUid, newUid){
+  if(v === oldUid) return newUid;
+  if(Array.isArray(v)) return v.map(x=>remapUidDeep(x, oldUid, newUid));
+  if(v && typeof v === "object" && !(v instanceof Date)){
+    const o = {};
+    for(const k of Object.keys(v)) o[k===oldUid ? newUid : k] = remapUidDeep(v[k], oldUid, newUid);
+    return o;
+  }
+  return v;
+}
+
 // Non-admin save — only updates players array (new user profile)
 // SAFE: reads current Firestore data first to avoid overwriting other players
 async function savePlayers(){
@@ -1752,7 +1769,7 @@ async function savePlayers(){
       const existingPlayers = current.players||[];
       const myUid = CURRENT_USER_UID;
       const myPlayer = DB.players.find(p=>p.uid===myUid);
-      if(!myPlayer) return;
+      if(!myPlayer) return false;
       const merged = existingPlayers.map(p=>{
         if(p.uid!==myUid) return p;
         // Merge fcmTokens: union of Firestore tokens + local tokens, deduplicated.
@@ -1765,14 +1782,17 @@ async function savePlayers(){
       });
       if(!merged.find(p=>p.uid===myUid)) merged.push(myPlayer);
       await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
-        players: merged,
+        players: sanitizePlayers(merged),
         updatedAt: serverTimestamp()
       });
       // Update local DB to stay in sync
       DB.players = merged;
+      setBaseline(DB.players, DB.stages, DB.admins);
     }
+    return true;
   } catch(e){
     console.error("savePlayers error:", e);
+    return false;
   }
 }
 
@@ -2545,17 +2565,16 @@ function renderProfileModal(){
     const file = e.target.files[0];
     if(!file) return;
     const statusEl = box.querySelector("#meu-av-status");
+    if(!/^image\//.test(file.type||"") || file.size > 20*1024*1024){
+      if(statusEl) statusEl.textContent = "❌ Escolha uma imagem de até 20 MB.";
+      return;
+    }
     if(statusEl) statusEl.textContent = "⏳ Enviando...";
     try {
       const url = await uploadPhoto(file, `avatars/${CURRENT_USER_UID}`);
-      const newPlayers = DB.players.map(pl=>{
-        if(pl.uid===CURRENT_USER_UID) return {...pl, photoURL:url};
-        return pl;
-      });
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
-        players: newPlayers, updatedAt: serverTimestamp()
-      });
-      DB.players = newPlayers;
+      const prevPlayers = DB.players;
+      DB.players = DB.players.map(pl=> pl.uid===CURRENT_USER_UID ? {...pl, photoURL:url} : pl);
+      try{ await commitDB(); } catch(e){ DB.players = prevPlayers; throw e; }
       if(CURRENT_PLAYER) CURRENT_PLAYER.photoURL = url;
       // Update avatar circle visually
       const avCircle = box.querySelector("#meu-av-circle");
@@ -2578,8 +2597,8 @@ function renderProfileModal(){
     wrap.innerHTML="";
   });
   box.querySelector("#pf-save").addEventListener("click", async()=>{
-    const name = box.querySelector("#pf-name").value.trim();
-    const nick = box.querySelector("#pf-nick").value.trim();
+    const name = cleanName(box.querySelector("#pf-name").value, 60);
+    const nick = cleanName(box.querySelector("#pf-nick").value, 30);
     const pass  = box.querySelector("#pf-pass").value;
     const pass2 = box.querySelector("#pf-pass2").value;
     const errEl = box.querySelector("#pf-err");
@@ -2589,6 +2608,10 @@ function renderProfileModal(){
       // Validate
       if(!name){ errEl.innerHTML='<div class="err-msg">Nome não pode ficar vazio.</div>'; return; }
       if(!nick){ errEl.innerHTML='<div class="err-msg">Apelido não pode ficar vazio.</div>'; return; }
+      const nickKey = s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+      if(DB.players.some(pl=>pl.uid!==u.uid && nickKey(pl.nickname)===nickKey(nick))){
+        errEl.innerHTML='<div class="err-msg">Já existe um jogador com esse apelido. Escolha outro.</div>'; return;
+      }
 
       const saveBtn = box.querySelector("#pf-save");
       saveBtn.disabled = true;
@@ -2620,7 +2643,13 @@ function renderProfileModal(){
       showToast("Perfil atualizado!","green");
       render();
     }catch(e){
-      errEl.innerHTML='<div class="err-msg">Erro: '+e.message+'</div>';
+      const friendly = {
+        "auth/requires-recent-login": "Por segurança, saia da conta, entre de novo e repita a troca de senha.",
+        "auth/weak-password": "Senha muito curta. Use ao menos 6 caracteres.",
+        "auth/network-request-failed": "Sem conexão. Tente novamente."
+      };
+      errEl.innerHTML='<div class="err-msg">'+(friendly[e.code]||("Erro: "+e.message))+'</div>';
+      const sb = box.querySelector("#pf-save"); if(sb){ sb.disabled=false; sb.textContent="✓ Salvar"; }   // antes ficava travado em "Salvando..."
     }
   });
 }
@@ -5976,7 +6005,7 @@ function bindProfileSetup(){
         DB.players.push(p);
         CURRENT_PLAYER = p;
       }
-      await savePlayers();
+      if(!(await savePlayers())) throw new Error("não foi possível salvar. Verifique a conexão e tente de novo.");
       render();
     } catch(e){
       errEl.innerHTML = `<div class="err-msg">Erro: ${e.message}</div>`;
@@ -6056,8 +6085,8 @@ function bindLoginEvents(){
 
   // Signup
   document.getElementById("btn-signup")?.addEventListener("click", async()=>{
-    const name  = document.getElementById("auth-name")?.value.trim();
-    const nick  = document.getElementById("auth-nick")?.value.trim();
+    const name  = cleanName(document.getElementById("auth-name")?.value, 60);
+    const nick  = cleanName(document.getElementById("auth-nick")?.value, 30);
     const email = document.getElementById("auth-email")?.value.trim();
     const pass  = document.getElementById("auth-pass")?.value;
     if(!name){ showLoginError("auth/missing-name"); return; }
@@ -7356,15 +7385,8 @@ function bindEvents(){
 
       // Update stages if UID changed
       if(finalUid !== oldUid){
-        let stFixed=0;
-        stages = stages.map(s=>{
-          let mod=false;
-          const results=(s.results||[]).map(r=>{ if(r.playerId===oldUid){mod=true;return{...r,playerId:finalUid};} return r;});
-          const ins=(s.inscriptions||[]).map(u=>{ if(u===oldUid){mod=true;return finalUid;} return u;});
-          if(mod){stFixed++;return{...s,results,inscriptions:ins};}
-          return s;
-        });
-        /* stages updated */
+        // troca em tudo: inscrições, resultados, buy-ins, cash game (inclui chaves), rascunhos…
+        stages = stages.map(s=>remapUidDeep(s, oldUid, finalUid));
       }
 
       // Dedup
@@ -7709,7 +7731,7 @@ onAuthStateChanged(auth, async (user) => {
 // ── ENSURE PLAYER PROFILE ─────────────────────────────────────────────────────
 async function ensurePlayerProfile(user){
   let player = DB.players.find(p=>p.uid===user.uid);
-  let needsSave = false;
+  let needsSave = false, relinked = false;
 
   if(!player){
     // 1. Match by email
@@ -7726,7 +7748,8 @@ async function ensurePlayerProfile(user){
         ? user.displayName.split("|")[0].trim()
         : user.displayName;
       const normDisplay = norm(rawDisplay);
-      player = DB.players.find(p=>{
+      const nameMatches = DB.players.filter(p=>{
+        if(!String(p.uid||"").startsWith("p_")) return false;   // só jogadores pré-cadastrados sem login; nunca "rouba" conta já vinculada
         const normName = norm(p.name||"");
         // Full name match
         if(normName === normDisplay) return true;
@@ -7738,11 +7761,18 @@ async function ensurePlayerProfile(user){
         }
         return false;
       });
+      if(nameMatches.length===1) player = nameMatches[0];   // ambíguo (2+ iguais) → não vincula sozinho; vira perfil novo
     }
 
     if(player){
       // Link Firebase uid — user's own data ALWAYS wins over pre-created seed data
+      const prevUid = player.uid;
       player.uid   = user.uid;
+      if(prevUid && prevUid !== user.uid){
+        // o histórico do jogador pré-cadastrado (inscrições, resultados, buy-ins, cash) passa para o uid real
+        DB.stages = DB.stages.map(s=>remapUidDeep(s, prevUid, user.uid));
+        relinked = true;
+      }
       player.email = user.email || player.email;
 
       let rawName = (user.displayName||"").trim();
@@ -7802,7 +7832,8 @@ async function ensurePlayerProfile(user){
 
   if(needsSave){
     try {
-      await savePlayers(); // updateDoc — works for all authenticated users
+      if(relinked) await commitDB();   // jogadores + etapas juntos (mescla com o servidor)
+      else await savePlayers();        // só o perfil
     } catch(e){ console.warn("Profile save:", e.message); }
   }
   CURRENT_PLAYER = player;
