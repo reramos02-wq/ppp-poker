@@ -3724,6 +3724,7 @@ function statsExtras(stages, players, season){
 }
 // ── STATS (fim) ──
 
+const RECAP_DAYS = 5;   // o banner da Início fica do dia seguinte até o 5º dia após a etapa
 // ── RESUMO (início) ── resumo pós-etapa: tudo derivado dos resultados publicados, aparece sozinho (nenhuma ação de admin)
 // Etapa a resumir: a última etapa finalizada, no dia seguinte e no seguinte a ele; se o resultado só foi publicado depois (atrasado),
 // aparece por 36h a partir da publicação.
@@ -3735,7 +3736,7 @@ function recapPick(stages, season, now){
   const days = Math.round((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate()) - Date.UTC(y,m-1,d))/86400000);
   const pub = Number(st.publishedAt)||0;
   const late = pub>0 && days>=1 && (now.getTime()-pub) < 36*3600*1000;
-  return (days===1 || days===2 || late) ? st : null;
+  return ((days>=1 && days<=RECAP_DAYS) || late) ? st : null;
 }
 // prizeInfo (opcional): {prize, bounty} do campeão, calculado por quem chama (o cálculo financeiro fica fora deste bloco puro)
 function buildRecap(stages, players, season, st, prizeInfo){
@@ -4011,8 +4012,8 @@ const RECAP_LBL = {geral:"Geral", nlholdem:"NL Hold'em", knockout:"PKO"};
 const recapType = t => t==="knockout" ? "PKO" : "NL Hold'em";
 const recapNames = l => l.map(u=>statsNick(u)).join(", ");
 // Dados do resumo atual (ou null fora da janela). O prêmio é calculado numa CÓPIA da etapa, para não gravar dados financeiros padrão na etapa real.
-function recapCurrent(){
-  const st = recapPick(DB.stages, ACTIVE_SEASON, new Date()); if(!st) return null;
+function recapCurrent(sid){
+  const st = sid ? DB.stages.find(x=>x.id===sid && x.status==="finished" && (x.results||[]).length) : recapPick(DB.stages, ACTIVE_SEASON, new Date()); if(!st) return null;
   let prizeInfo = null;
   try{
     const ghost = {...st, finance: st.finance ? JSON.parse(JSON.stringify(st.finance)) : undefined};
@@ -4025,8 +4026,8 @@ function recapCurrent(){
   return buildRecap(DB.stages, DB.players, ACTIVE_SEASON, st, prizeInfo);
 }
 const recapMove = m => `${statsNick(m.uid)} <b style="color:${m.d>0?"var(--green)":"var(--red)"}">${m.d>0?"▲":"▼"} ${Math.abs(m.d)}</b> <span class="rcp-dim">(${m.from}º › ${m.to}º)</span>`;
-function renderRecapBanner(){
-  const r = recapCurrent(); if(!r) return "";
+function renderRecapBanner(sid){
+  const r = recapCurrent(sid); if(!r) return "";
   const pod = r.podium.map((p,i)=>`<div class="rcp-pod"><span class="rcp-m" style="--m:${RECAP_MEDAL[i]}">${p.pos}º</span>${AV(p.uid)}<span class="rcp-pn">${statsNick(p.uid)}</span><span class="rcp-pp">${p.pts} pts${r.ko&&p.ko?` · ${p.ko} KO`:""}</span></div>`).join("");
   const lead = ["geral","nlholdem","knockout"].filter(t=>r.leaders[t]).map(t=>{ const l=r.leaders[t]; return `<div class="rcp-ld"><span class="rcp-dim">${RECAP_LBL[t]}</span><b>${statsNick(l.uid)}</b><span class="rcp-dim">${l.pts} pts${l.changed?' · <em>novo líder</em>':""}</span></div>`; }).join("");
   const rows = [];
@@ -4045,7 +4046,7 @@ function renderRecapBanner(){
     ${lead?`<div class="rcp-lds">${lead}</div>`:""}
     ${rows.join("")}
     <div class="rcp-facts">${facts.join(" · ")}</div>
-    <button class="btn by fw rcp-btn" id="btn-recap-share">Compartilhar resumo</button>
+    <button class="btn by fw rcp-btn" data-recap-share="${r.stage.id}">Compartilhar resumo</button>
   </div>`;
 }
 // Texto puro do resumo (e-mail, WhatsApp)
@@ -4119,8 +4120,8 @@ function recapImageHtml(r, photos){
     <div style="text-align:center;margin-top:20px;font-size:12px;letter-spacing:1.5px;color:#5d5d68">ppp-poker.vercel.app</div>
   </div>`;
 }
-async function openRecapModal(){
-  const r = recapCurrent(); if(!r) return;
+async function openRecapModal(sid){
+  const r = recapCurrent(sid); if(!r) return;
   const wrap = document.getElementById("result-modal"); wrap.innerHTML = "";
   const ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
@@ -4255,6 +4256,8 @@ function renderStageDetail(sid){
         </div>`:""}
       </div>
     </div>
+
+    ${s.status==="finished"?renderRecapBanner(s.id):""}
 
     <!-- Rules card (only if any rule exists) -->
     ${s.buyin||s.rebuy||s.addon||s.timechip?`
@@ -8630,7 +8633,7 @@ function bindEvents(){
   document.getElementById("btn-ft-prize")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; render(); });
   document.getElementById("btn-ft-prize-home")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; TAB="ranking"; render(); });
   document.getElementById("btn-ft-prize-back")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=false; render(); });
-  document.getElementById("btn-recap-share")?.addEventListener("click",()=>openRecapModal());
+  document.querySelectorAll("[data-recap-share]").forEach(b=>b.addEventListener("click",()=>openRecapModal(b.dataset.recapShare)));
   document.getElementById("btn-stats-open")?.addEventListener("click",()=>{ TAB="ranking"; STATS_VIEW=true; FT_PRIZE_VIEW=false; render(); window.scrollTo(0,0); });
   document.getElementById("btn-stats-back")?.addEventListener("click",()=>{ STATS_VIEW=false; render(); });
   document.querySelectorAll("[id^=stx-l-]").forEach(box=>box.addEventListener("click",e=>{

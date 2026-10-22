@@ -2,7 +2,7 @@
 import fs from 'node:fs'; import vm from 'node:vm'; import assert from 'node:assert/strict';
 const h = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 const cut = (a, b) => h.slice(h.indexOf(a), h.indexOf(b));
-const src = [cut('const POINTS_TABLE', '// ── APP STATE'), cut('// ── TIEBREAKER', '// ── FINANCIAL RANKING'), cut('// ── STATS (início)', '// ── STATS (fim)'), cut('// ── RESUMO (início)', '// ── RESUMO (fim)')].join('\n');
+const src = ['const RECAP_DAYS = 5;',cut('const POINTS_TABLE', '// ── APP STATE'), cut('// ── TIEBREAKER', '// ── FINANCIAL RANKING'), cut('// ── STATS (início)', '// ── STATS (fim)'), cut('// ── RESUMO (início)', '// ── RESUMO (fim)')].join('\n');
 const ctx = { DB:{players:[],stages:[]}, ACTIVE_SEASON:'2026', console }; vm.createContext(ctx);
 vm.runInContext(src + ';this.f={recapPick,buildRecap,calcRankGeral}', ctx); const f = ctx.f;
 const J = o => JSON.parse(JSON.stringify(o));
@@ -19,7 +19,8 @@ const at = (y,m,d,hh=10) => new Date(y,m-1,d,hh,0,0);
 assert.equal(f.recapPick(S,'2026',at(2026,10,21)), null, 'mesmo dia: não aparece');
 assert.equal(f.recapPick(S,'2026',at(2026,10,22)).id, '2', 'dia seguinte: aparece');
 assert.equal(f.recapPick(S,'2026',at(2026,10,23)).id, '2', 'dia+2: aparece');
-assert.equal(f.recapPick(S,'2026',at(2026,10,24)), null, 'dia+3: some');
+assert.equal(f.recapPick(S,'2026',at(2026,10,26)).id, '2', 'dia+5: aparece');
+assert.equal(f.recapPick(S,'2026',at(2026,10,27)), null, 'dia+6: some');
 assert.equal(f.recapPick(S,'2026',at(2026,10,12)), null, 'etapa 1 antiga não aparece');
 // publicação tardia: dentro de 36h
 const S2 = J(S); S2[1].publishedAt = at(2026,10,27,9).getTime();
