@@ -799,6 +799,28 @@ html:not(.pl) .hsv{font-size:32px;}
 .stf-prev{margin:4px 0 14px;padding:10px 12px;border-radius:10px;background:var(--bg-dark);border:1px dashed var(--border2);font-size:12.5px;line-height:1.6;color:var(--muted);}
 .stf-prev b{color:#fff;font-weight:600;}
 .stf-pt{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;}
+.rcp{margin-bottom:14px;padding:16px;border-radius:var(--r);border:1px solid rgba(248,183,11,.4);background:linear-gradient(160deg,rgba(248,183,11,.13),rgba(248,183,11,.02) 55%),var(--surface);}
+.rcp-h{display:flex;flex-direction:column;gap:2px;margin-bottom:12px;}
+.rcp-t{font-family:var(--f-d);font-weight:800;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--yellow);}
+.rcp-s{font-family:var(--f-d);font-weight:800;font-size:17px;color:#fff;line-height:1.2;}
+.rcp-pods{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+.rcp-pod{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:12px;background:var(--surface2);border-top:3px solid var(--m);min-width:0;}
+.rcp-m{font-family:var(--f-d);font-weight:800;font-size:12px;color:var(--m);}
+.rcp-pn{font-weight:700;font-size:13.5px;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rcp-pp{font-size:11.5px;color:var(--muted);}
+.rcp-prize{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(248,183,11,.12);border:1px solid rgba(248,183,11,.35);margin-bottom:10px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#FFD25E;}
+.rcp-prize b{font-family:var(--f-d);font-size:18px;letter-spacing:0;text-transform:none;}
+.rcp-prize small{display:block;font-size:10.5px;font-weight:600;color:var(--muted);text-align:right;}
+.rcp-lds{display:grid;gap:6px;margin-bottom:10px;}
+.rcp-ld{display:flex;align-items:baseline;gap:8px;font-size:13.5px;}
+.rcp-ld>span:first-child{flex:0 0 78px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
+.rcp-ld b{color:#fff;}
+.rcp-ld em{font-style:normal;color:var(--yellow);}
+.rcp-dim{color:var(--muted);}
+.rcp-row{display:flex;flex-direction:column;gap:2px;font-size:13px;margin-bottom:8px;color:var(--text);}
+.rcp-k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+.rcp-facts{font-size:12px;color:var(--muted);margin:4px 0 12px;line-height:1.5;}
+.rcp-btn{font-size:14px;}
 .stx-mvl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px;}
 .ftpill{align-self:center;margin-left:6px;font-family:var(--f-d);font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#FFD25E;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.28);border-radius:999px;padding:1px 7px;line-height:1.5;white-space:nowrap;}
 .home-top{padding:0;}
@@ -3565,6 +3587,7 @@ function renderHomeDesktop(){
 
   return `<div>
     ${heroHtml}
+    <div style="padding:20px 28px 0">${renderRecapBanner()}</div>
     <div class="home-top">${heroCard}${geralTop.length?renderFTPrizeBanner():""}</div>
     <div class="home-grid" style="margin-bottom:16px">${colNL}${colKO}</div>
     <div class="home-grid">${colGeral}${colHOF}</div>
@@ -3591,6 +3614,7 @@ function renderHome(){
   </div>
   <div style="padding:16px">
     ${renderClockBanner()}
+    ${renderRecapBanner()}
     ${next?`<div class="card cy mb10" style="cursor:pointer;border-left:4px solid ${isLive(next)?'var(--red)':'var(--yellow)'}" data-goto-expand="${next.id}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <div style="font-size:10px;color:var(--yellow);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700">📅 Próxima Etapa</div>
@@ -3699,6 +3723,63 @@ function statsExtras(stages, players, season){
   return {rows, total:fin.length, rise, fall, cols:D.cols};
 }
 // ── STATS (fim) ──
+
+// ── RESUMO (início) ── resumo pós-etapa: tudo derivado dos resultados publicados, aparece sozinho (nenhuma ação de admin)
+// Etapa a resumir: a última etapa finalizada, no dia seguinte e no seguinte a ele; se o resultado só foi publicado depois (atrasado),
+// aparece por 36h a partir da publicação.
+function recapPick(stages, season, now){
+  const fin = stages.filter(s=>(s.season===season||!s.season) && s.status==="finished" && (s.results||[]).length && s.date)
+    .slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  const st = fin[fin.length-1]; if(!st) return null;
+  const [y,m,d] = st.date.split("-").map(Number);
+  const days = Math.round((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate()) - Date.UTC(y,m-1,d))/86400000);
+  const pub = Number(st.publishedAt)||0;
+  const late = pub>0 && days>=1 && (now.getTime()-pub) < 36*3600*1000;
+  return (days===1 || days===2 || late) ? st : null;
+}
+// prizeInfo (opcional): {prize, bounty} do campeão, calculado por quem chama (o cálculo financeiro fica fora deste bloco puro)
+function buildRecap(stages, players, season, st, prizeInfo){
+  const res = (st.results||[]).slice().sort((a,b)=>a.position-b.position);
+  const ordered = statsOrder(stages, season);
+  const idx = ordered.findIndex(s=>s.id===st.id);          // -1 = mesa final (fora do ranking)
+  const isFinal = idx<0;
+  const withRes = s => s.status==="finished" && (s.results||[]).length;
+  const upTo = isFinal ? ordered.filter(withRes) : ordered.slice(0,idx+1).filter(withRes);
+  const before = isFinal ? upTo : upTo.filter(s=>s.id!==st.id);
+  const lead = (list, type) => { const r = statsRankAfter(type==="geral" ? list : list.filter(s=>s.type===type), players); return r[0] ? {uid:r[0].uid, pts:r[0].total} : null; };
+  const leaders = {};
+  ["geral","nlholdem","knockout"].forEach(t=>{
+    const now = lead(upTo,t), prev = lead(before,t);
+    leaders[t] = now ? {...now, changed: !!(prev && prev.uid!==now.uid), isNew: !prev && !isFinal} : null;
+  });
+  let rises=[], falls=[], entered=[], left=[];
+  if(!isFinal){
+    const D = statsBuild(stages, players, season, "geral");
+    const col = D.cols.findIndex(c=>c.id===st.id);
+    D.series.forEach(e=>{
+      const pos = e.pos[col]; if(pos==null) return;
+      const d = e.delta[col], prev = d==null ? null : pos + d;
+      if(d>0) rises.push({uid:e.uid, d, from:prev, to:pos}); else if(d<0) falls.push({uid:e.uid, d, from:prev, to:pos});
+      if(pos<=9 && (prev==null || prev>9)) entered.push({uid:e.uid, to:pos});
+      if(pos>9 && prev!=null && prev<=9) left.push({uid:e.uid, to:pos});
+    });
+    rises.sort((a,b)=>b.d-a.d || a.to-b.to); falls.sort((a,b)=>a.d-b.d || a.to-b.to);
+    rises = rises.slice(0,3); falls = falls.slice(0,2);
+    entered.sort((a,b)=>a.to-b.to); left.sort((a,b)=>a.to-b.to);
+  }
+  const ko = st.type==="knockout" ? (()=>{ const tot = res.reduce((n,r)=>n+(Number(r.knockouts)||0),0); const mx = Math.max(0,...res.map(r=>Number(r.knockouts)||0));
+    return {total:tot, top: mx>0 ? res.filter(r=>(Number(r.knockouts)||0)===mx).map(r=>r.playerId) : [], topN:mx}; })() : null;
+  const seen = new Set(); before.forEach(s=>(s.results||[]).forEach(r=>seen.add(r.playerId)));
+  const debuts = isFinal ? [] : res.filter(r=>!seen.has(r.playerId)).map(r=>r.playerId);
+  const nextStage = stages.filter(s=>s.status==="upcoming" && s.date).slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""))[0] || null;
+  return {
+    stage:{id:st.id, name:st.name, type:st.type, date:st.date, isFinal},
+    podium: res.slice(0,3).map(r=>({uid:r.playerId, pos:r.position, pts:getPts(r.position), ko:Number(r.knockouts)||0})),
+    participants: res.length, prize: prizeInfo||null, leaders, rises, falls, entered, left, ko, debuts,
+    season:{done:upTo.length, total:ordered.length}, next: nextStage ? {name:nextStage.name, date:nextStage.date, time:nextStage.time||""} : null
+  };
+}
+// ── RESUMO (fim) ──
 
 let STATS_VIEW = false, STATS_TYPE = "geral", STATS_MODE = "pos", STATS_SEL = null, STATS_Q = "", STATS_OPEN = false, STATS_FOCUS = null;
 const statsNorm = s => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
@@ -3924,6 +4005,176 @@ function renderRanking(){
 }
 
 // ── STAGES ────────────────────────────────────────────────────────────────────
+// ── RESUMO UI (início) ── (único trecho com dado financeiro: prêmio do campeão; fica fora do bloco de estatísticas)
+const RECAP_MEDAL = ["#FFD700","#C4CBD6","#CD7F32"];
+const RECAP_LBL = {geral:"Geral", nlholdem:"NL Hold'em", knockout:"PKO"};
+const recapType = t => t==="knockout" ? "PKO" : "NL Hold'em";
+const recapNames = l => l.map(u=>statsNick(u)).join(", ");
+// Dados do resumo atual (ou null fora da janela). O prêmio é calculado numa CÓPIA da etapa, para não gravar dados financeiros padrão na etapa real.
+function recapCurrent(){
+  const st = recapPick(DB.stages, ACTIVE_SEASON, new Date()); if(!st) return null;
+  let prizeInfo = null;
+  try{
+    const ghost = {...st, finance: st.finance ? JSON.parse(JSON.stringify(st.finance)) : undefined};
+    const champ = (st.results||[]).find(r=>r.position===1);
+    const pr = calcPremiacao(ghost).find(p=>p.position===1);
+    const prize = pr && pr.value>0 ? pr.value : 0;
+    const bounty = st.type==="knockout" && champ ? calcKOEarnings(ghost, champ.playerId) : 0;
+    if(st.finance && (prize>0 || bounty>0)) prizeInfo = {prize, bounty};
+  }catch(e){ prizeInfo = null; }
+  return buildRecap(DB.stages, DB.players, ACTIVE_SEASON, st, prizeInfo);
+}
+const recapMove = m => `${statsNick(m.uid)} <b style="color:${m.d>0?"var(--green)":"var(--red)"}">${m.d>0?"▲":"▼"} ${Math.abs(m.d)}</b> <span class="rcp-dim">(${m.from}º › ${m.to}º)</span>`;
+function renderRecapBanner(){
+  const r = recapCurrent(); if(!r) return "";
+  const pod = r.podium.map((p,i)=>`<div class="rcp-pod"><span class="rcp-m" style="--m:${RECAP_MEDAL[i]}">${p.pos}º</span>${AV(p.uid)}<span class="rcp-pn">${statsNick(p.uid)}</span><span class="rcp-pp">${p.pts} pts${r.ko&&p.ko?` · ${p.ko} KO`:""}</span></div>`).join("");
+  const lead = ["geral","nlholdem","knockout"].filter(t=>r.leaders[t]).map(t=>{ const l=r.leaders[t]; return `<div class="rcp-ld"><span class="rcp-dim">${RECAP_LBL[t]}</span><b>${statsNick(l.uid)}</b><span class="rcp-dim">${l.pts} pts${l.changed?' · <em>novo líder</em>':""}</span></div>`; }).join("");
+  const rows = [];
+  if(r.prize) rows.push(`<div class="rcp-prize"><span>${r.prize.prize>0?"Prêmio do campeão":"Bounties do campeão"}</span><b>${fmtBRL(r.prize.prize>0?r.prize.prize:r.prize.bounty)}${r.prize.prize>0&&r.prize.bounty>0?` <small>+ ${fmtBRL(r.prize.bounty)} em bounties</small>`:""}</b></div>`);
+  if(r.rises.length) rows.push(`<div class="rcp-row"><span class="rcp-k">Maiores subidas</span><span>${r.rises.map(recapMove).join(" · ")}</span></div>`);
+  if(r.falls.length) rows.push(`<div class="rcp-row"><span class="rcp-k">Maiores quedas</span><span>${r.falls.map(recapMove).join(" · ")}</span></div>`);
+  if(r.entered.length) rows.push(`<div class="rcp-row"><span class="rcp-k">Entrou na mesa final (top 9)</span><span>${recapNames(r.entered.map(e=>e.uid))}</span></div>`);
+  if(r.left.length) rows.push(`<div class="rcp-row"><span class="rcp-k">Saiu da mesa final</span><span>${recapNames(r.left.map(e=>e.uid))}</span></div>`);
+  const facts = [`${r.participants} jogador${r.participants!==1?"es":""}`];
+  if(r.ko && r.ko.total>0) facts.push(`${r.ko.total} knockouts${r.ko.top.length?` · mais eliminações: ${recapNames(r.ko.top)} (${r.ko.topN})`:""}`);
+  if(r.debuts.length) facts.push(`${r.debuts.length} estreia${r.debuts.length>1?"s":""} na temporada`);
+  if(!r.stage.isFinal) facts.push(`etapa ${r.season.done} de ${r.season.total}`);
+  return `<div class="rcp">
+    <div class="rcp-h"><span class="rcp-t">Resumo da etapa</span><span class="rcp-s">${r.stage.name} · ${recapType(r.stage.type)} · ${fmtD(r.stage.date)}</span></div>
+    <div class="rcp-pods">${pod}</div>
+    ${lead?`<div class="rcp-lds">${lead}</div>`:""}
+    ${rows.join("")}
+    <div class="rcp-facts">${facts.join(" · ")}</div>
+    <button class="btn by fw rcp-btn" id="btn-recap-share">Compartilhar resumo</button>
+  </div>`;
+}
+// Texto puro do resumo (e-mail, WhatsApp)
+function recapText(r){
+  const L = [];
+  L.push(`*PPP Poker* · Resumo da ${r.stage.name} (${recapType(r.stage.type)}) · ${fmtD(r.stage.date)}`, "");
+  r.podium.forEach((p,i)=>L.push(`${["🥇","🥈","🥉"][i]} ${statsNick(p.uid)} · ${p.pts} pts${r.ko&&p.ko?` · ${p.ko} KO`:""}`));
+  if(r.prize) L.push("", r.prize.prize>0 ? `Prêmio do campeão: ${fmtBRL(r.prize.prize)}${r.prize.bounty>0?` (+ ${fmtBRL(r.prize.bounty)} em bounties)`:""}` : `Bounties do campeão: ${fmtBRL(r.prize.bounty)}`);
+  const ld = ["geral","nlholdem","knockout"].filter(t=>r.leaders[t]).map(t=>`${RECAP_LBL[t]}: ${statsNick(r.leaders[t].uid)} (${r.leaders[t].pts} pts)${r.leaders[t].changed?" – novo líder":""}`);
+  if(ld.length) L.push("", "Líderes dos rankings", ...ld);
+  const mv = [];
+  if(r.rises.length) mv.push("Subidas: "+r.rises.map(m=>`${statsNick(m.uid)} +${m.d} (${m.from}º→${m.to}º)`).join(", "));
+  if(r.falls.length) mv.push("Quedas: "+r.falls.map(m=>`${statsNick(m.uid)} ${m.d} (${m.from}º→${m.to}º)`).join(", "));
+  if(r.entered.length) mv.push("Entrou na mesa final (top 9): "+recapNames(r.entered.map(e=>e.uid)));
+  if(r.left.length) mv.push("Saiu da mesa final: "+recapNames(r.left.map(e=>e.uid)));
+  if(mv.length) L.push("", "Variações no ranking geral", ...mv);
+  const fx = [`${r.participants} jogadores`];
+  if(r.ko && r.ko.total>0) fx.push(`${r.ko.total} knockouts${r.ko.top.length?` (mais eliminações: ${recapNames(r.ko.top)}, ${r.ko.topN})`:""}`);
+  if(r.debuts.length) fx.push(`${r.debuts.length} estreia${r.debuts.length>1?"s":""}`);
+  L.push("", fx.join(" · "));
+  if(r.next) L.push("", `Próxima etapa: ${r.next.name} · ${fmtD(r.next.date)}${r.next.time?" às "+r.next.time:""}`);
+  L.push("", "https://ppp-poker.vercel.app");
+  return L.join("\n");
+}
+// Foto do jogador como data URI (html2canvas não aceita imagens de outro domínio sem isso); sem foto → iniciais
+function recapPhoto(uid, size){
+  return new Promise(res=>{
+    const pl = getPlayer(uid); if(!pl || !pl.photoURL) return res(null);
+    const img = new Image(), t = setTimeout(()=>res(null), 5000);
+    img.onload = ()=>{ clearTimeout(t); try{ const cv=document.createElement("canvas"); cv.width=cv.height=size; cv.getContext("2d").drawImage(img,0,0,size,size); res(cv.toDataURL("image/jpeg",.9)); }catch(e){ res(null); } };
+    img.onerror = ()=>{ clearTimeout(t); res(null); };
+    img.src = pl.photoURL;
+  });
+}
+function recapImageHtml(r, photos){
+  const F = "font-family:'Archivo','Barlow Condensed',Arial,sans-serif;";
+  const av = (uid,sz,ring) => {
+    const pl = getPlayer(uid)||{name:"?"}, ph = photos[uid];
+    return ph ? `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;border:3px solid ${ring};box-sizing:border-box"><img src="${ph}" style="width:100%;height:100%;object-fit:cover;display:block"/></div>`
+              : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;border:3px solid ${ring};box-sizing:border-box;background:#222;display:flex;align-items:center;justify-content:center;${F}font-weight:800;font-size:${Math.round(sz*.34)}px;color:#F8B70B">${ini(pl.name)}</div>`;
+  };
+  const sec = t => `<div style="${F}font-weight:800;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#F8B70B;margin:22px 0 10px">${t}</div>`;
+  const pods = r.podium.map((p,i)=>`<div style="flex:1;text-align:center;padding:14px 6px 12px;background:#18181c;border-radius:14px;border-top:4px solid ${RECAP_MEDAL[i]}">
+      <div style="${F}font-weight:800;font-size:13px;color:${RECAP_MEDAL[i]};margin-bottom:8px">${p.pos}º LUGAR</div>
+      <div style="display:flex;justify-content:center">${av(p.uid, i===0?76:64, RECAP_MEDAL[i])}</div>
+      <div style="${F}font-weight:800;font-size:${i===0?19:16}px;color:#fff;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px">${statsNick(p.uid)}</div>
+      <div style="font-size:13px;color:#a4a4af;margin-top:2px">${p.pts} pts${r.ko&&p.ko?` · ${p.ko} KO`:""}</div></div>`).join("");
+  const leaders = ["geral","nlholdem","knockout"].filter(t=>r.leaders[t]).map(t=>{ const l=r.leaders[t];
+    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #26262c"><span style="flex:0 0 92px;font-size:12px;color:#8d8d98;text-transform:uppercase;letter-spacing:1px">${RECAP_LBL[t]}</span><span style="${F}font-weight:800;font-size:16px;color:#fff;flex:1">${statsNick(l.uid)}${l.changed?' <span style="font-size:10px;color:#F8B70B;letter-spacing:1px;margin-left:6px">NOVO LÍDER</span>':""}</span><span style="font-size:14px;color:#F8B70B;font-weight:700">${l.pts} pts</span></div>`; }).join("");
+  const mv = (m,c) => `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #26262c;font-size:14px"><span style="color:#fff;font-weight:600">${statsNick(m.uid)}</span><span style="color:${c};font-weight:700">${m.d>0?"▲":"▼"} ${Math.abs(m.d)} <span style="color:#8d8d98;font-weight:400">(${m.from}º › ${m.to}º)</span></span></div>`;
+  const moves = r.rises.map(m=>mv(m,"#2ecc71")).join("") + r.falls.map(m=>mv(m,"#e74c3c")).join("");
+  const zone = (r.entered.length?`<div style="font-size:13px;color:#c9c9d1;margin-top:8px">Entrou na mesa final (top 9): <b style="color:#fff">${recapNames(r.entered.map(e=>e.uid))}</b></div>`:"") + (r.left.length?`<div style="font-size:13px;color:#c9c9d1;margin-top:4px">Saiu da mesa final: <b style="color:#fff">${recapNames(r.left.map(e=>e.uid))}</b></div>`:"");
+  const facts = [`${r.participants} jogador${r.participants!==1?"es":""}`];
+  if(r.ko && r.ko.total>0) facts.push(`${r.ko.total} knockouts${r.ko.top.length?` · mais eliminações: ${recapNames(r.ko.top)} (${r.ko.topN})`:""}`);
+  if(r.debuts.length) facts.push(`${r.debuts.length} estreia${r.debuts.length>1?"s":""} na temporada`);
+  if(!r.stage.isFinal) facts.push(`etapa ${r.season.done} de ${r.season.total}`);
+  return `<div style="position:relative;overflow:hidden;background:#0f0f12;color:#e8e8ec;font-family:Arial,sans-serif;padding:0 0 18px">
+    <div style="padding:24px 26px 18px;background:linear-gradient(135deg,#1a1a1f,#101013);border-bottom:3px solid #F8B70B">
+      <div style="display:flex;align-items:center;justify-content:space-between"><div>${logoImg(46)}</div><div style="${F}font-weight:800;font-size:11px;letter-spacing:3px;color:#F8B70B;text-transform:uppercase">Resumo da etapa</div></div>
+      <div style="${F}font-weight:800;font-size:30px;color:#fff;margin-top:16px;line-height:1.1">${r.stage.name}</div>
+      <div style="font-size:13px;color:#a4a4af;margin-top:5px">${recapType(r.stage.type)} · ${fmtD(r.stage.date)}</div>
+    </div>
+    <div style="padding:0 26px">
+      ${sec("Pódio")}<div style="display:flex;gap:10px">${pods}</div>
+      ${r.prize?`<div style="margin-top:12px;padding:12px 16px;border-radius:12px;background:rgba(248,183,11,.12);border:1px solid rgba(248,183,11,.4);display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#FFD25E">${r.prize.prize>0?"Prêmio do campeão":"Bounties do campeão"}</span><span style="${F}font-weight:800;font-size:22px;color:#FFD25E">${fmtBRL(r.prize.prize>0?r.prize.prize:r.prize.bounty)}</span></div>${r.prize.prize>0&&r.prize.bounty>0?`<div style="font-size:12px;color:#a4a4af;margin-top:5px;text-align:right">+ ${fmtBRL(r.prize.bounty)} em bounties</div>`:""}`:""}
+      ${leaders?sec("Líderes dos rankings")+leaders:""}
+      ${moves?sec("Variações no ranking geral")+moves+zone:""}
+      ${sec("Em números")}<div style="font-size:14px;color:#c9c9d1;line-height:1.6">${facts.join("<br/>")}</div>
+      ${r.next?`<div style="margin-top:18px;padding:12px 16px;border-radius:12px;background:#18181c;font-size:13px;color:#a4a4af">Próxima etapa: <b style="color:#fff">${r.next.name}</b> · ${fmtD(r.next.date)}${r.next.time?" às "+r.next.time:""}</div>`:""}
+    </div>
+    <div style="text-align:center;margin-top:20px;font-size:12px;letter-spacing:1.5px;color:#5d5d68">ppp-poker.vercel.app</div>
+  </div>`;
+}
+async function openRecapModal(){
+  const r = recapCurrent(); if(!r) return;
+  const wrap = document.getElementById("result-modal"); wrap.innerHTML = "";
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  wrap.appendChild(ov);
+  const modal = document.createElement("div");
+  modal.style.cssText = "background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:18px;width:100%;max-width:480px;max-height:94vh;overflow-y:auto;box-sizing:border-box;";
+  modal.addEventListener("click",e=>e.stopPropagation()); ov.appendChild(modal); ov.addEventListener("click",()=>wrap.innerHTML="");
+  modal.innerHTML = `<div class="mtitle" style="margin-bottom:10px">Compartilhar resumo</div>
+    <div id="rcp-msg" style="font-size:12px;color:var(--muted);margin-bottom:12px">Gerando imagem…</div>
+    <div id="rcp-prev" style="margin-bottom:14px;border-radius:8px;overflow:hidden;display:none"></div>
+    <div id="rcp-btns" style="display:none;gap:8px;flex-direction:column">
+      <button id="rcp-share" class="btn by fw" style="display:none">Compartilhar imagem (WhatsApp, e-mail…)</button>
+      <button id="rcp-wa" class="btn fw" style="background:#25D366;color:#fff;display:none">Abrir WhatsApp</button>
+      <div class="row g8"><button id="rcp-dl" class="btn bo fw">Baixar imagem</button><button id="rcp-copy" class="btn bo fw">Copiar texto</button></div>
+      <button id="rcp-close" class="btn bo fw">Fechar</button>
+    </div>`;
+  modal.querySelector("#rcp-close").addEventListener("click",()=>wrap.innerHTML="");
+  const text = recapText(r), fname = `ppp-resumo-${String(r.stage.name).replace(/\s+/g,"-").toLowerCase()}.png`;
+  modal.querySelector("#rcp-copy").addEventListener("click", async()=>{
+    try{ await navigator.clipboard.writeText(text); showToast("Texto copiado!","green"); }
+    catch(e){ const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); showToast("Texto copiado!","green"); }catch(_){ showToast("Não foi possível copiar.","red"); } ta.remove(); }
+  });
+  try{
+    if(!window.html2canvas){
+      await new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"; sc.onload=res; sc.onerror=()=>rej(new Error("Falha ao carregar o gerador de imagem")); document.head.appendChild(sc); });
+    }
+    const photos = {}; const uids = r.podium.map(p=>p.uid);
+    await Promise.race([ Promise.all(uids.map(async u=>{ photos[u] = await recapPhoto(u,160); })), new Promise(res=>setTimeout(res,8000)) ]);
+    const W = 540, el = document.createElement("div");
+    el.style.cssText = `position:absolute;left:-9999px;top:0;width:${W}px;`; el.innerHTML = recapImageHtml(r, photos); document.body.appendChild(el);
+    const wm = document.createElement("img"); wm.src = logoDataUri({mono:"#ffffff"}); wm.style.cssText = "position:absolute;left:50%;top:55%;width:80%;transform:translate(-50%,-50%);opacity:.03;pointer-events:none;"; el.firstElementChild.appendChild(wm);
+    if(window.__pppIcons) window.__pppIcons(el);
+    const canvas = await html2canvas(el,{backgroundColor:"#0f0f12",scale:2,logging:false,allowTaint:true,useCORS:false,windowWidth:W,width:W});
+    document.body.removeChild(el);
+    const dataUrl = canvas.toDataURL("image/png");
+    modal.querySelector("#rcp-prev").innerHTML = `<img src="${dataUrl}" style="width:100%;display:block"/>`; modal.querySelector("#rcp-prev").style.display = "block";
+    modal.querySelector("#rcp-msg").style.display = "none"; modal.querySelector("#rcp-btns").style.display = "flex";
+    const blob = await (await fetch(dataUrl)).blob(), file = new File([blob], fname, {type:"image/png"});
+    const canShareFile = !!(navigator.share && navigator.canShare && navigator.canShare({files:[file]}));
+    if(canShareFile){
+      modal.querySelector("#rcp-share").style.display = "";
+      modal.querySelector("#rcp-share").addEventListener("click", async()=>{ try{ await navigator.share({files:[file], text}); }catch(e){ /* cancelado */ } });
+    } else {
+      modal.querySelector("#rcp-wa").style.display = "";
+      modal.querySelector("#rcp-wa").addEventListener("click",()=>{ const a=document.createElement("a"); a.href=dataUrl; a.download=fname; a.click(); setTimeout(()=>window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank"),800); });
+    }
+    modal.querySelector("#rcp-dl").addEventListener("click",()=>{ const a=document.createElement("a"); a.href=dataUrl; a.download=fname; a.click(); });
+  }catch(err){
+    modal.querySelector("#rcp-msg").innerHTML = `<span style="color:var(--red)">Não foi possível gerar a imagem (${err.message}). Você ainda pode copiar o texto.</span>`;
+    modal.querySelector("#rcp-btns").style.display = "flex"; modal.querySelector("#rcp-dl").style.display = "none";
+  }
+}
+
+// ── RESUMO UI (fim) ──
 function renderStages(){
   // Cash game management takes priority over everything
   if(CASHGAME_MGMT){
@@ -6779,7 +7030,7 @@ function drawResultModal(){
     var filled=resultRows.filter(function(r){return r.pos&&parseInt(r.pos)>0;});
     if(!filled.length){showToast("Selecione pelo menos uma posição antes de publicar.","red");return;}
     var results=filled.sort(function(a,b){return parseInt(a.pos)-parseInt(b.pos);}).map(function(r){return {playerId:r.uid,position:parseInt(r.pos),points:getPts(parseInt(r.pos)),knockouts:parseInt(r.ko)||0};});
-    DB.stages=DB.stages.map(function(st){return st.id===resultStage.id?Object.assign({},st,{status:"finished",results:results,draft:null}):st;});
+    DB.stages=DB.stages.map(function(st){return st.id===resultStage.id?Object.assign({},st,{status:"finished",results:results,draft:null,publishedAt:st.publishedAt||Date.now()}):st;});
     save();closeResultModal();render();
   });
   btns.appendChild(pubBtn);
@@ -8379,6 +8630,7 @@ function bindEvents(){
   document.getElementById("btn-ft-prize")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; render(); });
   document.getElementById("btn-ft-prize-home")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; TAB="ranking"; render(); });
   document.getElementById("btn-ft-prize-back")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=false; render(); });
+  document.getElementById("btn-recap-share")?.addEventListener("click",()=>openRecapModal());
   document.getElementById("btn-stats-open")?.addEventListener("click",()=>{ TAB="ranking"; STATS_VIEW=true; FT_PRIZE_VIEW=false; render(); window.scrollTo(0,0); });
   document.getElementById("btn-stats-back")?.addEventListener("click",()=>{ STATS_VIEW=false; render(); });
   document.querySelectorAll("[id^=stx-l-]").forEach(box=>box.addEventListener("click",e=>{
