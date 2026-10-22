@@ -4023,9 +4023,7 @@ function recapCurrent(sid){
     const bounty = st.type==="knockout" && champ ? calcKOEarnings(ghost, champ.playerId) : 0;
     if(st.finance && (prize>0 || bounty>0)) prizeInfo = {prize, bounty};
   }catch(e){ prizeInfo = null; }
-  const out = buildRecap(DB.stages, DB.players, ACTIVE_SEASON, st, prizeInfo);
-  out.champPhoto = st.photoChampion || "";
-  return out;
+  return buildRecap(DB.stages, DB.players, ACTIVE_SEASON, st, prizeInfo);
 }
 const recapMove = m => `${statsNick(m.uid)} <b style="color:${m.d>0?"var(--green)":"var(--red)"}">${m.d>0?"▲":"▼"} ${Math.abs(m.d)}</b> <span class="rcp-dim">(${m.from}º › ${m.to}º)</span>`;
 function renderRecapBanner(sid){
@@ -4100,7 +4098,7 @@ function recapLogoPng(w, mono){
 function recapImageHtml(r, photos, logo){
   const F = "font-family:'Archivo','Barlow Condensed',Arial,sans-serif;";
   const av = (uid,sz,ring) => {
-    const pl = getPlayer(uid)||{name:"?"}, ph = (uid===(r.podium[0]&&r.podium[0].uid) && photos.__champ) || photos[uid];
+    const pl = getPlayer(uid)||{name:"?"}, ph = photos[uid];
     return ph ? `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;border:3px solid ${ring};box-sizing:border-box"><img src="${ph}" style="width:100%;height:100%;object-fit:cover;display:block"/></div>`
               : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;border:3px solid ${ring};box-sizing:border-box;background:#222;display:flex;align-items:center;justify-content:center;${F}font-weight:800;font-size:${Math.round(sz*.34)}px;color:#F8B70B">${ini(pl.name)}</div>`;
   };
@@ -4167,7 +4165,6 @@ async function openRecapModal(sid){
     const photos = {}; const uids = r.podium.map(p=>p.uid); let logo = null, wmLogo = null;
     await Promise.race([ Promise.all([
       ...uids.map(async u=>{ const pl = getPlayer(u); photos[u] = pl && pl.photoURL ? await recapImgData(pl.photoURL,160,.3) : null; }),
-      (async()=>{ photos.__champ = r.champPhoto ? await recapImgData(r.champPhoto,200,.3) : null; })(),
       (async()=>{ logo = await recapLogoPng(86); wmLogo = await recapLogoPng(420,"#ffffff"); })()
     ]), new Promise(res=>setTimeout(res,10000)) ]);
     const W = 540, el = document.createElement("div");
@@ -4277,7 +4274,7 @@ function renderStageDetail(sid){
       </div>
     </div>
 
-    ${s.status==="finished"?renderRecapBanner(s.id):""}
+    ${s.status==="finished"&&(s.results||[]).length?`<button class="btn bo fw" data-recap-share="${s.id}" style="margin-bottom:12px;border-color:var(--yellow);color:var(--yellow)">Resumo da etapa</button>`:""}
 
     <!-- Rules card (only if any rule exists) -->
     ${s.buyin||s.rebuy||s.addon||s.timechip?`
