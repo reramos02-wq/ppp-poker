@@ -4023,7 +4023,9 @@ function recapCurrent(sid){
     const bounty = st.type==="knockout" && champ ? calcKOEarnings(ghost, champ.playerId) : 0;
     if(st.finance && (prize>0 || bounty>0)) prizeInfo = {prize, bounty};
   }catch(e){ prizeInfo = null; }
-  return buildRecap(DB.stages, DB.players, ACTIVE_SEASON, st, prizeInfo);
+  const out = buildRecap(DB.stages, DB.players, ACTIVE_SEASON, st, prizeInfo);
+  out.champPhoto = st.photoChampion || "";
+  return out;
 }
 const recapMove = m => `${statsNick(m.uid)} <b style="color:${m.d>0?"var(--green)":"var(--red)"}">${m.d>0?"▲":"▼"} ${Math.abs(m.d)}</b> <span class="rcp-dim">(${m.from}º › ${m.to}º)</span>`;
 function renderRecapBanner(sid){
@@ -4071,20 +4073,34 @@ function recapText(r){
   L.push("", "https://ppp-poker.vercel.app");
   return L.join("\n");
 }
-// Foto do jogador como data URI (html2canvas não aceita imagens de outro domínio sem isso); sem foto → iniciais
-function recapPhoto(uid, size){
-  return new Promise(res=>{
-    const pl = getPlayer(uid); if(!pl || !pl.photoURL) return res(null);
-    const img = new Image(), t = setTimeout(()=>res(null), 5000);
-    img.onload = ()=>{ clearTimeout(t); try{ const cv=document.createElement("canvas"); cv.width=cv.height=size; cv.getContext("2d").drawImage(img,0,0,size,size); res(cv.toDataURL("image/jpeg",.9)); }catch(e){ res(null); } };
-    img.onerror = ()=>{ clearTimeout(t); res(null); };
-    img.src = pl.photoURL;
-  });
+// URL → data URI (recorte quadrado centralizado). Tenta CORS e fetch; se o servidor não permitir, devolve null (cai nas iniciais).
+function recapImgData(url, size, focusY){
+  const crop = img => { try{
+    const cv = document.createElement("canvas"); cv.width = cv.height = size; const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const sx = (img.naturalWidth-side)/2, sy = Math.max(0, Math.min(img.naturalHeight-side, (img.naturalHeight-side)*(focusY==null?.5:focusY)));
+    cv.getContext("2d").drawImage(img, sx, sy, side, side, 0, 0, size, size); return cv.toDataURL("image/jpeg",.88);
+  }catch(e){ return null; } };
+  const load = (src, cors) => new Promise(res=>{ const im = new Image(); const t = setTimeout(()=>res(null),6000); if(cors) im.crossOrigin = "anonymous";
+    im.onload = ()=>{ clearTimeout(t); res(im); }; im.onerror = ()=>{ clearTimeout(t); res(null); }; im.src = src; });
+  return (async()=>{
+    if(!url) return null;
+    let im = await load(url, true); let d = im && crop(im); if(d) return d;
+    try{ const b = await (await fetch(url)).blob(); const u = URL.createObjectURL(b); im = await load(u,false); d = im && crop(im); URL.revokeObjectURL(u); if(d) return d; }catch(e){}
+    return null;
+  })();
 }
-function recapImageHtml(r, photos){
+// Logo como PNG (SVG sem width/height vira um bloco no html2canvas): rasteriza com tamanho explícito
+function recapLogoPng(w, mono){
+  const h = Math.round(w*268/498), c = mono ? [mono,mono,mono] : ["#FDFDFE","#717070","#F8B70B"];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="386 459 498 268" width="${w*2}" height="${h*2}">${logoMarkup(c[0],c[1],c[2],"lgr"+(mono?"m":"c"))}</svg>`;
+  return new Promise(res=>{ const im = new Image(); const t = setTimeout(()=>res(null),4000);
+    im.onload = ()=>{ clearTimeout(t); try{ const cv = document.createElement("canvas"); cv.width = w*2; cv.height = h*2; cv.getContext("2d").drawImage(im,0,0,w*2,h*2); res(cv.toDataURL("image/png")); }catch(e){ res(null); } };
+    im.onerror = ()=>{ clearTimeout(t); res(null); }; im.src = "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg); });
+}
+function recapImageHtml(r, photos, logo){
   const F = "font-family:'Archivo','Barlow Condensed',Arial,sans-serif;";
   const av = (uid,sz,ring) => {
-    const pl = getPlayer(uid)||{name:"?"}, ph = photos[uid];
+    const pl = getPlayer(uid)||{name:"?"}, ph = (uid===(r.podium[0]&&r.podium[0].uid) && photos.__champ) || photos[uid];
     return ph ? `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;border:3px solid ${ring};box-sizing:border-box"><img src="${ph}" style="width:100%;height:100%;object-fit:cover;display:block"/></div>`
               : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;border:3px solid ${ring};box-sizing:border-box;background:#222;display:flex;align-items:center;justify-content:center;${F}font-weight:800;font-size:${Math.round(sz*.34)}px;color:#F8B70B">${ini(pl.name)}</div>`;
   };
@@ -4105,7 +4121,7 @@ function recapImageHtml(r, photos){
   if(!r.stage.isFinal) facts.push(`etapa ${r.season.done} de ${r.season.total}`);
   return `<div style="position:relative;overflow:hidden;background:#0f0f12;color:#e8e8ec;font-family:Arial,sans-serif;padding:0 0 18px">
     <div style="padding:24px 26px 18px;background:linear-gradient(135deg,#1a1a1f,#101013);border-bottom:3px solid #F8B70B">
-      <div style="display:flex;align-items:center;justify-content:space-between"><div>${logoImg(46)}</div><div style="${F}font-weight:800;font-size:11px;letter-spacing:3px;color:#F8B70B;text-transform:uppercase">Resumo da etapa</div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><div>${logo?`<img src="${logo}" width="86" height="46" style="display:block"/>`:""}</div><div style="${F}font-weight:800;font-size:11px;letter-spacing:3px;color:#F8B70B;text-transform:uppercase">Resumo da etapa</div></div>
       <div style="${F}font-weight:800;font-size:30px;color:#fff;margin-top:16px;line-height:1.1">${r.stage.name}</div>
       <div style="font-size:13px;color:#a4a4af;margin-top:5px">${recapType(r.stage.type)} · ${fmtD(r.stage.date)}</div>
     </div>
@@ -4148,11 +4164,15 @@ async function openRecapModal(sid){
     if(!window.html2canvas){
       await new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"; sc.onload=res; sc.onerror=()=>rej(new Error("Falha ao carregar o gerador de imagem")); document.head.appendChild(sc); });
     }
-    const photos = {}; const uids = r.podium.map(p=>p.uid);
-    await Promise.race([ Promise.all(uids.map(async u=>{ photos[u] = await recapPhoto(u,160); })), new Promise(res=>setTimeout(res,8000)) ]);
+    const photos = {}; const uids = r.podium.map(p=>p.uid); let logo = null, wmLogo = null;
+    await Promise.race([ Promise.all([
+      ...uids.map(async u=>{ const pl = getPlayer(u); photos[u] = pl && pl.photoURL ? await recapImgData(pl.photoURL,160,.3) : null; }),
+      (async()=>{ photos.__champ = r.champPhoto ? await recapImgData(r.champPhoto,200,.3) : null; })(),
+      (async()=>{ logo = await recapLogoPng(86); wmLogo = await recapLogoPng(420,"#ffffff"); })()
+    ]), new Promise(res=>setTimeout(res,10000)) ]);
     const W = 540, el = document.createElement("div");
-    el.style.cssText = `position:absolute;left:-9999px;top:0;width:${W}px;`; el.innerHTML = recapImageHtml(r, photos); document.body.appendChild(el);
-    const wm = document.createElement("img"); wm.src = logoDataUri({mono:"#ffffff"}); wm.style.cssText = "position:absolute;left:50%;top:55%;width:80%;transform:translate(-50%,-50%);opacity:.03;pointer-events:none;"; el.firstElementChild.appendChild(wm);
+    el.style.cssText = `position:absolute;left:-9999px;top:0;width:${W}px;`; el.innerHTML = recapImageHtml(r, photos, logo); document.body.appendChild(el);
+    if(wmLogo){ const wm = document.createElement("img"); wm.src = wmLogo; wm.style.cssText = "position:absolute;left:50%;top:56%;width:78%;transform:translate(-50%,-50%);opacity:.06;pointer-events:none;"; el.firstElementChild.appendChild(wm); }
     if(window.__pppIcons) window.__pppIcons(el);
     const canvas = await html2canvas(el,{backgroundColor:"#0f0f12",scale:2,logging:false,allowTaint:true,useCORS:false,windowWidth:W,width:W});
     document.body.removeChild(el);
