@@ -3,7 +3,7 @@ import fs from 'node:fs'; import vm from 'node:vm'; import assert from 'node:ass
 const h = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 const cut = (a, b) => h.slice(h.indexOf(a), h.indexOf(b));
 const src = ['const RECAP_DAYS = 5;',cut('const POINTS_TABLE', '// ── APP STATE'), cut('// ── TIEBREAKER', '// ── FINANCIAL RANKING'), cut('// ── STATS (início)', '// ── STATS (fim)'), cut('// ── RESUMO (início)', '// ── RESUMO (fim)')].join('\n');
-const ctx = { DB:{players:[],stages:[]}, ACTIVE_SEASON:'2026', console }; vm.createContext(ctx);
+const ctx = { DB:{players:[],stages:[]}, ACTIVE_SEASON:'2026', DATA_SEASON:'2026', console }; vm.createContext(ctx);
 vm.runInContext(src + ';this.f={recapPick,buildRecap,calcRankGeral}', ctx); const f = ctx.f;
 const J = o => JSON.parse(JSON.stringify(o));
 const P = Array.from({length:10},(_, i)=>({uid:'u'+i, name:'P'+i, nickname:'P'+i}));

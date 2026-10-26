@@ -1077,7 +1077,7 @@ function waitForPlayer(uid, timeoutMs){
 // (O savePlayers() faz união dos tokens locais com os do servidor, então nunca conseguia REMOVER um token.)
 async function mutateMyTokens(fn){
   if(!CURRENT_USER_UID) return null;
-  const ref = doc(db,"seasons",ACTIVE_SEASON);
+  const ref = doc(db,"seasons",DATA_SEASON);
   let result = null;
   if(SCHEMA_V2){
     const pref = v2PlayerRef(CURRENT_USER_UID);
@@ -1477,10 +1477,10 @@ const CLOCK_DOCS = {};      // stageId → estado vindo do Firestore (undefined 
 let CLOCK_OFFSET_MS = 0;    // hora do servidor − Date.now() do aparelho (via /api/time)
 let _clockUnsub = null, _clockSyncTimer = null, _clockStage = null, _tplUnsub = null;
 let BLIND_TEMPLATE = undefined;   // undefined = carregando · null = não existe · array = modelo salvo
-const tplDocId = () => ACTIVE_SEASON+"_blindTemplate";
+const tplDocId = () => DATA_SEASON+"_blindTemplate";
 
 function clockNow(){ return Date.now() + CLOCK_OFFSET_MS; }
-function clockDocId(stageId){ return ACTIVE_SEASON+"_"+stageId; }
+function clockDocId(stageId){ return DATA_SEASON+"_"+stageId; }
 function getClockState(s){ return CLOCK_DOCS[s.id] || CLOCK_IDLE; }
 // Visão derivada do relógio da etapa: {idx, level, next, remainingMs, durMs, running, finished}
 function clockView(s){ return clockDerive(getBlindLevels(s), getClockState(s), clockNow()); }
@@ -1985,7 +1985,9 @@ let CASHGAME_PLAYER = null; // uid open in cash game player detail
 let RANK_TAB      = "geral";
 let LOGIN_TAB     = "login";
 
-const ACTIVE_SEASON = "2026";
+const DATA_SEASON = "2026";            // documento/coleções onde os dados vivem (as etapas de 2027 entram aqui com season:"2027")
+const SEASONS = ["2026","2027"];
+let ACTIVE_SEASON = "2026";            // temporada em exibição (Etapas, Ranking, Estatísticas)
 
 const SEED = { players: [], stages: [] }; // Data lives in Firestore
 
@@ -2098,7 +2100,7 @@ function mergeStage(sv, lc, baseJson){
 }
 async function commitDB(){
   if(SCHEMA_V2){ await v2Commit({players:DB.players, stages:DB.stages, admins:DB.admins, deleteMissing:true}); return; }
-  const ref = doc(db,"seasons",ACTIVE_SEASON);
+  const ref = doc(db,"seasons",DATA_SEASON);
   const localPlayers = sanitizePlayers(DB.players), localStages = sanitizeStages(DB.stages);
   let merged = null;
   await runTransaction(db, async (tx)=>{
@@ -2198,11 +2200,11 @@ function v2Diff(baseP, baseS, locP, locS, o){
 // ── V2 CAMADA (início) ── gravação/leitura da estrutura nova. Só é usada quando config/schema.version === 2 (chave desligada por padrão)
 let SCHEMA_V2 = false;
 const V2 = {players:null, stageDocs:null, regs:null, admins:null, seasonLoaded:false, claims:[], verified:false};
-const v2SeasonRef = () => doc(db,"seasons",ACTIVE_SEASON);
+const v2SeasonRef = () => doc(db,"seasons",DATA_SEASON);
 const v2PlayerRef = uid => doc(db,"players",uid);
-const v2StageRef  = id  => doc(db,"seasons",ACTIVE_SEASON,"stages",id);
-const v2RegRef    = id  => doc(db,"seasons",ACTIVE_SEASON,"regs",id);
-const v2ClaimRef  = uid => doc(db,"seasons",ACTIVE_SEASON,"claims",uid);
+const v2StageRef  = id  => doc(db,"seasons",DATA_SEASON,"stages",id);
+const v2RegRef    = id  => doc(db,"seasons",DATA_SEASON,"regs",id);
+const v2ClaimRef  = uid => doc(db,"seasons",DATA_SEASON,"claims",uid);
 async function v2Batched(fns){     // lotes de até 400 operações
   for(let i=0;i<fns.length;i+=400){ const b = writeBatch(db); fns.slice(i,i+400).forEach(fn=>fn(b)); await b.commit(); }
 }
@@ -2246,18 +2248,18 @@ async function v2Commit(parts){
 }
 // Gravação direta (substitui os updateDoc no documento da temporada espalhados pelo app)
 async function seasonUpdate(parts){
-  if(!SCHEMA_V2) return updateDoc(doc(db,"seasons",ACTIVE_SEASON), parts);
+  if(!SCHEMA_V2) return updateDoc(doc(db,"seasons",DATA_SEASON), parts);
   return v2Commit({players:parts.players, stages:parts.stages, admins:parts.admins});
 }
 // Leitura/gravação completa (ferramentas de admin)
 async function srvRead(){
-  if(!SCHEMA_V2){ const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON)); const d = snap.data()||{}; return {players:[...(d.players||[])], stages:[...(d.stages||[])], admins:d.admins||[]}; }
-  const [pS,sS,rS,seas] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"stages")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"regs")), getDoc(v2SeasonRef())]);
+  if(!SCHEMA_V2){ const snap = await getDoc(doc(db,"seasons",DATA_SEASON)); const d = snap.data()||{}; return {players:[...(d.players||[])], stages:[...(d.stages||[])], admins:d.admins||[]}; }
+  const [pS,sS,rS,seas] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",DATA_SEASON,"stages")), getDocs(collection(db,"seasons",DATA_SEASON,"regs")), getDoc(v2SeasonRef())]);
   const players = [], sd = [], rg = []; pS.forEach(d=>players.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data()));
   return {players, stages: v2AssembleStages(sd, rg), admins: (seas.exists()?seas.data().admins:[])||[]};
 }
 async function srvWriteFull(full){
-  if(!SCHEMA_V2){ await setDoc(doc(db,"seasons",ACTIVE_SEASON), {players:full.players, stages:full.stages, admins:full.admins, updatedAt:serverTimestamp()}); return; }
+  if(!SCHEMA_V2){ await setDoc(doc(db,"seasons",DATA_SEASON), {players:full.players, stages:full.stages, admins:full.admins, updatedAt:serverTimestamp()}); return; }
   const cur = await srvRead(); const bp = {}, bs = {};
   cur.players.forEach(p=>{ bp[p.uid] = JSON.stringify(p); }); cur.stages.forEach(st=>{ bs[st.id] = JSON.stringify(st); });
   const ops = v2Diff(bp, bs, sanitizePlayers(full.players), sanitizeStages(full.stages), {isAdmin:true, uid:CURRENT_USER_UID, deleteMissing:true});
@@ -2273,11 +2275,11 @@ function v2Listen(user){
   const err = (n)=>(e)=>{ dbg("ERRO v2 "+n+": "+e.code); console.warn("v2 "+n+":", e.code, e.message); };
   const push = u => _unsubListeners.push(u);
   push(onSnapshot(collection(db,"players"), snap=>{ V2.players = []; snap.forEach(d=>V2.players.push({...d.data(), uid:d.id})); v2Kick(user); }, err("players")));
-  push(onSnapshot(collection(db,"seasons",ACTIVE_SEASON,"stages"), snap=>{ V2.stageDocs = []; snap.forEach(d=>V2.stageDocs.push({...d.data(), id:d.id})); v2Kick(user); }, err("stages")));
-  push(onSnapshot(collection(db,"seasons",ACTIVE_SEASON,"regs"), snap=>{ V2.regs = []; snap.forEach(d=>V2.regs.push(d.data())); v2Kick(user); }, err("regs")));
+  push(onSnapshot(collection(db,"seasons",DATA_SEASON,"stages"), snap=>{ V2.stageDocs = []; snap.forEach(d=>V2.stageDocs.push({...d.data(), id:d.id})); v2Kick(user); }, err("stages")));
+  push(onSnapshot(collection(db,"seasons",DATA_SEASON,"regs"), snap=>{ V2.regs = []; snap.forEach(d=>V2.regs.push(d.data())); v2Kick(user); }, err("regs")));
   push(onSnapshot(v2SeasonRef(), snap=>{ V2.admins = snap.exists() ? (snap.data().admins||[]) : []; V2.seasonLoaded = true; v2Kick(user); }, err("season")));
   if(IS_ADMIN || ADMIN_EMAILS.includes(user && user.email)){
-    push(onSnapshot(collection(db,"seasons",ACTIVE_SEASON,"claims"), snap=>{ V2.claims = []; snap.forEach(d=>V2.claims.push({...d.data(), uid:d.id})); v2AutoApprove(); if(TAB==="admin" && TOOLS_VIEW==="diagnose") render(); }, err("claims")));
+    push(onSnapshot(collection(db,"seasons",DATA_SEASON,"claims"), snap=>{ V2.claims = []; snap.forEach(d=>V2.claims.push({...d.data(), uid:d.id})); v2AutoApprove(); if(TAB==="admin" && TOOLS_VIEW==="diagnose") render(); }, err("claims")));
   }
 }
 // ── vínculos por aprovação do admin (jogador novo que bate com um pré-cadastro) ──
@@ -2303,7 +2305,7 @@ function v2AutoApprove(){
 }
 // ── migração: copia do documento antigo para a estrutura nova (não apaga nada) e confere item a item ──
 async function v2Migrate(log){
-  const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON)); if(!snap.exists()) throw new Error("documento da temporada não encontrado");
+  const snap = await getDoc(doc(db,"seasons",DATA_SEASON)); if(!snap.exists()) throw new Error("documento da temporada não encontrado");
   const data = snap.data();
   const seenP = new Set(); const players = []; let dupP = 0;
   sanitizePlayers(data.players||[]).forEach(pl=>{ if(!pl.uid || seenP.has(pl.uid)){ dupP++; return; } seenP.add(pl.uid); players.push(pl); });
@@ -2315,7 +2317,7 @@ async function v2Migrate(log){
   log(`Gravando ${fns.length} documentos (${nRegs} inscrições)…`); await v2Batched(fns);
   // conferência: relê tudo da estrutura nova e compara com o antigo
   log("Conferindo…");
-  const nw = await (async()=>{ const [pS,sS,rS] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"stages")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"regs"))]);
+  const nw = await (async()=>{ const [pS,sS,rS] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",DATA_SEASON,"stages")), getDocs(collection(db,"seasons",DATA_SEASON,"regs"))]);
     const pl = [], sd = [], rg = []; pS.forEach(d=>pl.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data())); return {players:pl, stages:v2AssembleStages(sd, rg)}; })();
   const issues = [];
   const nwP = new Map(nw.players.map(x=>[x.uid,x])), nwS = new Map(nw.stages.map(x=>[x.id,x]));
@@ -2335,7 +2337,7 @@ async function v2Activate(){ await setDoc(doc(db,"config","schema"), {version:2,
 // Volta ao modelo antigo: copia o estado atual da estrutura nova de volta para o documento antigo e desliga a chave
 async function v2Rollback(log){
   const cur = await srvRead(); log(`Copiando de volta ${cur.players.length} jogadores e ${cur.stages.length} etapas…`);
-  await setDoc(doc(db,"seasons",ACTIVE_SEASON), {players:sanitizePlayers(cur.players), stages:sanitizeStages(cur.stages), admins:cur.admins, updatedAt:serverTimestamp()}, {merge:true});
+  await setDoc(doc(db,"seasons",DATA_SEASON), {players:sanitizePlayers(cur.players), stages:sanitizeStages(cur.stages), admins:cur.admins, updatedAt:serverTimestamp()}, {merge:true});
   await setDoc(doc(db,"config","schema"), {version:1, at:serverTimestamp(), by:(CURRENT_USER&&CURRENT_USER.email)||""});
 }
 // ── V2 CAMADA (fim) ──
@@ -2380,7 +2382,7 @@ function remapUidDeep(v, oldUid, newUid){
 async function savePlayers(){
   try {
     if(SCHEMA_V2){ const me = DB.players.find(p=>p.uid===CURRENT_USER_UID); if(!me) return false; const clean = sanitizePlayers([me])[0]; await v2SaveMyProfile(clean); BASE.players[me.uid] = JSON.stringify(clean); return true; }
-    const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
+    const snap = await getDoc(doc(db,"seasons",DATA_SEASON));
     if(snap.exists()){
       const current = snap.data();
       // Merge: keep all existing players, only update/add current user's entry
@@ -2474,7 +2476,7 @@ function tiebreak(a, b, stageFilter){
 function calcRank(type){
   const fin = DB.stages.filter(s=>
     s.status==="finished" && s.type===type && !s.isFinal &&
-    (s.season===ACTIVE_SEASON || !s.season)
+    ((s.season||DATA_SEASON)===ACTIVE_SEASON)
   );
   const sc = {};
   // Seed with all known players
@@ -2495,7 +2497,7 @@ function calcRank(type){
   }));
   const stageFilter = s =>
     s.status==="finished" && s.type===type && !s.isFinal &&
-    (s.season===ACTIVE_SEASON||!s.season);
+    ((s.season||DATA_SEASON)===ACTIVE_SEASON);
   return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>{
     if(b.total !== a.total) return b.total - a.total;
     return tiebreak(a, b, stageFilter);
@@ -2508,7 +2510,7 @@ function calcRankGeral(){
   DB.players.forEach(p=>{ sc[p.uid]={p,total:0,stages:0,ko:0,nlPts:0,koPts:0}; });
   const finStages = DB.stages.filter(s=>
     s.status==="finished" && !s.isFinal &&
-    (s.season===ACTIVE_SEASON || !s.season)
+    ((s.season||DATA_SEASON)===ACTIVE_SEASON)
   );
   // Also seed from results (catches UIDs not in players list)
   finStages.forEach(s=>(s.results||[]).forEach(r=>{
@@ -2530,7 +2532,7 @@ function calcRankGeral(){
   });
   const stageFilterGeral = s =>
     s.status==="finished" && !s.isFinal &&
-    (s.season===ACTIVE_SEASON||!s.season);
+    ((s.season||DATA_SEASON)===ACTIVE_SEASON);
   return Object.values(sc).filter(s=>s.stages>0).sort((a,b)=>{
     if(b.total !== a.total) return b.total - a.total;
     return tiebreak(a, b, stageFilterGeral);
@@ -2542,7 +2544,7 @@ function calcRankGeral(){
 // Returns array sorted by saldoGeral desc (best first, negatives last).
 function calcFinancialRanking(){
   const finishedStages = DB.stages.filter(s=>
-    s.status==="finished" && (s.season===ACTIVE_SEASON||!s.season)
+    s.status==="finished" && ((s.season||DATA_SEASON)===ACTIVE_SEASON)
   );
   const map = {}; // uid → {uid, entradas, premios, saldoTorneio, cashEntradas, cashSaidas, saldoCash, saldoGeral}
 
@@ -2596,7 +2598,7 @@ function calcFinancialRanking(){
 
 function calcStats(uid){
   let p=0,w=0,wNL=0,wKO=0,wFT=0,ft=0,ko=0;
-  DB.stages.filter(s=>s.status==="finished"&&(s.season===ACTIVE_SEASON||!s.season)).forEach(s=>{
+  DB.stages.filter(s=>s.status==="finished"&&((s.season||DATA_SEASON)===ACTIVE_SEASON)).forEach(s=>{
     const r=(s.results||[]).find(r=>r.playerId===uid);
     if(!r)return;
     if(!s.isFinal) p++;
@@ -3341,7 +3343,7 @@ function needsPrivacy(){ const me = myPlayerRec(); return !!(CURRENT_USER && me 
 // Altera só o registro do jogador logado, numa transação sobre a versão mais nova do servidor (como mutateMyTokens)
 async function mutateMyPlayer(fn){
   if(!CURRENT_USER_UID) return null;
-  const ref = doc(db,"seasons",ACTIVE_SEASON); let out = null;
+  const ref = doc(db,"seasons",DATA_SEASON); let out = null;
   if(SCHEMA_V2){
     const pref = v2PlayerRef(CURRENT_USER_UID);
     await runTransaction(db, async (tx)=>{
@@ -3444,7 +3446,7 @@ function openDeleteAccountModal(){
       if(isGoogle) await reauthenticateWithPopup(user, googleProvider);
       else { const pw = box.querySelector("#del-pass").value; if(!pw) throw {code:"auth/missing-password"}; await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pw)); }
       // 2) anonimiza o registro e tira das etapas futuras (sem mexer em quem já tem registro financeiro)
-      const ref = doc(db,"seasons",ACTIVE_SEASON); const uid = user.uid; window._deletingAccount = true;
+      const ref = doc(db,"seasons",DATA_SEASON); const uid = user.uid; window._deletingAccount = true;
       if(SCHEMA_V2){
         const pref = v2PlayerRef(uid);
         await runTransaction(db, async(tx)=>{ const snap = await tx.get(pref); tx.set(pref, deepSanitize(anonymizePlayerRec(snap.exists()?snap.data():{uid, season:ACTIVE_SEASON}))); });
@@ -3920,7 +3922,7 @@ function renderHomeDesktop(){
   const heroHtml = `
   <div class="hero">
     ${logoSvg(70,"margin-bottom:10px")}
-    <div class="hpsub">Poker · Temporada 2026</div>
+    <div class="hpsub">Poker · Temporada ${ACTIVE_SEASON}</div>
     <div class="hsts">
       <div class="hst" data-goto="players" style="cursor:pointer"><div class="hsv">${DB.players.length}</div><div class="hsl">Jogadores</div></div>
       <div class="hst" data-goto="stages" style="cursor:pointer"><div class="hsv">${done.length}</div><div class="hsl">Etapas</div></div>
@@ -4028,7 +4030,7 @@ function renderHome(){
   return `<div style="">
   <div class="hero">
     ${logoSvg(70,"margin-bottom:10px")}
-    <div class="hpsub">Poker · Temporada 2026</div>
+    <div class="hpsub">Poker · Temporada ${ACTIVE_SEASON}</div>
     <div class="hsts">
       <div class="hst" data-goto="players" style="cursor:pointer"><div class="hsv">${DB.players.length}</div><div class="hsl">Jogadores</div></div>
       <div class="hst" data-goto="stages" style="cursor:pointer"><div class="hsv">${done.length}</div><div class="hsl">Etapas</div></div>
@@ -4084,7 +4086,7 @@ function renderHome(){
 // ── RANKING ───────────────────────────────────────────────────────────────────
 // ── STATS (início) ── cálculo puro (sem DOM): tudo derivado de DB.stages, então atualiza sozinho a cada etapa concluída
 function statsOrder(stages, season){
-  return stages.filter(s=>!s.isFinal && (s.season===season||!s.season)).slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  return stages.filter(s=>!s.isFinal && ((s.season||"2026")===season)).slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 }
 // Ranking (lista de uids) considerando só as etapas de "done". Mesmas regras do ranking do app: pontos e desempate por contagem de posições.
 function statsRankAfter(done, players){
@@ -4152,7 +4154,7 @@ const RECAP_DAYS = 5;   // o banner da Início fica do dia seguinte até o 5º d
 // Etapa a resumir: a última etapa finalizada, no dia seguinte e no seguinte a ele; se o resultado só foi publicado depois (atrasado),
 // aparece por 36h a partir da publicação.
 function recapPick(stages, season, now){
-  const fin = stages.filter(s=>(s.season===season||!s.season) && s.status==="finished" && (s.results||[]).length && s.date)
+  const fin = stages.filter(s=>((s.season||"2026")===season) && s.status==="finished" && (s.results||[]).length && s.date)
     .slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
   const st = fin[fin.length-1]; if(!st) return null;
   const [y,m,d] = st.date.split("-").map(Number);
@@ -4407,7 +4409,7 @@ function renderRanking(){
   const isKO = RANK_TAB==="knockout";
   const isGeral = RANK_TAB==="geral";
   return `<div class="sec">
-  <div class="st">Rank<span class="ac">ing</span></div><div class="ss">Temporada 2026</div><div class="dv"></div>
+  <div class="st">Rank<span class="ac">ing</span></div><div class="ss">Temporada ${ACTIVE_SEASON}</div><div class="dv"></div>
   <div class="tabs">
     <button class="tb${RANK_TAB==="geral"?" on":""}" data-rtab="geral">🏅 Geral</button>
     <button class="tb${RANK_TAB==="nlholdem"?" on":""}" data-rtab="nlholdem">🃏 NL Hold'em</button>
@@ -4524,7 +4526,7 @@ const recapType = t => t==="knockout" ? "PKO" : "NL Hold'em";
 const recapNames = l => l.map(u=>statsNick(u)).join(", ");
 // Dados do resumo atual (ou null fora da janela). O prêmio é calculado numa CÓPIA da etapa, para não gravar dados financeiros padrão na etapa real.
 function recapCurrent(sid){
-  const st = sid ? DB.stages.find(x=>x.id===sid && x.status==="finished" && (x.results||[]).length) : recapPick(DB.stages, ACTIVE_SEASON, new Date()); if(!st) return null;
+  const st = sid ? DB.stages.find(x=>x.id===sid && x.status==="finished" && (x.results||[]).length) : SEASONS.map(y=>recapPick(DB.stages, y, new Date())).find(Boolean); if(!st) return null;
   let prizeInfo = null;
   try{
     const ghost = {...st, finance: st.finance ? JSON.parse(JSON.stringify(st.finance)) : undefined};
@@ -4534,7 +4536,7 @@ function recapCurrent(sid){
     const bounty = st.type==="knockout" && champ ? calcKOEarnings(ghost, champ.playerId) : 0;
     if(st.finance && (prize>0 || bounty>0)) prizeInfo = {prize, bounty};
   }catch(e){ prizeInfo = null; }
-  return buildRecap(DB.stages, DB.players, ACTIVE_SEASON, st, prizeInfo);
+  return buildRecap(DB.stages, DB.players, st.season||DATA_SEASON, st, prizeInfo);
 }
 const recapMove = m => `${statsNick(m.uid)} <b style="color:${m.d>0?"var(--green)":"var(--red)"}">${m.d>0?"▲":"▼"} ${Math.abs(m.d)}</b> <span class="rcp-dim">(${m.from}º › ${m.to}º)</span>`;
 function renderRecapBanner(sid){
@@ -4704,6 +4706,17 @@ async function openRecapModal(sid){
 }
 
 // ── RESUMO UI (fim) ──
+// ── Seletor de temporada (Etapas) ──
+function seasonSwitcher(){
+  const i = SEASONS.indexOf(ACTIVE_SEASON);
+  const b = (to,txt,dis)=>`<button class="btn bo sm" ${dis?"disabled":""} onclick="window.setSeasonView('${to}')" style="min-width:34px;font-size:16px;line-height:1;${dis?"opacity:.35":""}" aria-label="${txt}">${txt}</button>`;
+  return `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+    ${b(SEASONS[i-1]||ACTIVE_SEASON,"‹",i<=0)}
+    <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:1px;color:#fff;white-space:nowrap">Temporada <span style="color:var(--yellow)">${ACTIVE_SEASON}</span></span>
+    ${b(SEASONS[i+1]||ACTIVE_SEASON,"›",i>=SEASONS.length-1)}
+  </div>`;
+}
+window.setSeasonView = function(y){ if(!SEASONS.includes(y)) return; ACTIVE_SEASON = y; STAGE_DETAIL = null; render(); };
 function renderStages(){
   // Cash game management takes priority over everything
   if(CASHGAME_MGMT){
@@ -4720,11 +4733,15 @@ function renderStages(){
   if(STAGE_DETAIL) return renderStageDetail(STAGE_DETAIL);
   const upcoming = DB.stages.filter(s=>s.status==="upcoming").sort((a,b)=>(a.date||"").localeCompare(b.date||""));
   const nextId = getNextStage()?.id || null;
+  const seasonView = DB.stages.filter(s=>(s.season||DATA_SEASON)===ACTIVE_SEASON);
   return `<div class="sec">
-  <div class="st">Eta<span class="ac">pas</span></div><div class="ss">Calendário da temporada</div><div class="dv"></div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+    <div><div class="st">Eta<span class="ac">pas</span></div><div class="ss">Calendário da temporada</div></div>
+    ${seasonSwitcher()}
+  </div><div class="dv"></div>
   ${IS_ADMIN?`<button class="btn by fw mb10" id="btn-new-stage-list">＋ Nova Etapa</button>`:""}
-  ${DB.stages.length===0?'<div class="empty">Nenhuma etapa cadastrada.</div>':''}
-  ${DB.stages.map(s=>{
+  ${seasonView.length===0?'<div class="empty">Nenhuma etapa cadastrada em '+ACTIVE_SEASON+'.</div>':''}
+  ${seasonView.map(s=>{
     const ins  = s.inscriptions||[];
     const isNext = s.id===nextId && s.status==="upcoming";
     const badgeCls = s.isFinal?"bfin":s.status==="finished"?"bdone":isNext?"bnext":"bfuture";
@@ -6757,7 +6774,7 @@ function renderFinancialRanking(){
 // ── FT PRIZE TABLE (all users) ────────────────────────────────────────────────
 function renderFTPrize(){
   const finishedStages = DB.stages
-    .filter(s=>s.status==="finished" && !s.isFinal && (s.season===ACTIVE_SEASON||!s.season))
+    .filter(s=>s.status==="finished" && !s.isFinal && ((s.season||DATA_SEASON)===ACTIVE_SEASON))
     .sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 
   const totalFT = finishedStages.reduce((sum,s)=>sum+getFTContribution(s),0);
@@ -6820,7 +6837,7 @@ function renderFTPrize(){
   return `<div class="sec">
     <button id="btn-ft-prize-back" class="btn bo mb10" style="font-size:12px">‹ Voltar</button>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;margin-bottom:4px">🏆 Premiação Final de Temporada</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Temporada 2026 — acumulado por etapa</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Temporada ${ACTIVE_SEASON} — acumulado por etapa</div>
 
     <!-- Total acumulado -->
     <div style="background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,215,0,0.04));border:2px solid #FFD700;border-radius:8px;padding:16px 20px;margin-bottom:14px;text-align:center">
@@ -7998,7 +8015,7 @@ function bindEvents(){
   // inscrições/resultados feitos por outras pessoas enquanto o editor estava aberto não são sobrescritos.
   async function saveClockState(s){
     try{
-      const ref = doc(db,"seasons",ACTIVE_SEASON);
+      const ref = doc(db,"seasons",DATA_SEASON);
       if(SCHEMA_V2){ await updateDoc(v2StageRef(s.id), {blindLevels: deepSanitize(s.blindLevels)}); return true; }
       await runTransaction(db, async (tx)=>{
         const snap = await tx.get(ref);
@@ -9661,7 +9678,7 @@ function handleServerData(data, user, fromV2){
   dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
   if(!fromV2 && DB.players.length === 0 && DB.stages.length === 0){
     dbg("17. Documento vazio!");
-    setDoc(doc(db,"seasons",ACTIVE_SEASON), {players: SEED.players, stages: SEED.stages, updatedAt: serverTimestamp()})
+    setDoc(doc(db,"seasons",DATA_SEASON), {players: SEED.players, stages: SEED.stages, updatedAt: serverTimestamp()})
       .then(()=>{ dbg("SEED enviado com sucesso!"); }).catch(e=>{ dbg("ERRO seed: " + e.message); });
     DB.players = SEED.players; DB.stages = SEED.stages;
   }
@@ -9696,14 +9713,14 @@ function startListeners(user){
 }
 function legacyListen(user){
   const unsub = onSnapshot(
-    doc(db,"seasons",ACTIVE_SEASON),
+    doc(db,"seasons",DATA_SEASON),
     (snap)=>{
       dbg("15. Firestore snapshot recebido, exists=" + snap.exists());
       if(snap.exists()){
         handleServerData({players:snap.data().players||[], stages:snap.data().stages||[], admins:snap.data().admins||[]}, user, false);
       } else {
         dbg("16. Documento 2026 NAO existe! Criando...");
-        setDoc(doc(db,"seasons",ACTIVE_SEASON), {players: SEED.players, stages: SEED.stages, updatedAt: serverTimestamp()})
+        setDoc(doc(db,"seasons",DATA_SEASON), {players: SEED.players, stages: SEED.stages, updatedAt: serverTimestamp()})
           .then(()=>{ dbg("17. SEED criado!"); }).catch(e=>{ dbg("ERRO ao criar seed: " + e.message); });
         DB.players = SEED.players; DB.stages = SEED.stages;
         const fp = DB.players.find(p=>p.uid===CURRENT_USER_UID); CURRENT_PLAYER = fp || CURRENT_PLAYER;
@@ -9722,7 +9739,7 @@ function startAuxListeners(user){
   // Relógios (para o aviso "Relógio ao vivo" na tela principal) — tolerante a falha, não bloqueia o app
   try {
     const unsubClocks = onSnapshot(collection(db,"clocks"), (snap)=>{
-      const prefix = ACTIVE_SEASON + "_";
+      const prefix = DATA_SEASON + "_";
       const seen = {};
       snap.forEach(d=>{
         if(!d.id.startsWith(prefix) || d.id===tplDocId()) return;
