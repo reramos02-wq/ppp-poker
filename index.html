@@ -955,7 +955,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile, deleteUser, reauthenticateWithPopup, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 import { getMessaging, getToken, deleteToken, onMessage, isSupported as fcmIsSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
@@ -2875,6 +2875,7 @@ function render(){
       bindProfileSetup();
       return;
     }
+    syncPrivacyGate();
     document.documentElement.classList.toggle("pl", IS_PHONE_LAND());
     dbg("render() TAB="+TAB+" desktop="+IS_DESKTOP());
     let html = "";
@@ -3065,6 +3066,160 @@ function navObserveOverlays(){
 }
 if(document.readyState!=="loading") navObserveOverlays(); else document.addEventListener("DOMContentLoaded", navObserveOverlays);
 
+// ── LGPD (início) ── aviso de privacidade, aceite, exportar meus dados e excluir conta (anonimiza; não apaga referências de resultados)
+const PRIVACY_VERSION = "2026-10";
+const PRIVACY_CONTACT = "reramos02@gmail.com";
+function privacyHtml(){
+  const h = t => `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin:14px 0 4px">${t}</div>`;
+  const p = t => `<div style="font-size:13px;color:var(--text);line-height:1.55">${t}</div>`;
+  return `${p("O PPP Poker é um app privado para organizar as etapas, o ranking e o financeiro de um grupo de poker entre amigos. Este aviso explica quais dados pessoais usamos e quais são os seus direitos (Lei 13.709/2018 – LGPD).")}
+  ${h("Quem é o responsável")}${p(`O administrador do PPP Poker. Contato para qualquer assunto de privacidade: <b>${PRIVACY_CONTACT}</b>.`)}
+  ${h("Quais dados tratamos")}${p("Nome, apelido, e-mail, foto de perfil (opcional), identificador do aparelho para notificações (opcional), e a sua participação nas etapas: inscrições, posições, pontos, knockouts e os registros financeiros usados pelos administradores na gestão das etapas (buy-ins, prêmios e acertos).")}
+  ${h("Para que usamos")}${p("Operar as etapas, o ranking e as estatísticas; fazer a gestão financeira do grupo; enviar avisos de etapas (se você permitir notificações); e gerar resumos para compartilhar com o grupo.")}
+  ${h("Base legal")}${p("Execução da sua participação no grupo (art. 7º, V) e legítimo interesse do grupo em manter o histórico e o financeiro corretos (art. 7º, IX). Foto e notificações dependem do seu consentimento (art. 7º, I), que você pode retirar a qualquer momento.")}
+  ${h("Quem vê os seus dados")}${p("Os participantes do grupo veem nome/apelido, foto, resultados e ranking. Resumos e listas exportados como imagem e enviados por WhatsApp ou e-mail contêm esses dados. Usamos Google Firebase (login, banco de dados, fotos e notificações) e Vercel (hospedagem); esses fornecedores podem processar dados fora do Brasil, com salvaguardas contratuais.")}
+  ${h("Por quanto tempo")}${p("Enquanto você tiver conta. Ao excluir a conta, seus dados pessoais (nome, apelido, e-mail, foto, notificações) são removidos. Os resultados e registros financeiros das etapas já realizadas permanecem de forma anonimizada (“Ex-jogador”), para não alterar o ranking nem a conciliação do grupo.")}
+  ${h("Seus direitos")}${p("Em <b>Meu Perfil → Privacidade e dados</b> você pode baixar os seus dados, corrigir nome e apelido, trocar ou remover a foto e excluir a conta. Para qualquer outro pedido (acesso, correção, oposição, informação sobre compartilhamento), fale com o contato acima.")}
+  ${h("Segurança")}${p("Usamos login autenticado e conexão criptografada. Incidentes relevantes serão comunicados aos afetados.")}
+  <div style="font-size:11px;color:var(--muted);margin-top:14px">Versão ${PRIVACY_VERSION}</div>`;
+}
+function openPrivacyModal(){
+  const wrap = document.getElementById("result-modal"); wrap.innerHTML = "";
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:320;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  const box = document.createElement("div");
+  box.style.cssText = "background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:4px;padding:20px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-sizing:border-box;";
+  box.innerHTML = `<div class="mtitle" style="margin-bottom:6px">Política de Privacidade</div>${privacyHtml()}<button class="btn bo fw" id="priv-close" style="margin-top:16px">Fechar</button>`;
+  ov.appendChild(box); wrap.appendChild(ov);
+  box.addEventListener("click",e=>e.stopPropagation()); ov.addEventListener("click",()=>wrap.innerHTML="");
+  box.querySelector("#priv-close").addEventListener("click",()=>wrap.innerHTML="");
+}
+const myPlayerRec = () => DB.players.find(p=>p.uid===CURRENT_USER_UID);
+function privacyAccepted(){
+  const me = myPlayerRec(); if(me && me.privacyVersion===PRIVACY_VERSION) return true;
+  try{ return localStorage.getItem("ppp_priv_"+CURRENT_USER_UID)===PRIVACY_VERSION; }catch(e){ return false; }
+}
+function needsPrivacy(){ const me = myPlayerRec(); return !!(CURRENT_USER && me && !me.needsSetup && !privacyAccepted()); }
+// Altera só o registro do jogador logado, numa transação sobre a versão mais nova do servidor (como mutateMyTokens)
+async function mutateMyPlayer(fn){
+  if(!CURRENT_USER_UID) return null;
+  const ref = doc(db,"seasons",ACTIVE_SEASON); let out = null;
+  await runTransaction(db, async (tx)=>{
+    const snap = await tx.get(ref); if(!snap.exists()) throw new Error("temporada não encontrada");
+    const players = (snap.data().players||[]).slice(); const i = players.findIndex(p=>p.uid===CURRENT_USER_UID);
+    if(i<0) throw new Error("perfil do jogador não encontrado");
+    out = fn(players[i]); players[i] = out;
+    tx.update(ref,{players: sanitizePlayers(players), updatedAt: serverTimestamp()});
+  });
+  const idx = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID); if(idx>=0) DB.players[idx] = {...DB.players[idx], ...out};
+  return out;
+}
+async function savePrivacyAccept(){
+  const at = new Date().toISOString();
+  await mutateMyPlayer(p=>({...p, privacyVersion:PRIVACY_VERSION, privacyAcceptedAt:at}));
+}
+// Tela bloqueante de aceite (novos e atuais). Fica fora do #app para não sumir nos re-renders.
+function syncPrivacyGate(){
+  let gate = document.getElementById("privacy-gate");
+  if(!needsPrivacy()){
+    if(gate) gate.remove();
+    // aceite feito neste aparelho mas ainda não gravado (offline): tenta de novo uma vez por sessão
+    const me = myPlayerRec();
+    if(me && me.privacyVersion!==PRIVACY_VERSION && privacyAccepted() && !window._privSync){ window._privSync = true; savePrivacyAccept().catch(()=>{ window._privSync = false; }); }
+    return;
+  }
+  if(gate) return;
+  gate = document.createElement("div"); gate.id = "privacy-gate";
+  gate.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.96);z-index:400;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  gate.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:4px;padding:20px;width:100%;max-width:520px;max-height:92vh;display:flex;flex-direction:column;box-sizing:border-box">
+    <div class="mtitle" style="margin-bottom:6px">Privacidade dos seus dados</div>
+    <div style="overflow-y:auto;flex:1;min-height:0">${privacyHtml()}</div>
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="priv-ok" style="margin-top:3px;width:18px;height:18px;flex-shrink:0"/><span>Li e concordo com o tratamento dos meus dados conforme esta Política de Privacidade.</span></label>
+    <div id="priv-err" style="font-size:12px;color:var(--red);margin-top:6px"></div>
+    <button class="btn by fw" id="priv-accept" style="margin-top:10px" disabled>Continuar</button>
+    <button id="priv-out" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;text-decoration:underline;margin-top:10px">Não concordo — sair</button>
+  </div>`;
+  document.body.appendChild(gate);
+  const ok = gate.querySelector("#priv-ok"), btn = gate.querySelector("#priv-accept");
+  ok.addEventListener("change",()=>{ btn.disabled = !ok.checked; });
+  btn.addEventListener("click", async()=>{
+    btn.disabled = true; btn.textContent = "Salvando…";
+    try{ localStorage.setItem("ppp_priv_"+CURRENT_USER_UID, PRIVACY_VERSION); }catch(e){}
+    try{ await savePrivacyAccept(); }catch(e){ window._privSync = false; console.warn("aceite local; será gravado depois:", e.message); }
+    gate.remove();
+  });
+  gate.querySelector("#priv-out").addEventListener("click", async()=>{ gate.remove(); stopListeners(); await signOut(auth); });
+}
+// Baixar meus dados (JSON): perfil + minha participação e meus registros financeiros em cada etapa
+function exportMyData(){
+  const me = myPlayerRec() || {}, uid = CURRENT_USER_UID;
+  const profile = {nome:me.name||"", apelido:me.nickname||"", email:me.email||CURRENT_USER.email||"", foto:me.photoURL||"", aceitePrivacidade:{versao:me.privacyVersion||"", em:me.privacyAcceptedAt||""}, aparelhosComNotificacao:(me.fcmTokens||[]).length};
+  const etapas = DB.stages.filter(s=>(s.inscriptions||[]).includes(uid) || (s.results||[]).some(r=>r.playerId===uid) || (s.buyinData||[]).some(r=>r.uid===uid)).map(s=>{
+    const r = (s.results||[]).find(x=>x.playerId===uid);
+    return {etapa:s.name, data:s.date, tipo:s.type, inscrito:(s.inscriptions||[]).includes(uid), resultado: r?{posicao:r.position, pontos:getPts(r.position), knockouts:Number(r.knockouts)||0}:null, registroFinanceiro:(s.buyinData||[]).filter(x=>x.uid===uid)};
+  });
+  const blob = new Blob([JSON.stringify({geradoEm:new Date().toISOString(), perfil:profile, etapas}, null, 2)], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "meus-dados-ppp-poker.json"; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+// Dados pessoais removidos; uid e referências de resultados/financeiro ficam (ranking e conciliação não mudam)
+function anonymizePlayerRec(p){
+  return {uid:p.uid, name:"Ex-jogador", nickname:"Ex-jogador", email:"", photoURL:"", fcmTokens:[], season:p.season, needsSetup:false, deleted:true, deletedAt:new Date().toISOString()};
+}
+function openDeleteAccountModal(){
+  const wrap = document.getElementById("result-modal"); wrap.innerHTML = "";
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:320;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;";
+  const box = document.createElement("div");
+  box.style.cssText = "background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:4px;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-sizing:border-box;";
+  const isGoogle = (CURRENT_USER.providerData||[]).some(x=>x.providerId==="google.com");
+  const adminBlock = IS_ADMIN;
+  box.innerHTML = `<div class="mtitle" style="margin-bottom:8px;color:var(--red)">Excluir minha conta</div>
+    <div style="font-size:13px;color:var(--text);line-height:1.55">Seu login será apagado e seus dados pessoais (nome, apelido, e-mail, foto e notificações) serão removidos. Os resultados das etapas já realizadas permanecem como <b>“Ex-jogador”</b>, sem identificar você, para não alterar o ranking nem o financeiro do grupo. <b>Esta ação não pode ser desfeita.</b></div>
+    ${adminBlock?`<div style="margin-top:12px;font-size:13px;color:var(--yellow)">Contas de administrador não podem ser excluídas por aqui. Fale com ${PRIVACY_CONTACT}.</div>`:`
+    ${isGoogle?"":`<div class="fr" style="margin-top:12px"><label class="lbl">Sua senha (para confirmar)</label><input class="inp" id="del-pass" type="password" autocomplete="current-password"/></div>`}
+    <div class="fr" style="margin-top:12px"><label class="lbl">Digite EXCLUIR para confirmar</label><input class="inp" id="del-word" autocomplete="off"/></div>
+    <div id="del-err" style="font-size:12px;color:var(--red);margin-top:6px"></div>`}
+    <div class="row g8" style="margin-top:14px">
+      ${adminBlock?"":`<button class="btn fw" id="del-go" style="background:var(--red);color:#fff" disabled>Excluir definitivamente</button>`}
+      <button class="btn bo fw" id="del-cancel">${adminBlock?"Fechar":"Cancelar"}</button>
+    </div>`;
+  ov.appendChild(box); wrap.appendChild(ov); box.addEventListener("click",e=>e.stopPropagation());
+  box.querySelector("#del-cancel").addEventListener("click",()=>wrap.innerHTML="");
+  if(adminBlock) return;
+  const word = box.querySelector("#del-word"), go = box.querySelector("#del-go"), err = box.querySelector("#del-err");
+  word.addEventListener("input",()=>{ go.disabled = word.value.trim().toUpperCase()!=="EXCLUIR"; });
+  go.addEventListener("click", async()=>{
+    err.textContent = ""; go.disabled = true; go.textContent = "Excluindo…";
+    const user = auth.currentUser;
+    try{
+      // 1) reautentica (exigência do Firebase para apagar o login)
+      if(isGoogle) await reauthenticateWithPopup(user, googleProvider);
+      else { const pw = box.querySelector("#del-pass").value; if(!pw) throw {code:"auth/missing-password"}; await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pw)); }
+      // 2) anonimiza o registro e tira das etapas futuras (sem mexer em quem já tem registro financeiro)
+      const ref = doc(db,"seasons",ACTIVE_SEASON); const uid = user.uid; window._deletingAccount = true;
+      await runTransaction(db, async(tx)=>{
+        const snap = await tx.get(ref); if(!snap.exists()) throw new Error("temporada não encontrada");
+        const d = snap.data(); const players = (d.players||[]).map(p=>p.uid===uid?anonymizePlayerRec(p):p);
+        const stages = (d.stages||[]).map(s=> s.status==="upcoming" && !(s.buyinData||[]).some(r=>r.uid===uid) ? {...s, inscriptions:(s.inscriptions||[]).filter(x=>x!==uid)} : s);
+        tx.update(ref,{players: sanitizePlayers(players), stages: sanitizeStages(stages), updatedAt: serverTimestamp()});
+      });
+      // 3) foto e token do aparelho
+      try{ await deleteObject(storageRef(storage, `avatars/${uid}`)); }catch(e){}
+      try{ await deleteToken(messaging); }catch(e){}
+      try{ localStorage.removeItem("ppp_priv_"+uid); }catch(e){}
+      // 4) apaga o login
+      stopListeners(); await deleteUser(user);
+      wrap.innerHTML = ""; showToast("Conta excluída. Seus dados pessoais foram removidos.","green");
+    }catch(e){
+      const c = e && e.code || "";
+      err.textContent = c==="auth/wrong-password"||c==="auth/invalid-credential" ? "Senha incorreta." : c==="auth/missing-password" ? "Digite a sua senha." : c==="auth/popup-closed-by-user" ? "Confirmação cancelada." : "Não foi possível concluir: "+(e.message||c);
+      go.disabled = false; go.textContent = "Excluir definitivamente"; window._deletingAccount = false;
+    }
+  });
+}
+// ── LGPD (fim) ──
+
 // ── PROFILE SCREEN (user settings) ───────────────────────────────────────────
 function renderProfileModal(){
   const u = CURRENT_USER;
@@ -3107,11 +3262,21 @@ function renderProfileModal(){
       <button class="btn by fw" id="pf-save">✓ Salvar</button>
       <button class="btn bo" id="pf-close">Fechar</button>
     </div>
+    <div style="height:1px;background:var(--border);margin:16px 0 12px"></div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Privacidade e dados</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn bo fw" id="pf-priv">Política de Privacidade</button>
+      <button class="btn bo fw" id="pf-export">Baixar meus dados</button>
+      <button class="btn bo fw" id="pf-delete" style="border-color:var(--red);color:var(--red)">Excluir minha conta</button>
+    </div>
     <div style="margin-top:14px;text-align:center">
       <button id="pf-logout" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;text-decoration:underline">Sair da conta</button>
     </div>`;
 
   box.querySelector("#pf-close").addEventListener("click",()=>{ wrap.innerHTML=""; });
+  box.querySelector("#pf-priv").addEventListener("click",()=>openPrivacyModal());
+  box.querySelector("#pf-export").addEventListener("click",()=>exportMyData());
+  box.querySelector("#pf-delete").addEventListener("click",()=>openDeleteAccountModal());
 
   // Avatar upload in Meu Perfil
   box.querySelector("#meu-avatar-upload")?.addEventListener("change", async(e)=>{
@@ -3293,8 +3458,10 @@ function renderLoginScreen(){
         <div class="fr"><label class="lbl">Apelido</label><input class="inp" id="auth-nick" placeholder="Joãozinho"/></div>
         <div class="fr"><label class="lbl">Email</label><input class="inp" id="auth-email" type="email" placeholder="seu@email.com" autocomplete="email"/></div>
         <div class="fr"><label class="lbl">Senha</label><input class="inp" id="auth-pass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password"/></div>
+        <label style="display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--text);margin:4px 0 10px;cursor:pointer"><input type="checkbox" id="auth-priv" style="margin-top:2px;width:18px;height:18px;flex-shrink:0"/><span>Li e concordo com a <u class="priv-link" style="color:var(--yellow)">Política de Privacidade</u>.</span></label>
         <button class="btn by fw" id="btn-signup" style="padding:14px;font-size:16px;margin-top:4px">Criar conta</button>
       `}
+      <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--muted)">Ao continuar, você concorda com a <button class="priv-link" style="background:none;border:none;color:var(--yellow);cursor:pointer;font-size:12px;padding:0;text-decoration:underline">Política de Privacidade</button></div>
     </div>
   </div>`;
 }
@@ -7294,6 +7461,7 @@ function bindLoginEvents(){
     if(e.key==="Enter") document.getElementById("btn-login")?.click();
   });
 
+  document.querySelectorAll(".priv-link").forEach(el=>el.addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); openPrivacyModal(); }));
   // Signup
   document.getElementById("btn-signup")?.addEventListener("click", async()=>{
     const name  = cleanName(document.getElementById("auth-name")?.value, 60);
@@ -7303,6 +7471,7 @@ function bindLoginEvents(){
     if(!name){ showLoginError("auth/missing-name"); return; }
     if(!nick){ showLoginError("auth/missing-nick"); return; }
     if(!email||!pass){ showLoginError("auth/missing-fields"); return; }
+    if(!document.getElementById("auth-priv")?.checked){ document.getElementById("login-err").innerHTML = `<div style="color:var(--red);font-size:13px;margin-bottom:10px">Para criar a conta, marque que leu e concorda com a Política de Privacidade.</div>`; return; }
     try{
       const btn = document.getElementById("btn-signup");
       if(btn){ btn.disabled=true; btn.textContent="Criando conta..."; }
@@ -8957,7 +9126,9 @@ onAuthStateChanged(auth, async (user) => {
 
 // ── ENSURE PLAYER PROFILE ─────────────────────────────────────────────────────
 async function ensurePlayerProfile(user){
+  if(window._deletingAccount) return;   // exclusão em andamento (LGPD): não recria e-mail/nome no registro anonimizado
   let player = DB.players.find(p=>p.uid===user.uid);
+  if(player && player.deleted) return;  // registro anonimizado
   let needsSave = false, relinked = false;
 
   if(!player){
