@@ -4176,6 +4176,94 @@ function renderRanking(){
 }
 
 // ── STAGES ────────────────────────────────────────────────────────────────────
+// ── CHECAGEM DE FOTOS (início) ── testa cada foto: carrega? lê logado (SDK)? aberta sem login (REST)? Guarda as 2 últimas execuções p/ comparar antes/depois
+const PC_KEY = "ppp_photo_checks_v1";
+let PC_RUNNING = false, PC_CUR = null;
+function pcLoad(){ try{ return JSON.parse(localStorage.getItem(PC_KEY)||"[]"); }catch(e){ return []; } }
+function pcSave(runs){ try{ localStorage.setItem(PC_KEY, JSON.stringify(runs.slice(-2))); }catch(e){} }
+function pcItems(){
+  const out = [];
+  DB.players.forEach(pl=>{ if(pl.photoURL) out.push({id:"P:"+pl.uid, tipo:"Perfil", nome:pl.nickname||pl.name||pl.uid, url:pl.photoURL, path:`avatars/${pl.uid}`}); });
+  DB.stages.forEach(s=>{ [["photoChampion","campeão"],["photoFinalTable","mesa final"]].forEach(([k,l])=>{ if(s[k]) out.push({id:"S:"+s.id+":"+k, tipo:"Etapa", nome:`${s.name} · ${l}`, url:s[k], path:`stages/${s.id}/${k}.jpg`}); }); });
+  return out;
+}
+const pcWithTimeout = (pr, ms) => Promise.race([pr, new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),ms))]);
+async function pcCheckOne(it){
+  const r = {id:it.id, tipo:it.tipo, nome:it.nome};
+  // 1) a imagem carrega como o app a mostra?
+  r.carrega = await new Promise(res=>{ const im=new Image(); const t=setTimeout(()=>res(false),9000); im.onload=()=>{clearTimeout(t);res(true);}; im.onerror=()=>{clearTimeout(t);res(false);}; im.src=it.url; });
+  // 2) leitura pelo caminho, logado (depende da regra de leitura do Storage)
+  try{ await pcWithTimeout(getDownloadURL(storageRef(storage, it.path)), 9000); r.logado = true; }catch(e){ r.logado = false; r.logadoErro = (e && (e.code||e.message))||"erro"; }
+  // 3) leitura pelo caminho SEM login (REST, sem token): true = aberta ao público
+  try{
+    const bucket = "pppoker-c5f0d.firebasestorage.app";
+    const resp = await pcWithTimeout(fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(it.path)}`, {cache:"no-store"}), 9000);
+    r.publica = resp.status===200 ? true : (resp.status===401||resp.status===403 ? false : null);
+  }catch(e){ r.publica = null; }
+  return r;
+}
+async function runPhotoCheck(){
+  if(PC_RUNNING) return; PC_RUNNING = true;
+  const items = pcItems(); const res = []; let i = 0;
+  const btn = document.getElementById("pc-run"); if(btn){ btn.disabled = true; btn.textContent = "Checando…"; }
+  PC_CUR = {em:new Date().toISOString(), total:items.length, itens:res, andamento:true}; photoCheckPaint();
+  const worker = async()=>{ while(i<items.length){ const it = items[i++]; res.push(await pcCheckOne(it)); PC_CUR.feitos = res.length; photoCheckPaint(); } };
+  await Promise.all(Array.from({length:6}, worker));
+  res.sort((a,b)=>a.id.localeCompare(b.id)); PC_CUR.andamento = false;
+  const runs = pcLoad(); runs.push({em:PC_CUR.em, total:items.length, itens:res}); pcSave(runs);
+  PC_RUNNING = false; photoCheckPaint(); if(btn){ btn.disabled = false; btn.textContent = "Rodar checagem"; }
+}
+const pcSum = run => ({ok:run.itens.filter(x=>x.carrega).length, falha:run.itens.filter(x=>!x.carrega).length, logado:run.itens.filter(x=>x.logado).length, publica:run.itens.filter(x=>x.publica===true).length});
+function pcDiff(prev, cur){
+  if(!prev) return [];
+  const m = new Map(prev.itens.map(x=>[x.id,x])), d = [];
+  cur.itens.forEach(x=>{ const o = m.get(x.id); if(!o) return;
+    if(o.carrega!==x.carrega) d.push(`${x.nome}: carregava ${o.carrega?"✓":"✗"} → ${x.carrega?"✓":"✗"}`);
+    if(o.logado!==x.logado) d.push(`${x.nome}: leitura logado ${o.logado?"✓":"✗"} → ${x.logado?"✓":"✗"}`);
+    if(o.publica!==x.publica) d.push(`${x.nome}: acesso sem login ${o.publica===true?"aberto":o.publica===false?"bloqueado":"?"} → ${x.publica===true?"aberto":x.publica===false?"bloqueado":"?"}`);
+  });
+  return d;
+}
+function photoCheckText(){
+  const runs = pcLoad(), cur = runs[runs.length-1], prev = runs[runs.length-2]; if(!cur) return "Nenhuma checagem ainda.";
+  const f = r=>{ const t = pcSum(r); return `${new Date(r.em).toLocaleString("pt-BR")} — ${r.total} fotos: carregam ${t.ok}, falham ${t.falha}, leitura logado ${t.logado}, abertas sem login ${t.publica}`; };
+  const L = ["Checagem de fotos PPP Poker","ATUAL: "+f(cur)]; if(prev) L.push("ANTERIOR: "+f(prev));
+  const d = pcDiff(prev,cur); L.push("", d.length?"Mudanças:":"Sem mudanças em relação à anterior.", ...d);
+  const bad = cur.itens.filter(x=>!x.carrega); if(bad.length) L.push("", "Fotos que NÃO carregam:", ...bad.map(x=>`- ${x.nome}`));
+  return L.join("\n");
+}
+function photoCheckPaint(){
+  const out = document.getElementById("pc-out"); if(!out) return;
+  const runs = pcLoad(); const live = PC_CUR && PC_CUR.andamento ? PC_CUR : null;
+  const cur = live ? null : runs[runs.length-1], prev = live ? runs[runs.length-1] : runs[runs.length-2];
+  const box = (t,c)=>`<div style="flex:1;min-width:90px;background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-family:var(--f-d);font-weight:800;font-size:22px;color:${c||"#fff"}">${t[0]}</div><div style="font-size:11px;color:var(--muted)">${t[1]}</div></div>`;
+  let html = "";
+  if(live){ html += `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">Checando… ${live.feitos||0} de ${live.total}</div>`; }
+  if(cur){
+    const t = pcSum(cur);
+    html += `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Execução de ${new Date(cur.em).toLocaleString("pt-BR")}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${box([t.ok,"carregam","var(--green)"])}${box([t.falha,"falham",t.falha?"var(--red)":"#fff"])}${box([t.logado,"leitura logado"])}${box([t.publica,"abertas sem login",t.publica?"var(--yellow)":"#fff"])}</div>`;
+    const d = pcDiff(prev, cur);
+    html += prev ? `<div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:6px 0">Comparação com a execução anterior (${new Date(prev.em).toLocaleString("pt-BR")})</div>
+      ${d.length?`<div style="font-size:13px;line-height:1.6">${d.map(x=>`<div style="color:${/→ ✗|→ bloqueado/.test(x)&&/carregava|leitura/.test(x)?"var(--red)":"var(--text)"}">${x}</div>`).join("")}</div>`:`<div style="font-size:13px;color:var(--green)">Nenhuma mudança.</div>`}` : `<div style="font-size:12px;color:var(--muted)">Esta é a primeira execução guardada. Rode de novo depois de mudar as regras para comparar.</div>`;
+    const bad = cur.itens.filter(x=>!x.carrega);
+    if(bad.length) html += `<div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--red);margin:14px 0 6px">Fotos que não carregam</div>${bad.map(x=>`<div style="font-size:13px">${x.nome}${x.logadoErro?` <span class="rcp-dim">(${x.logadoErro})</span>`:""}</div>`).join("")}`;
+  } else if(!live){ html += `<div style="font-size:13px;color:var(--muted)">Nenhuma checagem guardada neste aparelho.</div>`; }
+  out.innerHTML = html;
+}
+function renderToolsPhotos(){
+  return `<div>
+    <button class="btn bo mb10 sm" id="pc-back">‹ Ferramentas</button>
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-weight:700;color:#fff;font-size:16px;margin-bottom:4px">Checagem de Fotos</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5">Testa cada foto de perfil e de etapa: se carrega, se pode ser lida pelo caminho estando logado e se está aberta a quem não tem login. <b>Rode uma vez antes</b> de mudar as regras do Storage e <b>outra depois</b>: o resultado é comparado com a execução anterior, guardada neste aparelho. Não altera nada.</div>
+      <div class="row g8" style="margin-top:12px"><button class="btn by fw" id="pc-run">Rodar checagem</button><button class="btn bo" id="pc-copy">Copiar relatório</button></div>
+    </div>
+    <div class="card" id="pc-out"></div>
+  </div>`;
+}
+// ── CHECAGEM DE FOTOS (fim) ──
+
 // ── RESUMO UI (início) ── (único trecho com dado financeiro: prêmio do campeão; fica fora do bloco de estatísticas)
 const RECAP_MEDAL = ["#FFD700","#C4CBD6","#CD7F32"];
 const RECAP_LBL = {geral:"Geral", nlholdem:"NL Hold'em", knockout:"PKO"};
@@ -6508,6 +6596,7 @@ function renderAdminTools(){
   if(TOOLS_VIEW==="diagnose")    return renderToolsDiagnose();
   if(TOOLS_VIEW==="audit")       return renderToolsAudit();
   if(TOOLS_VIEW==="fin_ranking") return renderFinancialRanking();
+  if(TOOLS_VIEW==="photos")      return renderToolsPhotos();
   return renderToolsHome();
 }
 
@@ -6532,6 +6621,17 @@ function renderToolsHome(){
         <div>
           <div style="font-weight:700;color:#fff;font-size:15px">Auditoria Firestore</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">Verificar duplicatas, UIDs fantasma e gerar relatório completo</div>
+        </div>
+        <div style="margin-left:auto;color:var(--muted)">›</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;cursor:pointer" id="btn-tool-photos">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">🖼️</div>
+        <div>
+          <div style="font-weight:700;color:#fff;font-size:15px">Checagem de Fotos</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Testa todas as fotos (perfil e etapas) e compara com a execução anterior — use antes e depois de mudar as regras do Storage</div>
         </div>
         <div style="margin-left:auto;color:var(--muted)">›</div>
       </div>
@@ -8811,6 +8911,11 @@ function bindEvents(){
   document.getElementById("btn-tool-diagnose")?.addEventListener("click",()=>{ TOOLS_VIEW="diagnose"; render(); });
   document.getElementById("btn-tool-audit")?.addEventListener("click",()=>{ TOOLS_VIEW="audit"; render(); });
   document.getElementById("btn-tool-fin-ranking")?.addEventListener("click",()=>{ TOOLS_VIEW="fin_ranking"; render(); });
+  document.getElementById("btn-tool-photos")?.addEventListener("click",()=>{ TOOLS_VIEW="photos"; render(); });
+  document.getElementById("pc-run")?.addEventListener("click",()=>runPhotoCheck());
+  document.getElementById("pc-copy")?.addEventListener("click",async()=>{ const t=photoCheckText(); try{ await navigator.clipboard.writeText(t); showToast("Relatório copiado!","green"); }catch(e){ showToast("Não foi possível copiar.","red"); } });
+  document.getElementById("pc-back")?.addEventListener("click",()=>{ TOOLS_VIEW="home"; render(); });
+  if(document.getElementById("pc-out")) photoCheckPaint();
 
   // Financial Ranking: back + tab switch
   document.getElementById("btn-finrank-back")?.addEventListener("click",()=>{ TOOLS_VIEW="home"; render(); });
