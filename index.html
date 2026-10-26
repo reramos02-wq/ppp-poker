@@ -6984,7 +6984,8 @@ function renderV2Panel(){
     <div style="font-weight:700;color:#fff;margin-bottom:4px">Estrutura de dados: ${SCHEMA_V2?"nova (v2)":"antiga (documento único)"}</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${SCHEMA_V2?"Jogadores, etapas e inscrições em documentos separados.":"Copie para a estrutura nova e confira antes de virar. Nada é apagado do documento antigo."}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      ${SCHEMA_V2 ? btn("rollback","↩ Voltar ao modelo antigo") : btn("migrate","1. Copiar e conferir")+btn("activate","2. Virar para a estrutura nova",!V2.verified)}
+      ${btn("backup","💾 Baixar backup")}
+            ${SCHEMA_V2 ? btn("rollback","↩ Voltar ao modelo antigo") : btn("migrate","1. Copiar e conferir")+btn("activate","2. Virar para a estrutura nova",!V2.verified)}
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;font-size:11px;color:var(--muted)">
       Conta: <b style="color:#fff">${esc((CURRENT_USER&&CURRENT_USER.email)||"?")}</b> · e-mail verificado: <b style="color:${CURRENT_USER&&CURRENT_USER.emailVerified?"var(--green)":"var(--red)"}">${CURRENT_USER&&CURRENT_USER.emailVerified?"sim":"NÃO"}</b> · login: ${esc(((CURRENT_USER&&CURRENT_USER.providerData)||[]).map(x=>x.providerId).join(", ")||"?")}
@@ -6998,6 +6999,17 @@ function renderV2Panel(){
 window.v2Ui = async function(act){
   const log = m=>{ V2_LOG += m+"\n"; render(); };
   try{
+    if(act==="backup"){
+      const snap = await getDoc(doc(db,"seasons",DATA_SEASON)); if(!snap.exists()) throw new Error("documento da temporada não encontrado");
+      const d = snap.data();
+      const extra = SCHEMA_V2 ? await srvRead() : null;
+      const out = {geradoEm:new Date().toISOString(), temporada:DATA_SEASON, estrutura:SCHEMA_V2?"v2":"antiga", documentoDaTemporada:d, ...(extra?{estruturaNova:extra}:{})};
+      const txt = JSON.stringify(out,(k,v)=> (v && typeof v==="object" && typeof v.toDate==="function") ? v.toDate().toISOString() : v, 1);
+      const blob = new Blob([txt],{type:"application/json"}), url = URL.createObjectURL(blob), a = document.createElement("a");
+      const pad=n=>String(n).padStart(2,"0"), t=new Date(); a.href=url; a.download=`backup-ppp-poker-${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}-${pad(t.getHours())}${pad(t.getMinutes())}.json`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+      V2_LOG = `Backup baixado: ${(d.players||[]).length} jogadores, ${(d.stages||[]).length} etapas, ${Math.round(txt.length/1024)} KB.\nGuarde o arquivo fora do celular (e-mail para você mesmo, Drive).`; render(); return;
+    }
     if(act==="verify"){ await sendEmailVerification(CURRENT_USER); V2_PERM="E-mail de verificação enviado para "+CURRENT_USER.email+". Se não achar, olhe o spam."; render(); openVerifySentModal(CURRENT_USER.email); return; }
     if(act==="verified"){ await CURRENT_USER.reload(); await CURRENT_USER.getIdToken(true); V2_PERM = CURRENT_USER.emailVerified ? "✓ E-mail verificado. Toque em “Testar permissões” para confirmar." : "Ainda não consta como verificado. Clique no link do e-mail e tente de novo."; render(); return; }
     if(act==="perm"){ V2_PERM="Testando…"; render(); const out=[]; const t=async(nome,fn)=>{ try{ await fn(); out.push("✓ "+nome); }catch(e){ out.push("✗ "+nome+" → "+(e.code||"")+" "+e.message); } };
