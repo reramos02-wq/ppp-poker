@@ -3067,20 +3067,20 @@ function navObserveOverlays(){
 if(document.readyState!=="loading") navObserveOverlays(); else document.addEventListener("DOMContentLoaded", navObserveOverlays);
 
 // ── LGPD (início) ── aviso de privacidade, aceite, exportar meus dados e excluir conta (anonimiza; não apaga referências de resultados)
-const PRIVACY_VERSION = "2026-10";
+const PRIVACY_VERSION = "2026-10-2";
 const PRIVACY_CONTACT = "reramos02@gmail.com";
 function privacyHtml(){
   const h = t => `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase;margin:14px 0 4px">${t}</div>`;
   const p = t => `<div style="font-size:13px;color:var(--text);line-height:1.55">${t}</div>`;
   return `${p("O PPP Poker é um app privado para organizar as etapas, o ranking e o financeiro de um grupo de poker entre amigos. Este aviso explica quais dados pessoais usamos e quais são os seus direitos (Lei 13.709/2018 – LGPD).")}
-  ${h("Quem é o responsável")}${p(`O administrador do PPP Poker. Contato para qualquer assunto de privacidade: <b>${PRIVACY_CONTACT}</b>.`)}
+  ${h("Quem é o responsável")}${p(`<b>Renan Ramos</b>, administrador do PPP Poker, é o controlador dos dados e também o encarregado para atender os titulares. Contato para qualquer assunto de privacidade: <b>${PRIVACY_CONTACT}</b>. O app é destinado a maiores de 18 anos.`)}
   ${h("Quais dados tratamos")}${p("Nome, apelido, e-mail, foto de perfil (opcional), identificador do aparelho para notificações (opcional), e a sua participação nas etapas: inscrições, posições, pontos, knockouts e os registros financeiros usados pelos administradores na gestão das etapas (buy-ins, prêmios e acertos).")}
   ${h("Para que usamos")}${p("Operar as etapas, o ranking e as estatísticas; fazer a gestão financeira do grupo; enviar avisos de etapas (se você permitir notificações); e gerar resumos para compartilhar com o grupo.")}
   ${h("Base legal")}${p("Execução da sua participação no grupo (art. 7º, V) e legítimo interesse do grupo em manter o histórico e o financeiro corretos (art. 7º, IX). Foto e notificações dependem do seu consentimento (art. 7º, I), que você pode retirar a qualquer momento.")}
   ${h("Quem vê os seus dados")}${p("Os participantes do grupo veem nome/apelido, foto, resultados e ranking. Resumos e listas exportados como imagem e enviados por WhatsApp ou e-mail contêm esses dados. Usamos Google Firebase (login, banco de dados, fotos e notificações) e Vercel (hospedagem); esses fornecedores podem processar dados fora do Brasil, com salvaguardas contratuais.")}
   ${h("Por quanto tempo")}${p("Enquanto você tiver conta. Ao excluir a conta, seus dados pessoais (nome, apelido, e-mail, foto, notificações) são removidos. Os resultados e registros financeiros das etapas já realizadas permanecem de forma anonimizada (“Ex-jogador”), para não alterar o ranking nem a conciliação do grupo.")}
-  ${h("Seus direitos")}${p("Em <b>Meu Perfil → Privacidade e dados</b> você pode baixar os seus dados, corrigir nome e apelido, trocar ou remover a foto e excluir a conta. Para qualquer outro pedido (acesso, correção, oposição, informação sobre compartilhamento), fale com o contato acima.")}
-  ${h("Segurança")}${p("Usamos login autenticado e conexão criptografada. Incidentes relevantes serão comunicados aos afetados.")}
+  ${h("Seus direitos")}${p("Em <b>Meu Perfil → Privacidade e dados</b> você pode baixar os seus dados, corrigir nome e apelido, trocar ou remover a foto e excluir a conta. Para qualquer outro pedido (acesso, correção, oposição, informação sobre compartilhamento), fale com o contato acima; respondemos em até 15 dias. Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).")}
+  ${h("Segurança e armazenamento no aparelho")}${p("Usamos login autenticado e conexão criptografada. O app guarda no seu aparelho apenas preferências de uso (por exemplo filtros e o seu aceite desta política), sem rastreamento nem publicidade. Incidentes relevantes serão comunicados aos afetados.")}
   <div style="font-size:11px;color:var(--muted);margin-top:14px">Versão ${PRIVACY_VERSION}</div>`;
 }
 function openPrivacyModal(){
