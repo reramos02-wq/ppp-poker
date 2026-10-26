@@ -3506,6 +3506,14 @@ function renderProfileModal(){
         ${IS_ADMIN?'<div style="margin-top:4px"><span style="background:var(--red);color:#fff;font-family:\'Barlow Condensed\',sans-serif;font-size:10px;font-weight:700;padding:2px 8px;letter-spacing:1px">ADMIN</span></div>':""}
       </div>
     </div>
+    <div id="pf-verif" style="background:var(--surface2);border-radius:4px;padding:10px 12px;margin-bottom:14px;font-size:12px">
+      ${u.emailVerified
+        ? `<span style="color:var(--green);font-weight:700">✓ E-mail verificado</span>`
+        : `<div style="color:var(--yellow);font-weight:700;margin-bottom:6px">⚠ E-mail não verificado</div>
+           <div style="color:var(--muted);margin-bottom:8px">Verificar o e-mail protege sua conta. Enviamos um link para ${u.email}.</div>
+           <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn bo sm" id="pf-verif-send">✉ Enviar e-mail de verificação</button><button class="btn bo sm" id="pf-verif-ok">↻ Já verifiquei, atualizar</button></div>
+           <div id="pf-verif-msg" style="color:var(--muted);margin-top:6px"></div>`}
+    </div>
     <div class="fr"><label class="lbl">Nome completo</label><input class="inp" id="pf-name" value="${p.name||u.displayName||""}"/></div>
     <div class="fr"><label class="lbl">Apelido</label><input class="inp" id="pf-nick" value="${p.nickname||""}"/></div>
     <div style="height:1px;background:var(--border);margin:14px 0"></div>
@@ -3528,6 +3536,17 @@ function renderProfileModal(){
       <button id="pf-logout" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;text-decoration:underline">Sair da conta</button>
     </div>`;
 
+  box.querySelector("#pf-verif-send")?.addEventListener("click", async(e)=>{
+    const m = box.querySelector("#pf-verif-msg"); e.target.disabled = true;
+    try{ await sendEmailVerification(CURRENT_USER); m.textContent = "Enviado. Abra o e-mail (veja também o spam), clique no link e volte aqui."; }
+    catch(err){ m.textContent = err.code==="auth/too-many-requests" ? "Muitas tentativas. Aguarde alguns minutos e tente de novo." : "Não foi possível enviar agora. Tente de novo em instantes."; }
+    setTimeout(()=>{ e.target.disabled = false; }, 30000);
+  });
+  box.querySelector("#pf-verif-ok")?.addEventListener("click", async()=>{
+    const m = box.querySelector("#pf-verif-msg");
+    try{ await CURRENT_USER.reload(); await CURRENT_USER.getIdToken(true); }catch(err){}
+    if(CURRENT_USER.emailVerified) renderProfileModal(); else m.textContent = "Ainda não consta como verificado. Clique no link do e-mail e tente de novo.";
+  });
   box.querySelector("#pf-close").addEventListener("click",()=>{ wrap.innerHTML=""; });
   box.querySelector("#pf-priv").addEventListener("click",()=>openPrivacyModal());
   box.querySelector("#pf-export").addEventListener("click",()=>exportMyData());
