@@ -3475,6 +3475,26 @@ function openDeleteAccountModal(){
 }
 // ── LGPD (fim) ──
 
+// ── Aviso depois de enviar o e-mail de verificação ──
+function openVerifySentModal(email){
+  document.getElementById("verif-modal")?.remove();
+  const ov = document.createElement("div"); ov.id = "verif-modal";
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1100;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box";
+  const safe = String(email||"").replace(/[<>&"']/g,"");
+  ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:4px;padding:22px;width:100%;max-width:420px;max-height:90vh;overflow:auto">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">✉ E-mail enviado</div>
+    <div style="font-size:14px;color:var(--text);margin-bottom:12px">Enviamos um link de confirmação para <b style="color:#fff">${safe}</b>.</div>
+    <div style="background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;color:var(--text);line-height:1.5">
+      <div style="margin-bottom:6px"><b>1.</b> Abra seu e-mail e procure a mensagem de <b>PPP Poker</b> (remetente <span style="color:#fff">noreply@pppoker-c5f0d.firebaseapp.com</span>).</div>
+      <div style="margin-bottom:6px"><b>2.</b> <b style="color:var(--yellow)">Não achou? Olhe o spam ou lixo eletrônico</b>, e também as abas Promoções e Atualizações.</div>
+      <div style="margin-bottom:6px"><b>3.</b> Se estiver no spam, toque em <b>“Não é spam”</b>. Assim os próximos e-mails chegam na caixa de entrada.</div>
+      <div><b>4.</b> Clique no link da mensagem e volte aqui para tocar em <b>“Já verifiquei, atualizar”</b>.</div>
+    </div>
+    <button class="btn by fw" id="verif-ok" style="margin-top:14px">Entendi</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#verif-ok").addEventListener("click",()=>ov.remove());
+}
 // ── PROFILE SCREEN (user settings) ───────────────────────────────────────────
 function renderProfileModal(){
   const u = CURRENT_USER;
@@ -3510,7 +3530,7 @@ function renderProfileModal(){
       ${u.emailVerified
         ? `<span style="color:var(--green);font-weight:700">✓ E-mail verificado</span>`
         : `<div style="color:var(--yellow);font-weight:700;margin-bottom:6px">⚠ E-mail não verificado</div>
-           <div style="color:var(--muted);margin-bottom:8px">Verificar o e-mail protege sua conta. Enviamos um link para ${u.email}.</div>
+           <div style="color:var(--muted);margin-bottom:8px">Verificar o e-mail protege sua conta. Vamos enviar um link para ${u.email}. Se a mensagem não chegar, olhe o spam.</div>
            <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn bo sm" id="pf-verif-send">✉ Enviar e-mail de verificação</button><button class="btn bo sm" id="pf-verif-ok">↻ Já verifiquei, atualizar</button></div>
            <div id="pf-verif-msg" style="color:var(--muted);margin-top:6px"></div>`}
     </div>
@@ -3538,7 +3558,7 @@ function renderProfileModal(){
 
   box.querySelector("#pf-verif-send")?.addEventListener("click", async(e)=>{
     const m = box.querySelector("#pf-verif-msg"); e.target.disabled = true;
-    try{ await sendEmailVerification(CURRENT_USER); m.textContent = "Enviado. Abra o e-mail (veja também o spam), clique no link e volte aqui."; }
+    try{ await sendEmailVerification(CURRENT_USER); m.textContent = "Enviado. Se não achar, olhe o spam."; openVerifySentModal(CURRENT_USER.email); }
     catch(err){ m.textContent = err.code==="auth/too-many-requests" ? "Muitas tentativas. Aguarde alguns minutos e tente de novo." : "Não foi possível enviar agora. Tente de novo em instantes."; }
     setTimeout(()=>{ e.target.disabled = false; }, 30000);
   });
@@ -6978,7 +6998,7 @@ function renderV2Panel(){
 window.v2Ui = async function(act){
   const log = m=>{ V2_LOG += m+"\n"; render(); };
   try{
-    if(act==="verify"){ await sendEmailVerification(CURRENT_USER); V2_PERM="E-mail de verificação enviado para "+CURRENT_USER.email+". Abra a mensagem (veja também o spam), clique no link e volte aqui para tocar em “Já verifiquei, atualizar”."; render(); return; }
+    if(act==="verify"){ await sendEmailVerification(CURRENT_USER); V2_PERM="E-mail de verificação enviado para "+CURRENT_USER.email+". Se não achar, olhe o spam."; render(); openVerifySentModal(CURRENT_USER.email); return; }
     if(act==="verified"){ await CURRENT_USER.reload(); await CURRENT_USER.getIdToken(true); V2_PERM = CURRENT_USER.emailVerified ? "✓ E-mail verificado. Toque em “Testar permissões” para confirmar." : "Ainda não consta como verificado. Clique no link do e-mail e tente de novo."; render(); return; }
     if(act==="perm"){ V2_PERM="Testando…"; render(); const out=[]; const t=async(nome,fn)=>{ try{ await fn(); out.push("✓ "+nome); }catch(e){ out.push("✗ "+nome+" → "+(e.code||"")+" "+e.message); } };
       let tok=""; try{ const r=await CURRENT_USER.getIdTokenResult(true); tok="token: email="+r.claims.email+" email_verified="+r.claims.email_verified+" provedor="+(r.signInProvider||""); }catch(e){ tok="token: "+e.message; } out.push(tok);
