@@ -955,7 +955,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile, deleteUser, reauthenticateWithPopup, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile, deleteUser, reauthenticateWithPopup, reauthenticateWithCredential, EmailAuthProvider, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 import { getMessaging, getToken, deleteToken, onMessage, isSupported as fcmIsSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
@@ -6949,7 +6949,7 @@ function renderV2Panel(){
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;font-size:11px;color:var(--muted)">
       Conta: <b style="color:#fff">${esc((CURRENT_USER&&CURRENT_USER.email)||"?")}</b> · e-mail verificado: <b style="color:${CURRENT_USER&&CURRENT_USER.emailVerified?"var(--green)":"var(--red)"}">${CURRENT_USER&&CURRENT_USER.emailVerified?"sim":"NÃO"}</b> · login: ${esc(((CURRENT_USER&&CURRENT_USER.providerData)||[]).map(x=>x.providerId).join(", ")||"?")}
-      <div style="margin-top:6px">${btn("perm","🔎 Testar permissões")}</div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${btn("perm","🔎 Testar permissões")}${CURRENT_USER&&!CURRENT_USER.emailVerified?btn("verify","✉ Enviar e-mail de verificação")+btn("verified","↻ Já verifiquei, atualizar"):""}</div>
       ${V2_PERM?`<pre style="white-space:pre-wrap;font-size:11px;margin:6px 0 0">${esc(V2_PERM)}</pre>`:""}
     </div>
     ${V2_LOG?`<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:8px 0 0">${esc(V2_LOG)}</pre>`:""}
@@ -6959,6 +6959,8 @@ function renderV2Panel(){
 window.v2Ui = async function(act){
   const log = m=>{ V2_LOG += m+"\n"; render(); };
   try{
+    if(act==="verify"){ await sendEmailVerification(CURRENT_USER); V2_PERM="E-mail de verificação enviado para "+CURRENT_USER.email+". Abra a mensagem (veja também o spam), clique no link e volte aqui para tocar em “Já verifiquei, atualizar”."; render(); return; }
+    if(act==="verified"){ await CURRENT_USER.reload(); await CURRENT_USER.getIdToken(true); V2_PERM = CURRENT_USER.emailVerified ? "✓ E-mail verificado. Toque em “Testar permissões” para confirmar." : "Ainda não consta como verificado. Clique no link do e-mail e tente de novo."; render(); return; }
     if(act==="perm"){ V2_PERM="Testando…"; render(); const out=[]; const t=async(nome,fn)=>{ try{ await fn(); out.push("✓ "+nome); }catch(e){ out.push("✗ "+nome+" → "+(e.code||"")+" "+e.message); } };
       let tok=""; try{ const r=await CURRENT_USER.getIdTokenResult(true); tok="token: email="+r.claims.email+" email_verified="+r.claims.email_verified+" provedor="+(r.signInProvider||""); }catch(e){ tok="token: "+e.message; } out.push(tok);
       await t("ler documento da temporada", ()=>getDoc(doc(db,"seasons",DATA_SEASON)));

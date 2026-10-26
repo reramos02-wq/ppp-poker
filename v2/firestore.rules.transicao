@@ -18,8 +18,9 @@ service cloud.firestore {
     // ── estrutura antiga (documento único) ──
     match /seasons/{season} {
       allow read: if signedIn();
-      allow create, write: if verified() && request.auth.token.email in ['reramos02@gmail.com'];
-      allow update: if verified() && (
+      // (provisório) sem exigir e-mail verificado, como era antes, para não travar quem entra por e-mail e senha
+      allow create, write: if signedIn() && request.auth.token.email in ['reramos02@gmail.com'];
+      allow update: if signedIn() && (
         request.auth.token.email in ['reramos02@gmail.com'] ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stages', 'players', 'updatedAt'])
       );
@@ -63,7 +64,12 @@ service cloud.firestore {
 
     match /clocks/{clockId} {
       allow read: if signedIn();
-      allow write: if isAdmin(clockId.split('_')[0]);
+      // (provisório) como era antes, sem exigir e-mail verificado
+      allow write: if signedIn() && (
+        request.auth.token.email in ['reramos02@gmail.com'] ||
+        request.auth.token.email in get(/databases/$(database)/documents/seasons/$(clockId.split('_')[0])).data.get('admins', []) ||
+        request.auth.uid in get(/databases/$(database)/documents/seasons/$(clockId.split('_')[0])).data.get('admins', [])
+      );
     }
   }
 }
