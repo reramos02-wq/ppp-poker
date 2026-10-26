@@ -6935,7 +6935,7 @@ function renderToolsHome(){
 
 // ── DIAGNOSE ──────────────────────────────────────────────────────────────────
 // ── Painel admin: estrutura de dados (migração, virada, volta) e vínculos pendentes ──
-let V2_LOG = "";
+let V2_LOG = ""; let V2_PERM = "";
 const esc = v => String(v==null?"":v).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function renderV2Panel(){
   if(!IS_ADMIN) return "";
@@ -6947,6 +6947,11 @@ function renderV2Panel(){
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       ${SCHEMA_V2 ? btn("rollback","↩ Voltar ao modelo antigo") : btn("migrate","1. Copiar e conferir")+btn("activate","2. Virar para a estrutura nova",!V2.verified)}
     </div>
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;font-size:11px;color:var(--muted)">
+      Conta: <b style="color:#fff">${esc((CURRENT_USER&&CURRENT_USER.email)||"?")}</b> · e-mail verificado: <b style="color:${CURRENT_USER&&CURRENT_USER.emailVerified?"var(--green)":"var(--red)"}">${CURRENT_USER&&CURRENT_USER.emailVerified?"sim":"NÃO"}</b> · login: ${esc(((CURRENT_USER&&CURRENT_USER.providerData)||[]).map(x=>x.providerId).join(", ")||"?")}
+      <div style="margin-top:6px">${btn("perm","🔎 Testar permissões")}</div>
+      ${V2_PERM?`<pre style="white-space:pre-wrap;font-size:11px;margin:6px 0 0">${esc(V2_PERM)}</pre>`:""}
+    </div>
     ${V2_LOG?`<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:8px 0 0">${esc(V2_LOG)}</pre>`:""}
     ${claims.length?`<div style="margin-top:10px;font-weight:700;color:#fff;font-size:12px">Vínculos pendentes</div>`+claims.map(c=>{ const cand=DB.players.find(x=>x.uid===c.candidate), me=DB.players.find(x=>x.uid===c.uid); return `<div style="display:flex;gap:6px;align-items:center;justify-content:space-between;margin-top:6px;font-size:12px"><span>${esc((me&&me.name)||c.name||c.uid)} → ${esc((cand&&cand.name)||c.candidate)} <span style="color:var(--muted)">(${esc(c.via||"")}${c.emailVerified?", e-mail verificado":""})</span></span><span><button class="btn bo sm" onclick="window.v2Ui('approve:${esc(c.uid)}')">Aprovar</button> <button class="btn bo sm" onclick="window.v2Ui('reject:${esc(c.uid)}')">Recusar</button></span></div>`; }).join(""):""}
   </div>`;
@@ -6954,6 +6959,14 @@ function renderV2Panel(){
 window.v2Ui = async function(act){
   const log = m=>{ V2_LOG += m+"\n"; render(); };
   try{
+    if(act==="perm"){ V2_PERM="Testando…"; render(); const out=[]; const t=async(nome,fn)=>{ try{ await fn(); out.push("✓ "+nome); }catch(e){ out.push("✗ "+nome+" → "+(e.code||"")+" "+e.message); } };
+      let tok=""; try{ const r=await CURRENT_USER.getIdTokenResult(true); tok="token: email="+r.claims.email+" email_verified="+r.claims.email_verified+" provedor="+(r.signInProvider||""); }catch(e){ tok="token: "+e.message; } out.push(tok);
+      await t("ler documento da temporada", ()=>getDoc(doc(db,"seasons",DATA_SEASON)));
+      await t("gravar no documento da temporada (só updatedAt)", ()=>updateDoc(doc(db,"seasons",DATA_SEASON),{updatedAt:serverTimestamp()}));
+      await t("transação no documento da temporada", ()=>runTransaction(db, async tx=>{ const sn=await tx.get(doc(db,"seasons",DATA_SEASON)); tx.update(doc(db,"seasons",DATA_SEASON),{updatedAt:serverTimestamp()}); }));
+      await t("ler config/schema", ()=>getDoc(doc(db,"config","schema")));
+      await t("ler jogadores (estrutura nova)", ()=>getDocs(collection(db,"players")));
+      V2_PERM=out.join("\n"); render(); return; }
     if(act==="migrate"){ V2_LOG=""; await v2Migrate(log); }
     else if(act==="activate"){ if(!V2.verified) return; if(!confirm("Virar para a estrutura nova? Os usuários passam a ler e gravar nela. Dá para voltar pelo mesmo painel.")) return; await v2Activate(); V2_LOG="Virada feita. O app recarrega sozinho."; }
     else if(act==="rollback"){ if(!confirm("Voltar ao modelo antigo? O estado atual é copiado de volta para o documento da temporada.")) return; V2_LOG=""; await v2Rollback(log); }
