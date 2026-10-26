@@ -1,0 +1,69 @@
+rules_version = '2';
+// REGRAS DE TRANSIÇÃO — publicar ANTES de copiar os dados.
+// Mantém o app atual funcionando (documento único) e já libera a estrutura nova.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    // admin = e-mail principal OU e-mail/uid na lista admins da temporada (sempre com e-mail verificado)
+    function isAdmin(season) {
+      return verified() && (
+        request.auth.token.email in ['reramos02@gmail.com'] ||
+        request.auth.token.email in get(/databases/$(database)/documents/seasons/$(season)).data.get('admins', []) ||
+        request.auth.uid in get(/databases/$(database)/documents/seasons/$(season)).data.get('admins', [])
+      );
+    }
+
+    // ── estrutura antiga (documento único) ──
+    match /seasons/{season} {
+      allow read: if signedIn();
+      allow create, write: if verified() && request.auth.token.email in ['reramos02@gmail.com'];
+      allow update: if verified() && (
+        request.auth.token.email in ['reramos02@gmail.com'] ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stages', 'players', 'updatedAt'])
+      );
+
+      // ── estrutura nova ──
+      match /stages/{stageId} {
+        allow read: if signedIn();
+        allow write: if isAdmin(season);
+      }
+      match /regs/{regId} {
+        allow read: if signedIn();
+        allow write: if isAdmin(season);
+        // jogador: só a própria inscrição, e só em etapa não encerrada
+        allow create, update: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && regId == request.resource.data.stageId + '__' + request.auth.uid
+          && request.resource.data.keys().hasOnly(['stageId','uid','inscrito','late','ord','lord'])
+          && get(/databases/$(database)/documents/seasons/$(season)/stages/$(request.resource.data.stageId)).data.get('allowInscriptions', true) != false
+          && get(/databases/$(database)/documents/seasons/$(season)/stages/$(request.resource.data.stageId)).data.status != 'finished';
+        allow delete: if signedIn()
+          && regId.matches('.*__' + request.auth.uid)
+          && get(/databases/$(database)/documents/seasons/$(season)/stages/$(regId.split('__')[0])).data.status != 'finished';
+      }
+      match /claims/{uid} {
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow read: if signedIn() && (request.auth.uid == uid || isAdmin(season));
+        allow delete: if isAdmin(season);
+      }
+    }
+
+    match /players/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid;
+      allow write: if isAdmin('2026');
+    }
+
+    match /config/{doc} {
+      allow read: if signedIn();
+      allow write: if verified() && request.auth.token.email in ['reramos02@gmail.com'];
+    }
+
+    match /clocks/{clockId} {
+      allow read: if signedIn();
+      allow write: if isAdmin(clockId.split('_')[0]);
+    }
+  }
+}

@@ -956,7 +956,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updatePassword, signOut, updateProfile, deleteUser, reauthenticateWithPopup, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, onSnapshot, setDoc, getDoc, updateDoc, deleteDoc, addDoc, query, where, getDocs, serverTimestamp, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 import { getMessaging, getToken, deleteToken, onMessage, isSupported as fcmIsSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 import { derive as clockDerive, applyAction as clockApply, normalizeState as clockNormalize, IDLE as CLOCK_IDLE } from "./clock-core.js";
@@ -1079,6 +1079,16 @@ async function mutateMyTokens(fn){
   if(!CURRENT_USER_UID) return null;
   const ref = doc(db,"seasons",ACTIVE_SEASON);
   let result = null;
+  if(SCHEMA_V2){
+    const pref = v2PlayerRef(CURRENT_USER_UID);
+    await runTransaction(db, async (tx)=>{
+      const snap = await tx.get(pref); if(!snap.exists()) throw new Error("perfil do jogador não encontrado");
+      result = [...new Set(fn(snap.data().fcmTokens||[]).filter(Boolean))];
+      tx.update(pref,{fcmTokens: result});
+    });
+    const idx2 = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID); if(idx2>=0) DB.players[idx2] = {...DB.players[idx2], fcmTokens: result};
+    return result;
+  }
   await runTransaction(db, async (tx)=>{
     const snap = await tx.get(ref);
     if(!snap.exists()) throw new Error("temporada não encontrada");
@@ -2087,6 +2097,7 @@ function mergeStage(sv, lc, baseJson){
   }catch(e){ return lc; }
 }
 async function commitDB(){
+  if(SCHEMA_V2){ await v2Commit({players:DB.players, stages:DB.stages, admins:DB.admins, deleteMissing:true}); return; }
   const ref = doc(db,"seasons",ACTIVE_SEASON);
   const localPlayers = sanitizePlayers(DB.players), localStages = sanitizeStages(DB.stages);
   let merged = null;
@@ -2103,6 +2114,232 @@ async function commitDB(){
   });
   setBaseline(merged.players, merged.stages, merged.admins);
 }
+// ── V2 PURO (início) ── estrutura nova: jogadores, etapas e inscrições em documentos separados. Funções puras (sem DOM/Firebase), testadas em v2.test.mjs
+const V2_LEGACY_ONLY = ["inscriptions","lateList"];          // na estrutura nova vivem nos docs de inscrição (regs), não no doc da etapa
+const v2RegId = (sid, uid) => sid + "__" + uid;
+function v2Canon(v){   // JSON com chaves ordenadas (comparação independente da ordem das chaves)
+  if(Array.isArray(v)) return "[" + v.map(v2Canon).join(",") + "]";
+  if(v && typeof v === "object") return "{" + Object.keys(v).sort().filter(k=>v[k]!==undefined).map(k=>JSON.stringify(k)+":"+v2Canon(v[k])).join(",") + "}";
+  return JSON.stringify(v===undefined?null:v);
+}
+const v2Uniq = a => { const o=[]; (a||[]).forEach(u=>{ if(typeof u==="string" && u && !o.includes(u)) o.push(u); }); return o; };
+// Etapa (formato do app) → {doc (sem inscrições), regs: [{id,data}]}
+function v2SplitStage(st){
+  const doc = {}; Object.keys(st).forEach(k=>{ if(!V2_LEGACY_ONLY.includes(k) && st[k]!==undefined) doc[k] = st[k]; });
+  const ins = v2Uniq(st.inscriptions), late = v2Uniq(st.lateList), all = v2Uniq([...ins, ...late]);
+  const regs = all.map(uid=>{
+    const data = {stageId:st.id, uid, inscrito:ins.includes(uid), late:late.includes(uid)};
+    if(data.inscrito) data.ord = ins.indexOf(uid);
+    if(data.late) data.lord = late.indexOf(uid);
+    return {id:v2RegId(st.id, uid), data};
+  });
+  return {doc, regs};
+}
+// Docs → formato do app. Ordem das inscrições = ord; da lista de late = lord.
+function v2AssembleStages(stageDocs, regDocs){
+  const by = {}; regDocs.forEach(r=>{ (by[r.stageId] = by[r.stageId] || []).push(r); });
+  return stageDocs.map(d=>{
+    const rs = by[d.id] || [];
+    const ins = rs.filter(r=>r.inscrito!==false).slice().sort((a,b)=>(a.ord??1e15)-(b.ord??1e15) || String(a.uid).localeCompare(String(b.uid))).map(r=>r.uid);
+    const late = rs.filter(r=>r.late===true).slice().sort((a,b)=>(a.lord??1e15)-(b.lord??1e15) || String(a.uid).localeCompare(String(b.uid))).map(r=>r.uid);
+    return {...d, inscriptions:ins, lateList:late};
+  });
+}
+// Normaliza uma etapa do formato antigo para comparar com a montada da estrutura nova
+const v2NormStage = st => ({...st, inscriptions:v2Uniq(st.inscriptions), lateList:v2Uniq(st.lateList)});
+// Diferenças entre o que este aparelho viu por último (base) e o estado local → operações de gravação
+// base*: mapas id → JSON (como BASE); loc*: arrays do app; regsNow: mapa id → doc de inscrição conhecido
+function v2Diff(baseP, baseS, locP, locS, o){
+  const ops = {players:{set:[], del:[]}, stages:{set:[], del:[]}, regs:{set:[], del:[]}, blocked:0};
+  const admin = !!o.isAdmin, me = o.uid, stamp = o.now || Date.now();
+  // jogadores
+  const locPIds = new Set(locP.map(p=>p.uid));
+  locP.forEach(p=>{ const same = baseP[p.uid]!==undefined && v2Canon(JSON.parse(baseP[p.uid]))===v2Canon(p);
+    if(same) return; if(!admin && p.uid!==me){ ops.blocked++; return; } ops.players.set.push(p); });
+  if(o.deleteMissing) Object.keys(baseP).forEach(uid=>{ if(!locPIds.has(uid)){ if(admin) ops.players.del.push(uid); else ops.blocked++; } });
+  // etapas
+  const locSIds = new Set(locS.map(s=>s.id));
+  locS.forEach((st,si)=>{
+    const baseStage = baseS[st.id]!==undefined ? JSON.parse(baseS[st.id]) : null;
+    if(baseStage && v2Canon(v2NormStage(baseStage))===v2Canon(v2NormStage(st))) return;
+    const loc = v2SplitStage(st);
+    if(admin){
+      const bs = baseStage ? v2SplitStage(baseStage).doc : null;
+      if(!bs || v2Canon(bs)!==v2Canon(loc.doc)) ops.stages.set.push(loc.doc);
+    } else if(!baseStage){ ops.blocked++; return; }
+    else if(v2Canon(v2SplitStage(baseStage).doc)!==v2Canon(loc.doc)) ops.blocked++;      // não-admin não altera dados da etapa
+    // inscrições / late
+    const bIns = baseStage ? v2Uniq(baseStage.inscriptions) : [], bLate = baseStage ? v2Uniq(baseStage.lateList) : [];
+    const lIns = v2Uniq(st.inscriptions), lLate = v2Uniq(st.lateList);
+    const bAll = new Set([...bIns, ...bLate]), lAll = new Set([...lIns, ...lLate]);
+    const mine = u => admin || u===me;
+    const orderChanged = JSON.stringify(bIns.filter(u=>lIns.includes(u))) !== JSON.stringify(lIns.filter(u=>bIns.includes(u)));
+    const lorderChanged = JSON.stringify(bLate.filter(u=>lLate.includes(u))) !== JSON.stringify(lLate.filter(u=>bLate.includes(u)));
+    bAll.forEach(u=>{ if(!lAll.has(u)){ if(mine(u)) ops.regs.del.push(v2RegId(st.id,u)); else ops.blocked++; } });
+    let k = 0;
+    lAll.forEach(u=>{
+      const id = v2RegId(st.id,u), isNew = !bAll.has(u), nowIns = lIns.includes(u), nowLate = lLate.includes(u), wasIns = bIns.includes(u), wasLate = bLate.includes(u);
+      const data = {};
+      if(isNew){ data.stageId = st.id; data.uid = u; data.inscrito = nowIns; data.late = nowLate; if(nowIns) data.ord = orderChanged||!baseStage ? lIns.indexOf(u) : stamp + (k++); if(nowLate) data.lord = lLate.indexOf(u); }
+      else {
+        if(nowIns!==wasIns){ data.inscrito = nowIns; if(nowIns) data.ord = stamp + (k++); }
+        else if(nowIns && orderChanged) data.ord = lIns.indexOf(u);
+        if(nowLate!==wasLate){ data.late = nowLate; if(nowLate) data.lord = lLate.indexOf(u); }
+        else if(nowLate && lorderChanged) data.lord = lLate.indexOf(u);
+      }
+      if(Object.keys(data).length){ if(mine(u)) ops.regs.set.push({id, data, create:isNew}); else ops.blocked++; }
+    });
+  });
+  if(o.deleteMissing) Object.keys(baseS).forEach(id=>{ if(!locSIds.has(id)){ if(admin){ ops.stages.del.push(id); JSON.parse(baseS[id]).inscriptions && v2Uniq([...(JSON.parse(baseS[id]).inscriptions||[]), ...(JSON.parse(baseS[id]).lateList||[])]).forEach(u=>ops.regs.del.push(v2RegId(id,u))); } else ops.blocked++; } });
+  return ops;
+}
+// ── V2 PURO (fim) ──
+
+// ── V2 CAMADA (início) ── gravação/leitura da estrutura nova. Só é usada quando config/schema.version === 2 (chave desligada por padrão)
+let SCHEMA_V2 = false;
+const V2 = {players:null, stageDocs:null, regs:null, admins:null, seasonLoaded:false, claims:[], verified:false};
+const v2SeasonRef = () => doc(db,"seasons",ACTIVE_SEASON);
+const v2PlayerRef = uid => doc(db,"players",uid);
+const v2StageRef  = id  => doc(db,"seasons",ACTIVE_SEASON,"stages",id);
+const v2RegRef    = id  => doc(db,"seasons",ACTIVE_SEASON,"regs",id);
+const v2ClaimRef  = uid => doc(db,"seasons",ACTIVE_SEASON,"claims",uid);
+async function v2Batched(fns){     // lotes de até 400 operações
+  for(let i=0;i<fns.length;i+=400){ const b = writeBatch(db); fns.slice(i,i+400).forEach(fn=>fn(b)); await b.commit(); }
+}
+async function v2ApplyOps(ops){
+  const fns = [];
+  ops.stages.set.forEach(d=>fns.push(b=>b.set(v2StageRef(d.id), deepSanitize(d))));
+  ops.stages.del.forEach(id=>fns.push(b=>b.delete(v2StageRef(id))));
+  ops.regs.set.forEach(r=>fns.push(b=>b.set(v2RegRef(r.id), r.data, {merge:true})));
+  ops.regs.del.forEach(id=>fns.push(b=>b.delete(v2RegRef(id))));
+  ops.players.del.forEach(uid=>fns.push(b=>b.delete(v2PlayerRef(uid))));
+  const mine = ops.players.set.filter(p=>p.uid===CURRENT_USER_UID);
+  ops.players.set.filter(p=>p.uid!==CURRENT_USER_UID).forEach(pl=>fns.push(b=>b.set(v2PlayerRef(pl.uid), deepSanitize(pl))));
+  await v2Batched(fns);
+  for(const pl of mine) await v2SaveMyProfile(pl);
+}
+// Perfil próprio: transação que une os tokens de notificação do servidor com os locais (nunca perde token de outro aparelho)
+async function v2SaveMyProfile(pl){
+  const ref = v2PlayerRef(pl.uid);
+  await runTransaction(db, async(tx)=>{
+    const snap = await tx.get(ref); const srv = snap.exists() ? snap.data() : {};
+    const toks = [...new Set([...(srv.fcmTokens||[]), ...(pl.fcmTokens||[])])];
+    tx.set(ref, deepSanitize({...srv, ...pl, fcmTokens: toks}));
+  });
+}
+// parts: {players?, stages?, admins?, deleteMissing?}. Só grava o que ESTE aparelho mudou desde a última leitura.
+async function v2Commit(parts){
+  const locP = parts.players ? sanitizePlayers(parts.players) : [], locS = parts.stages ? sanitizeStages(parts.stages) : [];
+  const ops = v2Diff(BASE.players, BASE.stages, locP, locS, {isAdmin:IS_ADMIN, uid:CURRENT_USER_UID, deleteMissing: !!parts.deleteMissing && !!parts.players && !!parts.stages});
+  if(ops.blocked) console.warn("v2: alterações sem permissão ignoradas:", ops.blocked);
+  await v2ApplyOps(ops);
+  // atualiza a "foto" do que foi gravado
+  const touched = new Set([...ops.stages.set.map(d=>d.id), ...ops.regs.set.map(r=>r.data.stageId||r.id.split("__")[0]), ...ops.regs.del.map(id=>id.split("__")[0])]);
+  locS.forEach(st=>{ if(touched.has(st.id)) BASE.stages[st.id] = JSON.stringify(st); });
+  ops.stages.del.forEach(id=>{ delete BASE.stages[id]; });
+  ops.players.set.forEach(pl=>{ BASE.players[pl.uid] = JSON.stringify(pl); });
+  ops.players.del.forEach(uid=>{ delete BASE.players[uid]; });
+  if(IS_ADMIN && parts.admins && JSON.stringify(parts.admins)!==BASE.admins){
+    await updateDoc(v2SeasonRef(), {admins: parts.admins, updatedAt: serverTimestamp()}); BASE.admins = JSON.stringify(parts.admins);
+  }
+  return ops;
+}
+// Gravação direta (substitui os updateDoc no documento da temporada espalhados pelo app)
+async function seasonUpdate(parts){
+  if(!SCHEMA_V2) return updateDoc(doc(db,"seasons",ACTIVE_SEASON), parts);
+  return v2Commit({players:parts.players, stages:parts.stages, admins:parts.admins});
+}
+// Leitura/gravação completa (ferramentas de admin)
+async function srvRead(){
+  if(!SCHEMA_V2){ const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON)); const d = snap.data()||{}; return {players:[...(d.players||[])], stages:[...(d.stages||[])], admins:d.admins||[]}; }
+  const [pS,sS,rS,seas] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"stages")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"regs")), getDoc(v2SeasonRef())]);
+  const players = [], sd = [], rg = []; pS.forEach(d=>players.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data()));
+  return {players, stages: v2AssembleStages(sd, rg), admins: (seas.exists()?seas.data().admins:[])||[]};
+}
+async function srvWriteFull(full){
+  if(!SCHEMA_V2){ await setDoc(doc(db,"seasons",ACTIVE_SEASON), {players:full.players, stages:full.stages, admins:full.admins, updatedAt:serverTimestamp()}); return; }
+  const cur = await srvRead(); const bp = {}, bs = {};
+  cur.players.forEach(p=>{ bp[p.uid] = JSON.stringify(p); }); cur.stages.forEach(st=>{ bs[st.id] = JSON.stringify(st); });
+  const ops = v2Diff(bp, bs, sanitizePlayers(full.players), sanitizeStages(full.stages), {isAdmin:true, uid:CURRENT_USER_UID, deleteMissing:true});
+  await v2ApplyOps(ops);
+  if(JSON.stringify(full.admins||[])!==JSON.stringify(cur.admins||[])) await updateDoc(v2SeasonRef(), {admins:full.admins||[], updatedAt:serverTimestamp()});
+}
+// Montagem dos dados vindos do servidor (estrutura nova)
+function v2Kick(user){
+  if(!(V2.players && V2.stageDocs && V2.regs && V2.seasonLoaded)) return;
+  handleServerData({players:V2.players, stages:v2AssembleStages(V2.stageDocs, V2.regs), admins:V2.admins||[]}, user, true);
+}
+function v2Listen(user){
+  const err = (n)=>(e)=>{ dbg("ERRO v2 "+n+": "+e.code); console.warn("v2 "+n+":", e.code, e.message); };
+  const push = u => _unsubListeners.push(u);
+  push(onSnapshot(collection(db,"players"), snap=>{ V2.players = []; snap.forEach(d=>V2.players.push({...d.data(), uid:d.id})); v2Kick(user); }, err("players")));
+  push(onSnapshot(collection(db,"seasons",ACTIVE_SEASON,"stages"), snap=>{ V2.stageDocs = []; snap.forEach(d=>V2.stageDocs.push({...d.data(), id:d.id})); v2Kick(user); }, err("stages")));
+  push(onSnapshot(collection(db,"seasons",ACTIVE_SEASON,"regs"), snap=>{ V2.regs = []; snap.forEach(d=>V2.regs.push(d.data())); v2Kick(user); }, err("regs")));
+  push(onSnapshot(v2SeasonRef(), snap=>{ V2.admins = snap.exists() ? (snap.data().admins||[]) : []; V2.seasonLoaded = true; v2Kick(user); }, err("season")));
+  if(IS_ADMIN || ADMIN_EMAILS.includes(user && user.email)){
+    push(onSnapshot(collection(db,"seasons",ACTIVE_SEASON,"claims"), snap=>{ V2.claims = []; snap.forEach(d=>V2.claims.push({...d.data(), uid:d.id})); v2AutoApprove(); if(TAB==="admin" && TOOLS_VIEW==="diagnose") render(); }, err("claims")));
+  }
+}
+// ── vínculos por aprovação do admin (jogador novo que bate com um pré-cadastro) ──
+const _v2Approving = new Set();
+async function v2ApproveClaim(c){
+  const cand = DB.players.find(x=>x.uid===c.candidate), mine = DB.players.find(x=>x.uid===c.uid);
+  if(!cand || !mine || cand.uid===mine.uid){ try{ await deleteDoc(v2ClaimRef(c.uid)); }catch(e){} return false; }
+  DB.stages = DB.stages.map(st=>remapUidDeep(st, cand.uid, mine.uid));                 // histórico passa para o uid real
+  const merged = {...cand, ...mine, uid:mine.uid, email: mine.email || cand.email || ""};
+  DB.players = DB.players.filter(x=>x.uid!==cand.uid).map(x=>x.uid===mine.uid ? merged : x);
+  await v2Commit({players:DB.players, stages:DB.stages, admins:DB.admins, deleteMissing:true});
+  try{ await deleteDoc(v2ClaimRef(c.uid)); }catch(e){}
+  return true;
+}
+// Vínculo automático só quando o e-mail verificado da conta é o mesmo do pré-cadastro; o resto fica para o admin aprovar
+function v2AutoApprove(){
+  if(!SCHEMA_V2 || !IS_ADMIN) return;
+  V2.claims.forEach(c=>{
+    const cand = DB.players.find(x=>x.uid===c.candidate);
+    if(_v2Approving.has(c.uid) || !cand || c.via!=="email" || c.emailVerified!==true || !cand.email || String(cand.email).toLowerCase()!==String(c.email||"").toLowerCase()) return;
+    _v2Approving.add(c.uid); v2ApproveClaim(c).then(ok=>{ if(ok){ showToast("Vínculo aprovado: "+(cand.name||""),"green"); render(); } }).catch(e=>{ console.warn("auto-aprovação:", e.message); }).finally(()=>_v2Approving.delete(c.uid));
+  });
+}
+// ── migração: copia do documento antigo para a estrutura nova (não apaga nada) e confere item a item ──
+async function v2Migrate(log){
+  const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON)); if(!snap.exists()) throw new Error("documento da temporada não encontrado");
+  const data = snap.data();
+  const seenP = new Set(); const players = []; let dupP = 0;
+  sanitizePlayers(data.players||[]).forEach(pl=>{ if(!pl.uid || seenP.has(pl.uid)){ dupP++; return; } seenP.add(pl.uid); players.push(pl); });
+  const stages = sanitizeStages(data.stages||[]);
+  log(`Documento antigo: ${players.length} jogadores${dupP?` (${dupP} duplicados ignorados)`:""}, ${stages.length} etapas.`);
+  const fns = []; let nRegs = 0;
+  players.forEach(pl=>fns.push(b=>b.set(v2PlayerRef(pl.uid), deepSanitize(pl))));
+  stages.forEach(st=>{ const sp = v2SplitStage(st); fns.push(b=>b.set(v2StageRef(st.id), deepSanitize(sp.doc))); sp.regs.forEach(r=>{ nRegs++; fns.push(b=>b.set(v2RegRef(r.id), r.data)); }); });
+  log(`Gravando ${fns.length} documentos (${nRegs} inscrições)…`); await v2Batched(fns);
+  // conferência: relê tudo da estrutura nova e compara com o antigo
+  log("Conferindo…");
+  const nw = await (async()=>{ const [pS,sS,rS] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"stages")), getDocs(collection(db,"seasons",ACTIVE_SEASON,"regs"))]);
+    const pl = [], sd = [], rg = []; pS.forEach(d=>pl.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data())); return {players:pl, stages:v2AssembleStages(sd, rg)}; })();
+  const issues = [];
+  const nwP = new Map(nw.players.map(x=>[x.uid,x])), nwS = new Map(nw.stages.map(x=>[x.id,x]));
+  players.forEach(pl=>{ const o = nwP.get(pl.uid); if(!o) issues.push(`jogador ausente: ${pl.name||pl.uid}`); else if(v2Canon(o)!==v2Canon(JSON.parse(JSON.stringify(pl)))) issues.push(`jogador diferente: ${pl.name||pl.uid}`); });
+  stages.forEach(st=>{ const o = nwS.get(st.id); if(!o) issues.push(`etapa ausente: ${st.name||st.id}`); else if(v2Canon(o)!==v2Canon(v2NormStage(JSON.parse(JSON.stringify(st))))) issues.push(`etapa diferente: ${st.name||st.id}`); });
+  // conciliação: rankings e financeiro calculados nos dois conjuntos de dados têm que ser idênticos
+  const saveP = DB.players, saveS = DB.stages; let sumA, sumB;
+  const summary = ()=>JSON.stringify({g:calcRankGeral().map(r=>[r.p.uid,r.total,r.stages,r.ko]), n:calcRank("nlholdem").map(r=>[r.p.uid,r.total,r.stages,r.ko]), k:calcRank("knockout").map(r=>[r.p.uid,r.total,r.stages,r.ko]), f:calcFinancialRanking().map(r=>[r.uid,r.entradas,r.premios,r.saldoGeral,r.cashEntradas,r.cashSaidas])});
+  try{ DB.players = players; DB.stages = stages.map(v2NormStage); sumA = summary(); DB.players = nw.players; DB.stages = nw.stages; sumB = summary(); }catch(e){ issues.push("falha ao calcular ranking/financeiro: "+e.message); }
+  finally{ DB.players = saveP; DB.stages = saveS; }
+  if(sumA!==undefined && sumA!==sumB) issues.push("ranking ou financeiro calculado diferente entre antigo e novo");
+  const res = {ok: issues.length===0, players:nw.players.length, stages:nw.stages.length, regs:nRegs, issues};
+  log(res.ok ? `✓ Tudo igual: ${res.players} jogadores, ${res.stages} etapas, ${nRegs} inscrições; rankings e financeiro idênticos.` : `✗ ${issues.length} diferença(s):\n- ${issues.join("\n- ")}`);
+  V2.verified = res.ok; return res;
+}
+async function v2Activate(){ await setDoc(doc(db,"config","schema"), {version:2, at:serverTimestamp(), by:(CURRENT_USER&&CURRENT_USER.email)||""}); }
+// Volta ao modelo antigo: copia o estado atual da estrutura nova de volta para o documento antigo e desliga a chave
+async function v2Rollback(log){
+  const cur = await srvRead(); log(`Copiando de volta ${cur.players.length} jogadores e ${cur.stages.length} etapas…`);
+  await setDoc(doc(db,"seasons",ACTIVE_SEASON), {players:sanitizePlayers(cur.players), stages:sanitizeStages(cur.stages), admins:cur.admins, updatedAt:serverTimestamp()}, {merge:true});
+  await setDoc(doc(db,"config","schema"), {version:1, at:serverTimestamp(), by:(CURRENT_USER&&CURRENT_USER.email)||""});
+}
+// ── V2 CAMADA (fim) ──
+
 async function save(){
   try { await commitDB(); return true; }
   catch(e){
@@ -2142,6 +2379,7 @@ function remapUidDeep(v, oldUid, newUid){
 // SAFE: reads current Firestore data first to avoid overwriting other players
 async function savePlayers(){
   try {
+    if(SCHEMA_V2){ const me = DB.players.find(p=>p.uid===CURRENT_USER_UID); if(!me) return false; const clean = sanitizePlayers([me])[0]; await v2SaveMyProfile(clean); BASE.players[me.uid] = JSON.stringify(clean); return true; }
     const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
     if(snap.exists()){
       const current = snap.data();
@@ -2161,7 +2399,7 @@ async function savePlayers(){
         return {...p, ...myPlayer, fcmTokens: mergedToks};
       });
       if(!merged.find(p=>p.uid===myUid)) merged.push(myPlayer);
-      await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
+      await seasonUpdate({
         players: sanitizePlayers(merged),
         updatedAt: serverTimestamp()
       });
@@ -3104,6 +3342,15 @@ function needsPrivacy(){ const me = myPlayerRec(); return !!(CURRENT_USER && me 
 async function mutateMyPlayer(fn){
   if(!CURRENT_USER_UID) return null;
   const ref = doc(db,"seasons",ACTIVE_SEASON); let out = null;
+  if(SCHEMA_V2){
+    const pref = v2PlayerRef(CURRENT_USER_UID);
+    await runTransaction(db, async (tx)=>{
+      const snap = await tx.get(pref); if(!snap.exists()) throw new Error("perfil do jogador não encontrado");
+      out = fn(snap.data()); tx.set(pref, deepSanitize(out));
+    });
+    const idx2 = DB.players.findIndex(p=>p.uid===CURRENT_USER_UID); if(idx2>=0) DB.players[idx2] = {...DB.players[idx2], ...out};
+    return out;
+  }
   await runTransaction(db, async (tx)=>{
     const snap = await tx.get(ref); if(!snap.exists()) throw new Error("temporada não encontrada");
     const players = (snap.data().players||[]).slice(); const i = players.findIndex(p=>p.uid===CURRENT_USER_UID);
@@ -3198,6 +3445,12 @@ function openDeleteAccountModal(){
       else { const pw = box.querySelector("#del-pass").value; if(!pw) throw {code:"auth/missing-password"}; await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pw)); }
       // 2) anonimiza o registro e tira das etapas futuras (sem mexer em quem já tem registro financeiro)
       const ref = doc(db,"seasons",ACTIVE_SEASON); const uid = user.uid; window._deletingAccount = true;
+      if(SCHEMA_V2){
+        const pref = v2PlayerRef(uid);
+        await runTransaction(db, async(tx)=>{ const snap = await tx.get(pref); tx.set(pref, deepSanitize(anonymizePlayerRec(snap.exists()?snap.data():{uid, season:ACTIVE_SEASON}))); });
+        const drop = DB.stages.filter(s=>s.status==="upcoming" && !(s.buyinData||[]).some(r=>r.uid===uid)).map(s=>v2RegId(s.id,uid));
+        await v2Batched(drop.map(id=>b=>b.delete(v2RegRef(id))));
+      } else
       await runTransaction(db, async(tx)=>{
         const snap = await tx.get(ref); if(!snap.exists()) throw new Error("temporada não encontrada");
         const d = snap.data(); const players = (d.players||[]).map(p=>p.uid===uid?anonymizePlayerRec(p):p);
@@ -6664,6 +6917,34 @@ function renderToolsHome(){
 }
 
 // ── DIAGNOSE ──────────────────────────────────────────────────────────────────
+// ── Painel admin: estrutura de dados (migração, virada, volta) e vínculos pendentes ──
+let V2_LOG = "";
+const esc = v => String(v==null?"":v).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function renderV2Panel(){
+  if(!IS_ADMIN) return "";
+  const claims = SCHEMA_V2 ? (V2.claims||[]) : [];
+  const btn = (id,txt,dis)=>`<button class="btn bo sm" ${dis?"disabled":""} onclick="window.v2Ui('${id}')" style="${dis?"opacity:.4":""}">${txt}</button>`;
+  return `<div class="card" style="margin-bottom:12px;padding:12px">
+    <div style="font-weight:700;color:#fff;margin-bottom:4px">Estrutura de dados: ${SCHEMA_V2?"nova (v2)":"antiga (documento único)"}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${SCHEMA_V2?"Jogadores, etapas e inscrições em documentos separados.":"Copie para a estrutura nova e confira antes de virar. Nada é apagado do documento antigo."}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      ${SCHEMA_V2 ? btn("rollback","↩ Voltar ao modelo antigo") : btn("migrate","1. Copiar e conferir")+btn("activate","2. Virar para a estrutura nova",!V2.verified)}
+    </div>
+    ${V2_LOG?`<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:8px 0 0">${esc(V2_LOG)}</pre>`:""}
+    ${claims.length?`<div style="margin-top:10px;font-weight:700;color:#fff;font-size:12px">Vínculos pendentes</div>`+claims.map(c=>{ const cand=DB.players.find(x=>x.uid===c.candidate), me=DB.players.find(x=>x.uid===c.uid); return `<div style="display:flex;gap:6px;align-items:center;justify-content:space-between;margin-top:6px;font-size:12px"><span>${esc((me&&me.name)||c.name||c.uid)} → ${esc((cand&&cand.name)||c.candidate)} <span style="color:var(--muted)">(${esc(c.via||"")}${c.emailVerified?", e-mail verificado":""})</span></span><span><button class="btn bo sm" onclick="window.v2Ui('approve:${esc(c.uid)}')">Aprovar</button> <button class="btn bo sm" onclick="window.v2Ui('reject:${esc(c.uid)}')">Recusar</button></span></div>`; }).join(""):""}
+  </div>`;
+}
+window.v2Ui = async function(act){
+  const log = m=>{ V2_LOG += m+"\n"; render(); };
+  try{
+    if(act==="migrate"){ V2_LOG=""; await v2Migrate(log); }
+    else if(act==="activate"){ if(!V2.verified) return; if(!confirm("Virar para a estrutura nova? Os usuários passam a ler e gravar nela. Dá para voltar pelo mesmo painel.")) return; await v2Activate(); V2_LOG="Virada feita. O app recarrega sozinho."; }
+    else if(act==="rollback"){ if(!confirm("Voltar ao modelo antigo? O estado atual é copiado de volta para o documento da temporada.")) return; V2_LOG=""; await v2Rollback(log); }
+    else if(act.startsWith("approve:")){ const c=V2.claims.find(x=>x.uid===act.slice(8)); if(c && await v2ApproveClaim(c)) showToast("Vínculo aprovado","green"); }
+    else if(act.startsWith("reject:")){ await deleteDoc(v2ClaimRef(act.slice(7))); }
+  }catch(e){ V2_LOG += "Erro: "+e.message+"\n"; }
+  render();
+};
 function renderToolsDiagnose(){
   const sorted = [...DB.players].sort((a,b)=>(a.name||"").localeCompare(b.name||"","pt-BR",{sensitivity:"base"}));
   const linked   = sorted.filter(p=>p.email&&p.email.trim()!=="").length;
@@ -6674,6 +6955,7 @@ function renderToolsDiagnose(){
 
   return `<div>
     <button class="btn bo mb10 sm" id="btn-tools-back">‹ Ferramentas</button>
+    ${renderV2Panel()}
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <span style="background:rgba(46,204,113,.15);border:1px solid rgba(46,204,113,.3);color:var(--green);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px;letter-spacing:1px">✓ ${linked} vinculados</span>
       <span style="background:rgba(245,168,0,.1);border:1px solid rgba(245,168,0,.25);color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px;letter-spacing:1px">⚠ ${unlinked} sem login</span>
@@ -6842,8 +7124,7 @@ function toolsLog(msg, cls=""){
 }
 
 async function runFixDupes(){
-  const snap = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
-  const data = snap.data();
+  const data = await srvRead();
   let players = [...(data.players||[])];
   const stages = data.stages||[];
   const admins = data.admins||[];
@@ -6863,7 +7144,7 @@ async function runFixDupes(){
       else { toolsLog(`🗑️ Removido: "${p.name}"`, "warn"); }
     }
   });
-  await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players:cleaned,stages,admins,updatedAt:serverTimestamp()});
+  await srvWriteFull({players:cleaned,stages,admins});
   DB.players=cleaned;
   toolsLog(`✅ ${before} → ${cleaned.length} jogadores (${before-cleaned.length} removidos)`, "ok");
 }
@@ -7718,6 +7999,7 @@ function bindEvents(){
   async function saveClockState(s){
     try{
       const ref = doc(db,"seasons",ACTIVE_SEASON);
+      if(SCHEMA_V2){ await updateDoc(v2StageRef(s.id), {blindLevels: deepSanitize(s.blindLevels)}); return true; }
       await runTransaction(db, async (tx)=>{
         const snap = await tx.get(ref);
         const stages = snap.exists() ? (snap.data().stages||[]) : [];
@@ -8397,7 +8679,7 @@ function bindEvents(){
         const newIns = [...(stageFull.inscriptions||[]), uid];
         stageFull.inscriptions = newIns;
         try{
-          await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+          await seasonUpdate({
             stages: sanitizeStages(DB.stages), updatedAt: serverTimestamp()
           });
           render();
@@ -8440,7 +8722,7 @@ function bindEvents(){
       try{
         DB.players = [...DB.players, newPlayer];
         s2.inscriptions = newIns;
-        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        await seasonUpdate({
           players: sanitizePlayers(DB.players),
           stages: sanitizeStages(DB.stages),
           updatedAt: serverTimestamp()
@@ -8792,7 +9074,7 @@ function bindEvents(){
         const newIns = alreadyIn
           ? ins.filter(i=>i!==CURRENT_USER_UID)
           : [...ins, CURRENT_USER_UID];
-        await updateDoc(doc(db,"seasons",ACTIVE_SEASON), {
+        await seasonUpdate({
           stages: sanitizeStages(DB.stages.map(s=>{
             if(s.id!==sid) return s;
             return {...s, inscriptions: newIns};
@@ -8859,8 +9141,7 @@ function bindEvents(){
     if(msgEl) msgEl.innerHTML='<div style="color:var(--yellow);font-size:12px">Salvando...</div>';
 
     try {
-      const snap  = await getDoc(doc(db,"seasons",ACTIVE_SEASON));
-      const data  = snap.data();
+      const data  = await srvRead();
       let players = [...(data.players||[])];
       let stages  = [...(data.stages||[])];
       const admins= data.admins||[];
@@ -8881,7 +9162,7 @@ function bindEvents(){
       const seen=new Set();
       players=players.filter(p=>{ if(seen.has(p.uid))return false; seen.add(p.uid);return true; });
 
-      await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages,admins,updatedAt:serverTimestamp()});
+      await srvWriteFull({players,stages,admins});
       DB.players=players; DB.stages=stages;
       DIAGNOSE_EDIT_UID=null;
       TOOLS_VIEW="diagnose";
@@ -8897,10 +9178,9 @@ function bindEvents(){
     const uid = decodeURIComponent(escape(atob(uidB64)));
     const p=DB.players.find(x=>x.uid===uid);
     if(!p||!confirm("Excluir "+p.name+"?")) return;
-    const snap=await getDoc(doc(db,"seasons",ACTIVE_SEASON));
-    const data=snap.data();
+    const data=await srvRead();
     const players=(data.players||[]).filter(x=>x.uid!==uid);
-    await setDoc(doc(db,"seasons",ACTIVE_SEASON),{players,stages:data.stages||[],admins:data.admins||[],updatedAt:serverTimestamp()});
+    await srvWriteFull({players,stages:data.stages||[],admins:data.admins||[]});
     DB.players=players;
     DIAGNOSE_EDIT_UID=null;
     showToast(p.name+" removido.","green");
@@ -8945,7 +9225,7 @@ function bindEvents(){
       if(!s) return;
       s.ftContribution = isNaN(val) ? null : val;
       try{
-        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        await seasonUpdate({
           stages: sanitizeStages(DB.stages),
           updatedAt: serverTimestamp()
         });
@@ -9026,7 +9306,7 @@ function bindEvents(){
       if(!s) return;
       const newVal = s.allowInscriptions !== false ? false : true;
       try {
-        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        await seasonUpdate({
           stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,allowInscriptions:newVal}:x)),
           updatedAt: serverTimestamp()
         });
@@ -9070,7 +9350,7 @@ function bindEvents(){
           if(s.id===sid) return {...s, [photoType]:url};
           return s;
         });
-        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        await seasonUpdate({
           stages: newStages,
           updatedAt: serverTimestamp()
         });
@@ -9098,7 +9378,7 @@ function bindEvents(){
         ? [...new Set([...lateList, CURRENT_USER_UID])]
         : lateList.filter(u=>u!==CURRENT_USER_UID);
       try {
-        await updateDoc(doc(db,"seasons",ACTIVE_SEASON),{
+        await seasonUpdate({
           stages: sanitizeStages(DB.stages.map(s=>s.id===sid?{...s,lateList:newLate}:s)),
           updatedAt: serverTimestamp()
         });
@@ -9267,6 +9547,15 @@ async function ensurePlayerProfile(user){
       if(nameMatches.length===1) player = nameMatches[0];   // ambíguo (2+ iguais) → não vincula sozinho; vira perfil novo
     }
 
+    if(player && SCHEMA_V2 && player.uid!==user.uid){
+      const _adm = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
+      if(!_adm){
+        // estrutura nova: jogador comum não reescreve o histórico de outro registro; pede vínculo ao admin
+        const cand = player; player = null;
+        const via = (cand.email && user.email && String(cand.email).toLowerCase()===String(user.email).toLowerCase()) ? "email" : "nome";
+        try{ await setDoc(v2ClaimRef(user.uid), {uid:user.uid, candidate:cand.uid, via, email:user.email||"", emailVerified: !!user.emailVerified, name:user.displayName||"", createdAt:serverTimestamp()}); }catch(e){ console.warn("claim:", e.message); }
+      }
+    }
     if(player){
       // Link Firebase uid — user's own data ALWAYS wins over pre-created seed data
       const prevUid = player.uid;
@@ -9346,86 +9635,89 @@ async function ensurePlayerProfile(user){
 let _unsubListeners = [];
 function stopListeners(){ _unsubListeners.forEach(fn=>fn()); _unsubListeners=[]; }
 
+function handleServerData(data, user, fromV2){
+    const _srvPlayers = sanitizeIncoming(data.players || [], "players");
+    const _srvStages  = sanitizeIncoming(data.stages || [], "stages");
+    setBaseline(_srvPlayers, _srvStages, (data.admins||[]));
+    DB.players = _srvPlayers;
+    DB.admins  = (data.admins || []).map(a=> typeof a==="string" ? a.replace(/[<>"'`]/g,"") : a);
+    // If admin is editing a result, preserve local draft to avoid overwrite
+    const editingStageId = resultStage ? resultStage.id : null;
+    // If admin has the financial management screen open for a stage,
+    // preserve local finance/buyinData so in-progress edits (inputs being
+    // typed) aren't wiped out by the snapshot echo of our own save.
+    const editingFinanceId = BUYIN_MGMT;
+    // (O estado do relógio não vive mais neste documento — ver coleção "clocks".)
+    DB.stages = _srvStages.map(s=>{
+      const local = DB.stages.find(x=>x.id===s.id);
+      if(s.id===editingStageId && local){
+        return {...s, draft: local.draft};
+      }
+      if(s.id===editingFinanceId && local){
+        return {...s, finance: local.finance, buyinData: local.buyinData};
+      }
+      return s;
+    }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
+  if(!fromV2 && DB.players.length === 0 && DB.stages.length === 0){
+    dbg("17. Documento vazio!");
+    setDoc(doc(db,"seasons",ACTIVE_SEASON), {players: SEED.players, stages: SEED.stages, updatedAt: serverTimestamp()})
+      .then(()=>{ dbg("SEED enviado com sucesso!"); }).catch(e=>{ dbg("ERRO seed: " + e.message); });
+    DB.players = SEED.players; DB.stages = SEED.stages;
+  }
+    // Link user to player after data is loaded
+    if(user && DB.players.length > 0){
+      ensurePlayerProfile(user).then(()=>{
+        IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
+        dbg("18. Renderizando app...");
+        render();
+      });
+    } else {
+      // Re-apply current player (snapshot may have stale data briefly)
+      const freshPlayer = DB.players.find(p=>p.uid===CURRENT_USER_UID);
+      CURRENT_PLAYER = freshPlayer || CURRENT_PLAYER;
+      dbg("18. Renderizando app...");
+      render();
+    }
+}
 function startListeners(user){
   stopListeners();
   dbg("14. Conectando ao Firestore...");
-  // Listen to season document
+  // Detecta a estrutura de dados (config/schema). Se mudar em tempo real (virada), recarrega o app.
+  let _decided = false;
+  const unsubSchema = onSnapshot(doc(db,"config","schema"), (snap)=>{
+    const v2 = !!(snap.exists() && snap.data().version===2);
+    if(_decided){ if(v2!==SCHEMA_V2){ dbg("Estrutura de dados mudou — recarregando"); location.reload(); } return; }
+    _decided = true; SCHEMA_V2 = v2; V2.verified = !!(snap.exists() && snap.data().verified);
+    if(v2) v2Listen(user); else legacyListen(user);
+  }, (e)=>{ if(_decided) return; _decided = true; dbg("config/schema indisponível: "+e.code+" — usando estrutura antiga"); legacyListen(user); });
+  _unsubListeners.push(unsubSchema);
+  startAuxListeners(user);
+}
+function legacyListen(user){
   const unsub = onSnapshot(
     doc(db,"seasons",ACTIVE_SEASON),
     (snap)=>{
       dbg("15. Firestore snapshot recebido, exists=" + snap.exists());
       if(snap.exists()){
-        const data = snap.data();
-        const _srvPlayers = sanitizeIncoming(data.players || [], "players");
-        const _srvStages  = sanitizeIncoming(data.stages || [], "stages");
-        setBaseline(_srvPlayers, _srvStages, (data.admins||[]));
-        DB.players = _srvPlayers;
-        DB.admins  = (data.admins || []).map(a=> typeof a==="string" ? a.replace(/[<>"'`]/g,"") : a);
-        // If admin is editing a result, preserve local draft to avoid overwrite
-        const editingStageId = resultStage ? resultStage.id : null;
-        // If admin has the financial management screen open for a stage,
-        // preserve local finance/buyinData so in-progress edits (inputs being
-        // typed) aren't wiped out by the snapshot echo of our own save.
-        const editingFinanceId = BUYIN_MGMT;
-        // (O estado do relógio não vive mais neste documento — ver coleção "clocks".)
-        DB.stages = _srvStages.map(s=>{
-          const local = DB.stages.find(x=>x.id===s.id);
-          if(s.id===editingStageId && local){
-            return {...s, draft: local.draft};
-          }
-          if(s.id===editingFinanceId && local){
-            return {...s, finance: local.finance, buyinData: local.buyinData};
-          }
-          return s;
-        }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
-        dbg("16. Players=" + DB.players.length + " Stages=" + DB.stages.length);
-        // If document exists but is empty, seed it
-        if(DB.players.length === 0 && DB.stages.length === 0){
-          dbg("17. Documento vazio!");
-          setDoc(doc(db,"seasons",ACTIVE_SEASON), {
-            players: SEED.players,
-            stages:  SEED.stages,
-            updatedAt: serverTimestamp()
-          }).then(()=>{ dbg("SEED enviado com sucesso!"); })
-            .catch(e=>{ dbg("ERRO seed: " + e.message); });
-          DB.players = SEED.players;
-          DB.stages  = SEED.stages;
-        }
+        handleServerData({players:snap.data().players||[], stages:snap.data().stages||[], admins:snap.data().admins||[]}, user, false);
       } else {
         dbg("16. Documento 2026 NAO existe! Criando...");
-        setDoc(doc(db,"seasons",ACTIVE_SEASON), {
-          players: SEED.players,
-          stages:  SEED.stages,
-          updatedAt: serverTimestamp()
-        }).then(()=>{ dbg("17. SEED criado!"); })
-          .catch(e=>{ dbg("ERRO ao criar seed: " + e.message); });
-        DB.players = SEED.players;
-        DB.stages  = SEED.stages;
-      }
-      // Link user to player after data is loaded
-      if(user && DB.players.length > 0){
-        ensurePlayerProfile(user).then(()=>{
-          IS_ADMIN = ADMIN_EMAILS.includes(user.email) || (DB.admins||[]).includes(user.email) || (DB.admins||[]).includes(user.uid);
-          dbg("18. Renderizando app...");
-          render();
-        });
-      } else {
-        // Re-apply current player (snapshot may have stale data briefly)
-        const freshPlayer = DB.players.find(p=>p.uid===CURRENT_USER_UID);
-        CURRENT_PLAYER = freshPlayer || CURRENT_PLAYER;
-        dbg("18. Renderizando app...");
+        setDoc(doc(db,"seasons",ACTIVE_SEASON), {players: SEED.players, stages: SEED.stages, updatedAt: serverTimestamp()})
+          .then(()=>{ dbg("17. SEED criado!"); }).catch(e=>{ dbg("ERRO ao criar seed: " + e.message); });
+        DB.players = SEED.players; DB.stages = SEED.stages;
+        const fp = DB.players.find(p=>p.uid===CURRENT_USER_UID); CURRENT_PLAYER = fp || CURRENT_PLAYER;
         render();
       }
     },
     (err)=>{
       dbg("ERRO Firestore: " + err.code + " - " + err.message);
-      // Fallback: render with SEED data
-      DB.players = SEED.players;
-      DB.stages  = SEED.stages;
-      render();
+      DB.players = SEED.players; DB.stages = SEED.stages; render();
     }
   );
   _unsubListeners.push(unsub);
+}
+function startAuxListeners(user){
 
   // Relógios (para o aviso "Relógio ao vivo" na tela principal) — tolerante a falha, não bloqueia o app
   try {
