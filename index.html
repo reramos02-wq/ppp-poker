@@ -2246,6 +2246,8 @@ async function v2Commit(parts){
   }
   return ops;
 }
+// A ordem dos jogadores do documento antigo é preservada no campo _ord (desempates dos rankings dependem dela)
+function v2SortPlayers(arr){ return [...arr].sort((a,b)=>{ const x = a._ord==null?1e9:a._ord, y = b._ord==null?1e9:b._ord; return x!==y ? x-y : String(a.uid).localeCompare(String(b.uid)); }); }
 // Gravação direta (substitui os updateDoc no documento da temporada espalhados pelo app)
 async function seasonUpdate(parts){
   if(!SCHEMA_V2) return updateDoc(doc(db,"seasons",DATA_SEASON), parts);
@@ -2256,7 +2258,7 @@ async function srvRead(){
   if(!SCHEMA_V2){ const snap = await getDoc(doc(db,"seasons",DATA_SEASON)); const d = snap.data()||{}; return {players:[...(d.players||[])], stages:[...(d.stages||[])], admins:d.admins||[]}; }
   const [pS,sS,rS,seas] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",DATA_SEASON,"stages")), getDocs(collection(db,"seasons",DATA_SEASON,"regs")), getDoc(v2SeasonRef())]);
   const players = [], sd = [], rg = []; pS.forEach(d=>players.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data()));
-  return {players, stages: v2AssembleStages(sd, rg), admins: (seas.exists()?seas.data().admins:[])||[]};
+  return {players: v2SortPlayers(players), stages: v2AssembleStages(sd, rg), admins: (seas.exists()?seas.data().admins:[])||[]};
 }
 async function srvWriteFull(full){
   if(!SCHEMA_V2){ await setDoc(doc(db,"seasons",DATA_SEASON), {players:full.players, stages:full.stages, admins:full.admins, updatedAt:serverTimestamp()}); return; }
@@ -2269,7 +2271,7 @@ async function srvWriteFull(full){
 // Montagem dos dados vindos do servidor (estrutura nova)
 function v2Kick(user){
   if(!(V2.players && V2.stageDocs && V2.regs && V2.seasonLoaded)) return;
-  handleServerData({players:V2.players, stages:v2AssembleStages(V2.stageDocs, V2.regs), admins:V2.admins||[]}, user, true);
+  handleServerData({players:v2SortPlayers(V2.players), stages:v2AssembleStages(V2.stageDocs, V2.regs), admins:V2.admins||[]}, user, true);
 }
 function v2Listen(user){
   const err = (n)=>(e)=>{ dbg("ERRO v2 "+n+": "+e.code); console.warn("v2 "+n+":", e.code, e.message); };
@@ -2312,23 +2314,41 @@ async function v2Migrate(log){
   const stages = sanitizeStages(data.stages||[]);
   log(`Documento antigo: ${players.length} jogadores${dupP?` (${dupP} duplicados ignorados)`:""}, ${stages.length} etapas.`);
   const fns = []; let nRegs = 0;
-  players.forEach(pl=>fns.push(b=>b.set(v2PlayerRef(pl.uid), deepSanitize(pl))));
+  players.forEach((pl,i)=>fns.push(b=>b.set(v2PlayerRef(pl.uid), deepSanitize({...pl, _ord:i}))));
   stages.forEach(st=>{ const sp = v2SplitStage(st); fns.push(b=>b.set(v2StageRef(st.id), deepSanitize(sp.doc))); sp.regs.forEach(r=>{ nRegs++; fns.push(b=>b.set(v2RegRef(r.id), r.data)); }); });
   log(`Gravando ${fns.length} documentos (${nRegs} inscrições)…`); await v2Batched(fns);
   // conferência: relê tudo da estrutura nova e compara com o antigo
   log("Conferindo…");
   const nw = await (async()=>{ const [pS,sS,rS] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",DATA_SEASON,"stages")), getDocs(collection(db,"seasons",DATA_SEASON,"regs"))]);
-    const pl = [], sd = [], rg = []; pS.forEach(d=>pl.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data())); return {players:pl, stages:v2AssembleStages(sd, rg)}; })();
+    const pl = [], sd = [], rg = []; pS.forEach(d=>pl.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data())); return {players:v2SortPlayers(pl), stages:v2AssembleStages(sd, rg)}; })();
   const issues = [];
   const nwP = new Map(nw.players.map(x=>[x.uid,x])), nwS = new Map(nw.stages.map(x=>[x.id,x]));
-  players.forEach(pl=>{ const o = nwP.get(pl.uid); if(!o) issues.push(`jogador ausente: ${pl.name||pl.uid}`); else if(v2Canon(o)!==v2Canon(JSON.parse(JSON.stringify(pl)))) issues.push(`jogador diferente: ${pl.name||pl.uid}`); });
+  players.forEach(pl=>{ const o = nwP.get(pl.uid); if(!o) issues.push(`jogador ausente: ${pl.name||pl.uid}`); else if(v2Canon((({_ord,...r})=>r)(o))!==v2Canon(JSON.parse(JSON.stringify(pl)))) issues.push(`jogador diferente: ${pl.name||pl.uid}`); });
   stages.forEach(st=>{ const o = nwS.get(st.id); if(!o) issues.push(`etapa ausente: ${st.name||st.id}`); else if(v2Canon(o)!==v2Canon(v2NormStage(JSON.parse(JSON.stringify(st))))) issues.push(`etapa diferente: ${st.name||st.id}`); });
   // conciliação: rankings e financeiro calculados nos dois conjuntos de dados têm que ser idênticos
   const saveP = DB.players, saveS = DB.stages; let sumA, sumB;
-  const summary = ()=>JSON.stringify({g:calcRankGeral().map(r=>[r.p.uid,r.total,r.stages,r.ko]), n:calcRank("nlholdem").map(r=>[r.p.uid,r.total,r.stages,r.ko]), k:calcRank("knockout").map(r=>[r.p.uid,r.total,r.stages,r.ko]), f:calcFinancialRanking().map(r=>[r.uid,r.entradas,r.premios,r.saldoGeral,r.cashEntradas,r.cashSaidas])});
+  const summary = ()=>({
+    geral: calcRankGeral().map(r=>[r.p.uid,r.total,r.stages,r.ko]),
+    nlholdem: calcRank("nlholdem").map(r=>[r.p.uid,r.total,r.stages,r.ko]),
+    knockout: calcRank("knockout").map(r=>[r.p.uid,r.total,r.stages,r.ko]),
+    financeiro: calcFinancialRanking().map(r=>[r.uid,r.entradas,r.premios,r.saldoGeral,r.cashEntradas,r.cashSaidas])
+  });
   try{ DB.players = players; DB.stages = stages.map(v2NormStage); sumA = summary(); DB.players = nw.players; DB.stages = nw.stages; sumB = summary(); }catch(e){ issues.push("falha ao calcular ranking/financeiro: "+e.message); }
   finally{ DB.players = saveP; DB.stages = saveS; }
-  if(sumA!==undefined && sumA!==sumB) issues.push("ranking ou financeiro calculado diferente entre antigo e novo");
+  if(sumA && sumB){
+    Object.keys(sumA).forEach(sec=>{
+      const byUid = arr=>{ const m = new Map(); arr.forEach(r=>m.set(r[0], JSON.stringify(r))); return m; };
+      const ma = byUid(sumA[sec]), mb = byUid(sumB[sec]);
+      const diffs = [];
+      new Set([...ma.keys(), ...mb.keys()]).forEach(u=>{ if(ma.get(u)!==mb.get(u)) diffs.push(u); });
+      if(diffs.length){
+        const nome = u=>{ const pl = players.find(x=>x.uid===u); return pl ? pl.name : u; };
+        issues.push(`${sec}: ${diffs.length} jogador(es) com valores diferentes. Ex.: `+diffs.slice(0,3).map(u=>`${nome(u)} antigo=${ma.get(u)||"-"} novo=${mb.get(u)||"-"}`).join(" ; "));
+      } else if(JSON.stringify(sumA[sec])!==JSON.stringify(sumB[sec])){
+        log(`ℹ ${sec}: mesmos valores, só a ordem de empates difere (${sumA[sec].length} linhas).`);
+      }
+    });
+  }
   const res = {ok: issues.length===0, players:nw.players.length, stages:nw.stages.length, regs:nRegs, issues};
   log(res.ok ? `✓ Tudo igual: ${res.players} jogadores, ${res.stages} etapas, ${nRegs} inscrições; rankings e financeiro idênticos.` : `✗ ${issues.length} diferença(s):\n- ${issues.join("\n- ")}`);
   V2.verified = res.ok; return res;
@@ -2337,7 +2357,7 @@ async function v2Activate(){ await setDoc(doc(db,"config","schema"), {version:2,
 // Volta ao modelo antigo: copia o estado atual da estrutura nova de volta para o documento antigo e desliga a chave
 async function v2Rollback(log){
   const cur = await srvRead(); log(`Copiando de volta ${cur.players.length} jogadores e ${cur.stages.length} etapas…`);
-  await setDoc(doc(db,"seasons",DATA_SEASON), {players:sanitizePlayers(cur.players), stages:sanitizeStages(cur.stages), admins:cur.admins, updatedAt:serverTimestamp()}, {merge:true});
+  await setDoc(doc(db,"seasons",DATA_SEASON), {players:sanitizePlayers(cur.players).map(({_ord,...r})=>r), stages:sanitizeStages(cur.stages), admins:cur.admins, updatedAt:serverTimestamp()}, {merge:true});
   await setDoc(doc(db,"config","schema"), {version:1, at:serverTimestamp(), by:(CURRENT_USER&&CURRENT_USER.email)||""});
 }
 // ── V2 CAMADA (fim) ──
