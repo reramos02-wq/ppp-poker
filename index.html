@@ -3543,6 +3543,7 @@ function renderProfileModal(){
         <div style="font-size:15px;color:#fff;font-weight:600">${p.name||u.displayName||""}</div>
         <div style="font-size:12px;color:var(--muted)">${u.email}</div>
         <div id="meu-av-status" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+        ${p.photoURL?`<button id="meu-av-remove" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;text-decoration:underline;padding:2px 0">Remover foto</button>`:""}
         ${IS_ADMIN?'<div style="margin-top:4px"><span style="background:var(--red);color:#fff;font-family:\'Barlow Condensed\',sans-serif;font-size:10px;font-weight:700;padding:2px 8px;letter-spacing:1px">ADMIN</span></div>':""}
       </div>
     </div>
@@ -3622,6 +3623,19 @@ function renderProfileModal(){
     } catch(err) {
       if(statusEl) statusEl.textContent = "❌ "+err.message;
     }
+  });
+  box.querySelector("#meu-av-remove")?.addEventListener("click", async()=>{
+    if(!confirm("Remover sua foto de perfil?")) return;
+    const statusEl = box.querySelector("#meu-av-status");
+    if(statusEl) statusEl.textContent = "⏳ Removendo...";
+    try{
+      const prevPlayers = DB.players;
+      DB.players = DB.players.map(pl=> pl.uid===CURRENT_USER_UID ? {...pl, photoURL:""} : pl);
+      try{ await commitDB(); } catch(e){ DB.players = prevPlayers; throw e; }
+      try{ await deleteObject(storageRef(storage, `avatars/${CURRENT_USER_UID}`)); }catch(e){ /* arquivo já ausente: segue */ }
+      if(CURRENT_PLAYER) CURRENT_PLAYER.photoURL = "";
+      render(); renderProfileModal();
+    }catch(err){ if(statusEl) statusEl.textContent = "❌ "+err.message; }
   });
   box.querySelector("#pf-logout").addEventListener("click", async()=>{
     stopListeners();
@@ -4992,7 +5006,7 @@ function renderStageDetail(sid){
         <div>
           <div style="position:relative">
             ${s.photoChampion
-              ?`<img src="${s.photoChampion}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--yellow);cursor:zoom-in" onclick="openLightbox('${s.photoChampion}')" />`
+              ?`<img src="${s.photoChampion}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--yellow);cursor:zoom-in" onclick="openLightbox('${s.photoChampion}')" />${IS_ADMIN?`<button data-photo-del="photoChampion" data-stage-id="${s.id}" aria-label="Remover foto" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);color:#fff;border:1px solid var(--red);border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer">🗑 Remover</button>`:""}`
               :`<div style="width:100%;aspect-ratio:1;background:var(--surface2);border-radius:6px;border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font-size:28px">🏆</span><span style="font-size:10px;color:var(--muted)">Sem foto</span></div>`}
             ${IS_ADMIN?`<label style="position:absolute;bottom:4px;right:4px;background:var(--yellow);color:#000;padding:3px 8px;border-radius:3px;font-size:10px;font-weight:700;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,.4)">📷 ${s.photoChampion?"Trocar":"Adicionar"}<input type="file" accept="image/*" data-photo-type="photoChampion" data-stage-id="${s.id}" style="display:none"/></label>`:""}
           </div>
@@ -5002,7 +5016,7 @@ function renderStageDetail(sid){
         <div>
           <div style="position:relative">
             ${s.photoFinalTable
-              ?`<img src="${s.photoFinalTable}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--border);cursor:zoom-in" onclick="openLightbox('${s.photoFinalTable}')" />`
+              ?`<img src="${s.photoFinalTable}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid var(--border);cursor:zoom-in" onclick="openLightbox('${s.photoFinalTable}')" />${IS_ADMIN?`<button data-photo-del="photoFinalTable" data-stage-id="${s.id}" aria-label="Remover foto" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);color:#fff;border:1px solid var(--red);border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer">🗑 Remover</button>`:""}`
               :`<div style="width:100%;aspect-ratio:1;background:var(--surface2);border-radius:6px;border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font-size:28px">🃏</span><span style="font-size:10px;color:var(--muted)">Sem foto</span></div>`}
             ${IS_ADMIN?`<label style="position:absolute;bottom:4px;right:4px;background:var(--surface2);color:var(--yellow);border:1px solid var(--yellow);padding:3px 8px;border-radius:3px;font-size:10px;font-weight:700;cursor:pointer">📷 ${s.photoFinalTable?"Trocar":"Adicionar"}<input type="file" accept="image/*" data-photo-type="photoFinalTable" data-stage-id="${s.id}" style="display:none"/></label>`:""}
           </div>
@@ -9465,6 +9479,29 @@ function bindEvents(){
       } catch(err) {
         if(statusEl) statusEl.textContent = "❌ Erro: "+err.message;
         console.error(err);
+      }
+    });
+  });
+
+  // Remover foto da etapa (admin)
+  document.querySelectorAll("button[data-photo-del]").forEach(btn=>{
+    btn.addEventListener("click", async(e)=>{
+      e.stopPropagation();
+      const photoType = btn.dataset.photoDel, sid = btn.dataset.stageId;
+      if(!["photoChampion","photoFinalTable"].includes(photoType)) return;
+      if(!confirm("Remover esta foto da etapa?")) return;
+      const statusEl = document.getElementById(`stage-photo-status-${sid}`);
+      if(statusEl) statusEl.textContent = "⏳ Removendo...";
+      try{
+        const newStages = DB.stages.map(s=> s.id===sid ? {...s, [photoType]:""} : s);
+        await seasonUpdate({ stages: newStages, updatedAt: serverTimestamp() });
+        DB.stages = newStages;
+        try{ await deleteObject(storageRef(storage, `stages/${sid}/${photoType}.jpg`)); }catch(err){ /* arquivo já ausente: segue */ }
+        if(statusEl) statusEl.textContent = "✅ Foto removida.";
+        STAGE_DETAIL = sid; TAB = "stages";
+        setTimeout(()=>render(), 400);
+      }catch(err){
+        if(statusEl) statusEl.textContent = "❌ Erro: "+err.message;
       }
     });
   });
