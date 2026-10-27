@@ -7,11 +7,12 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function verified() { return signedIn() && request.auth.token.email_verified == true; }
     // admin = e-mail principal OU e-mail/uid na lista admins da temporada (sempre com e-mail verificado)
+    // admins vivem em seasons/2026 e valem para TODAS as temporadas (o parâmetro "season" é ignorado de propósito)
     function isAdmin(season) {
       return verified() && (
         request.auth.token.email in ['reramos02@gmail.com'] ||
-        request.auth.token.email in get(/databases/$(database)/documents/seasons/$(season)).data.get('admins', []) ||
-        request.auth.uid in get(/databases/$(database)/documents/seasons/$(season)).data.get('admins', [])
+        request.auth.token.email in get(/databases/$(database)/documents/seasons/2026).data.get('admins', []) ||
+        request.auth.uid in get(/databases/$(database)/documents/seasons/2026).data.get('admins', [])
       );
     }
 
@@ -50,6 +51,20 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid;
       allow write: if isAdmin('2026');
+    }
+
+    // prova do aceite da política: criado pelo próprio jogador com horário do servidor; ninguém edita nem apaga
+    match /consents/{id} {
+      allow read: if signedIn() && (id.matches(request.auth.uid + '__.*') || isAdmin('2026'));
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.version is string
+        && id == request.auth.uid + '__' + request.resource.data.version
+        && request.resource.data.keys().hasOnly(['uid','version','at','clientAt'])
+        && request.resource.data.at == request.time;
+      allow create: if isAdmin('2026')      // migração dos aceites que já estavam no cadastro dos jogadores
+        && request.resource.data.keys().hasOnly(['uid','version','clientAt','source','migratedAt']);
+      allow update, delete: if false;
     }
 
     match /config/{doc} {

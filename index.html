@@ -2213,21 +2213,25 @@ function v2Diff(baseP, baseS, locP, locS, o){
 
 // ── V2 CAMADA (início) ── gravação/leitura da estrutura nova. Só é usada quando config/schema.version === 2 (chave desligada por padrão)
 let SCHEMA_V2 = false;
-const V2 = {players:null, stageDocs:null, regs:null, admins:null, seasonLoaded:false, claims:[], verified:false};
+const V2 = {players:null, stageBy:{}, regsBy:{}, admins:null, seasonLoaded:false, claims:[], verified:false};
+// Cada temporada tem a sua pasta: seasons/{ano}/stages e seasons/{ano}/regs. Os admins e os pedidos de vínculo ficam em seasons/2026 (valem para todos os anos).
+const V2_SEASON_OF = {};                                  // id da etapa → ano da pasta onde o documento vive
+function v2Years(){ const out=[]; for(let y=FIRST_SEASON; y<=Math.max(CUR_YEAR+1, FIRST_SEASON+1); y++) out.push(String(y)); return out; }
+const v2SeasonForStage = (id, d) => V2_SEASON_OF[id] || (d&&d.season) || ((DB.stages.find(x=>x.id===id)||{}).season) || DATA_SEASON;
 const v2SeasonRef = () => doc(db,"seasons",DATA_SEASON);
 const v2PlayerRef = uid => doc(db,"players",uid);
-const v2StageRef  = id  => doc(db,"seasons",DATA_SEASON,"stages",id);
-const v2RegRef    = id  => doc(db,"seasons",DATA_SEASON,"regs",id);
+const v2StageRef  = (id, y) => doc(db,"seasons",String(y||v2SeasonForStage(id)),"stages",id);
+const v2RegRef    = (id, y) => doc(db,"seasons",String(y||v2SeasonForStage(id.split("__")[0])),"regs",id);
 const v2ClaimRef  = uid => doc(db,"seasons",DATA_SEASON,"claims",uid);
 async function v2Batched(fns){     // lotes de até 400 operações
   for(let i=0;i<fns.length;i+=400){ const b = writeBatch(db); fns.slice(i,i+400).forEach(fn=>fn(b)); await b.commit(); }
 }
 async function v2ApplyOps(ops){
   const fns = [];
-  ops.stages.set.forEach(d=>fns.push(b=>b.set(v2StageRef(d.id), deepSanitize(d))));
-  ops.stages.del.forEach(id=>fns.push(b=>b.delete(v2StageRef(id))));
-  ops.regs.set.forEach(r=>fns.push(b=>b.set(v2RegRef(r.id), r.data, {merge:true})));
-  ops.regs.del.forEach(id=>fns.push(b=>b.delete(v2RegRef(id))));
+  ops.stages.set.forEach(d=>{ const y = v2SeasonForStage(d.id, d); V2_SEASON_OF[d.id] = y; fns.push(b=>b.set(v2StageRef(d.id,y), deepSanitize(d))); });
+  ops.stages.del.forEach(id=>{ const y = v2SeasonForStage(id); fns.push(b=>b.delete(v2StageRef(id,y))); });
+  ops.regs.set.forEach(r=>{ const y = v2SeasonForStage(String(r.data.stageId||r.id.split("__")[0])); fns.push(b=>b.set(v2RegRef(r.id,y), r.data, {merge:true})); });
+  ops.regs.del.forEach(id=>{ const y = v2SeasonForStage(id.split("__")[0]); fns.push(b=>b.delete(v2RegRef(id,y))); });
   ops.players.del.forEach(uid=>fns.push(b=>b.delete(v2PlayerRef(uid))));
   const mine = ops.players.set.filter(p=>p.uid===CURRENT_USER_UID);
   ops.players.set.filter(p=>p.uid!==CURRENT_USER_UID).forEach(pl=>fns.push(b=>b.set(v2PlayerRef(pl.uid), deepSanitize(pl))));
@@ -2267,11 +2271,22 @@ async function seasonUpdate(parts){
   if(!SCHEMA_V2) return updateDoc(doc(db,"seasons",DATA_SEASON), parts);
   return v2Commit({players:parts.players, stages:parts.stages, admins:parts.admins});
 }
+// Lê as pastas de todas as temporadas (e registra em qual pasta cada etapa vive)
+async function v2ReadAllSeasons(){
+  const sd = [], rg = [];
+  await Promise.all(v2Years().map(async y=>{
+    try{
+      const [a,b] = await Promise.all([getDocs(collection(db,"seasons",y,"stages")), getDocs(collection(db,"seasons",y,"regs"))]);
+      a.forEach(d=>{ V2_SEASON_OF[d.id] = y; sd.push({...d.data(), id:d.id}); }); b.forEach(d=>rg.push(d.data()));
+    }catch(e){ if(y===DATA_SEASON) throw e; }
+  }));
+  return {sd, rg};
+}
 // Leitura/gravação completa (ferramentas de admin)
 async function srvRead(){
   if(!SCHEMA_V2){ const snap = await getDoc(doc(db,"seasons",DATA_SEASON)); const d = snap.data()||{}; return {players:[...(d.players||[])], stages:[...(d.stages||[])], admins:d.admins||[]}; }
-  const [pS,sS,rS,seas] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",DATA_SEASON,"stages")), getDocs(collection(db,"seasons",DATA_SEASON,"regs")), getDoc(v2SeasonRef())]);
-  const players = [], sd = [], rg = []; pS.forEach(d=>players.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data()));
+  const [pS,all,seas] = await Promise.all([getDocs(collection(db,"players")), v2ReadAllSeasons(), getDoc(v2SeasonRef())]);
+  const players = [], sd = all.sd, rg = all.rg; pS.forEach(d=>players.push({...d.data(), uid:d.id}));
   return {players: v2SortPlayers(players), stages: v2AssembleStages(sd, rg), admins: (seas.exists()?seas.data().admins:[])||[]};
 }
 async function srvWriteFull(full){
@@ -2284,15 +2299,22 @@ async function srvWriteFull(full){
 }
 // Montagem dos dados vindos do servidor (estrutura nova)
 function v2Kick(user){
-  if(!(V2.players && V2.stageDocs && V2.regs && V2.seasonLoaded)) return;
-  handleServerData({players:v2SortPlayers(V2.players), stages:v2AssembleStages(V2.stageDocs, V2.regs), admins:V2.admins||[]}, user, true);
+  const ys = v2Years();
+  if(!(V2.players && V2.seasonLoaded && ys.every(y=>V2.stageBy[y] && V2.regsBy[y]))) return;
+  const stageDocs = [], regs = [];
+  ys.forEach(y=>{ V2.stageBy[y].forEach(d=>{ V2_SEASON_OF[d.id] = y; stageDocs.push(d); }); V2.regsBy[y].forEach(r=>regs.push(r)); });
+  handleServerData({players:v2SortPlayers(V2.players), stages:v2AssembleStages(stageDocs, regs), admins:V2.admins||[]}, user, true);
 }
 function v2Listen(user){
   const err = (n)=>(e)=>{ dbg("ERRO v2 "+n+": "+e.code); console.warn("v2 "+n+":", e.code, e.message); };
   const push = u => _unsubListeners.push(u);
   push(onSnapshot(collection(db,"players"), snap=>{ V2.players = []; snap.forEach(d=>V2.players.push({...d.data(), uid:d.id})); v2Kick(user); }, err("players")));
-  push(onSnapshot(collection(db,"seasons",DATA_SEASON,"stages"), snap=>{ V2.stageDocs = []; snap.forEach(d=>V2.stageDocs.push({...d.data(), id:d.id})); v2Kick(user); }, err("stages")));
-  push(onSnapshot(collection(db,"seasons",DATA_SEASON,"regs"), snap=>{ V2.regs = []; snap.forEach(d=>V2.regs.push(d.data())); v2Kick(user); }, err("regs")));
+  V2.stageBy = {}; V2.regsBy = {};
+  v2Years().forEach(y=>{
+    // pasta de ano que falhar (ex.: ainda sem permissão) conta como vazia; só a de 2026 é obrigatória
+    push(onSnapshot(collection(db,"seasons",y,"stages"), snap=>{ const a=[]; snap.forEach(d=>a.push({...d.data(), id:d.id})); V2.stageBy[y] = a; v2Kick(user); }, e=>{ err("stages "+y)(e); if(y!==DATA_SEASON){ V2.stageBy[y] = V2.stageBy[y]||[]; v2Kick(user); } }));
+    push(onSnapshot(collection(db,"seasons",y,"regs"), snap=>{ const a=[]; snap.forEach(d=>a.push(d.data())); V2.regsBy[y] = a; v2Kick(user); }, e=>{ err("regs "+y)(e); if(y!==DATA_SEASON){ V2.regsBy[y] = V2.regsBy[y]||[]; v2Kick(user); } }));
+  });
   push(onSnapshot(v2SeasonRef(), snap=>{ V2.admins = snap.exists() ? (snap.data().admins||[]) : []; V2.seasonLoaded = true; v2Kick(user); }, err("season")));
   if(IS_ADMIN || ADMIN_EMAILS.includes(user && user.email)){
     push(onSnapshot(collection(db,"seasons",DATA_SEASON,"claims"), snap=>{ V2.claims = []; snap.forEach(d=>V2.claims.push({...d.data(), uid:d.id})); v2AutoApprove(); if(TAB==="admin" && TOOLS_VIEW==="diagnose") render(); }, err("claims")));
@@ -2334,8 +2356,8 @@ async function v2Migrate(log){
   log(`Gravando ${fns.length} documentos (${nRegs} inscrições)…`); await v2Batched(fns);
   // conferência: relê tudo da estrutura nova e compara com o antigo
   log("Conferindo…");
-  const nw = await (async()=>{ const [pS,sS,rS] = await Promise.all([getDocs(collection(db,"players")), getDocs(collection(db,"seasons",DATA_SEASON,"stages")), getDocs(collection(db,"seasons",DATA_SEASON,"regs"))]);
-    const pl = [], sd = [], rg = []; pS.forEach(d=>pl.push({...d.data(), uid:d.id})); sS.forEach(d=>sd.push({...d.data(), id:d.id})); rS.forEach(d=>rg.push(d.data())); return {players:v2SortPlayers(pl), stages:v2AssembleStages(sd, rg)}; })();
+  const nw = await (async()=>{ const [pS,all] = await Promise.all([getDocs(collection(db,"players")), v2ReadAllSeasons()]);
+    const pl = []; pS.forEach(d=>pl.push({...d.data(), uid:d.id})); return {players:v2SortPlayers(pl), stages:v2AssembleStages(all.sd, all.rg)}; })();
   const issues = [];
   const nwP = new Map(nw.players.map(x=>[x.uid,x])), nwS = new Map(nw.stages.map(x=>[x.id,x]));
   players.forEach(pl=>{ const o = nwP.get(pl.uid); if(!o) issues.push(`jogador ausente: ${pl.name||pl.uid}`); else if(v2Canon((({_ord,...r})=>r)(o))!==v2Canon(JSON.parse(JSON.stringify(pl)))) issues.push(`jogador diferente: ${pl.name||pl.uid}`); });
@@ -3401,6 +3423,12 @@ async function mutateMyPlayer(fn){
 async function savePrivacyAccept(){
   const at = new Date().toISOString();
   await mutateMyPlayer(p=>({...p, privacyVersion:PRIVACY_VERSION, privacyAcceptedAt:at}));
+  // prova do aceite: documento próprio, com horário gravado pelo SERVIDOR; as regras não deixam editar nem apagar
+  try{
+    const ref = doc(db,"consents",CURRENT_USER_UID+"__"+PRIVACY_VERSION);
+    const sn = await getDoc(ref);
+    if(!sn.exists()) await setDoc(ref, {uid:CURRENT_USER_UID, version:PRIVACY_VERSION, at:serverTimestamp(), clientAt:at});
+  }catch(e){ console.warn("registro do aceite (consents):", e.code||e.message); }
 }
 // Tela bloqueante de aceite (novos e atuais). Fica fora do #app para não sumir nos re-renders.
 function syncPrivacyGate(){
@@ -7133,7 +7161,7 @@ function renderV2Panel(){
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;font-size:11px;color:var(--muted)">
       Conta: <b style="color:#fff">${esc((CURRENT_USER&&CURRENT_USER.email)||"?")}</b> · e-mail verificado: <b style="color:${CURRENT_USER&&CURRENT_USER.emailVerified?"var(--green)":"var(--red)"}">${CURRENT_USER&&CURRENT_USER.emailVerified?"sim":"NÃO"}</b> · login: ${esc(((CURRENT_USER&&CURRENT_USER.providerData)||[]).map(x=>x.providerId).join(", ")||"?")}
-      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${btn("perm","🔎 Testar permissões")}${CURRENT_USER&&!CURRENT_USER.emailVerified?btn("verify","✉ Enviar e-mail de verificação")+btn("verified","↻ Já verifiquei, atualizar"):""}</div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${btn("perm","🔎 Testar permissões")}${btn("consents","Registrar aceites existentes")}${CURRENT_USER&&!CURRENT_USER.emailVerified?btn("verify","✉ Enviar e-mail de verificação")+btn("verified","↻ Já verifiquei, atualizar"):""}</div>
       ${V2_PERM?`<pre style="white-space:pre-wrap;font-size:11px;margin:6px 0 0">${esc(V2_PERM)}</pre>`:""}
     </div>
     ${V2_LOG?`<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:8px 0 0">${esc(V2_LOG)}</pre>`:""}
@@ -7165,6 +7193,15 @@ window.v2Ui = async function(act){
       await t("ler jogadores (estrutura nova)", ()=>getDocs(collection(db,"players")));
       V2_PERM=out.join("\n"); render(); return; }
     if(act==="migrate"){ V2_LOG=""; await v2Migrate(log); }
+    else if(act==="consents"){
+      try{
+        const have = new Set(); (await getDocs(collection(db,"consents"))).forEach(d=>have.add(d.id));
+        const fns = []; let n = 0;
+        DB.players.forEach(pl=>{ const id = pl.uid+"__"+pl.privacyVersion; if(!pl.deleted && pl.privacyVersion && !String(pl.uid).startsWith("p_") && !have.has(id)){ n++; fns.push(b=>b.set(doc(db,"consents",id), {uid:pl.uid, version:pl.privacyVersion, clientAt:pl.privacyAcceptedAt||"", source:"migrado do cadastro", migratedAt:serverTimestamp()})); } });
+        await v2Batched(fns); V2_LOG += `Aceites registrados: ${n} novo(s), ${have.size} já existiam.\n`;
+      }catch(e){ V2_LOG += "Falha ao registrar aceites: "+(e.code||e.message)+"\n"; }
+      render();
+    }
     else if(act==="activate"){ if(!V2.verified) return; if(!(await askConfirm("Virar para a estrutura nova?\nOs usuários passam a ler e gravar nela. Dá para voltar pelo mesmo painel.","Virar agora"))){ V2_LOG += "Virada cancelada.\n"; render(); return; } V2_LOG += "Gravando a chave…\n"; render(); await v2Activate(); const chk = await getDoc(doc(db,"config","schema")); V2_LOG += (chk.exists() && chk.data().version===2) ? "✓ Virada feita (config/schema = 2). O app recarrega sozinho.\n" : "✗ A chave não foi gravada. Tente de novo.\n"; }
     else if(act==="rollback"){ if(!(await askConfirm("Voltar ao modelo antigo?\nO estado atual é copiado de volta para o documento da temporada.","Voltar ao antigo"))) return; V2_LOG=""; await v2Rollback(log); }
     else if(act.startsWith("approve:")){ const c=V2.claims.find(x=>x.uid===act.slice(8)); if(c && await v2ApproveClaim(c)) showToast("Vínculo aprovado","green"); }
@@ -7492,7 +7529,7 @@ function openStageModal(stage=null){
       type,
       isFinal:document.getElementById("sf-f").checked,
       buyin:txt.buyin, rebuy:txt.rebuy, addon:txt.addon, timechip:txt.timechip,
-      season:ACTIVE_SEASON
+      season: stage ? (stage.season||DATA_SEASON) : ACTIVE_SEASON   // editar não muda a temporada da etapa
     };
     // Só mexe no financeiro quando preciso: etapa sem dados financeiros e com o KO padrão continua sem eles (o app já usa esse padrão), então nada é "congelado" sem querer
     const applyKO = s => { if(type!=="knockout") return s; if(!s.finance && ko.value===DEFAULT_KO_VALUE && ko.per===DEFAULT_KO_PER_ENTRY) return s; const fin=getFinanceData(s); fin.koValue=ko.value; fin.koPer=ko.per; return s; };

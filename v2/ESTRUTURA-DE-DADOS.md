@@ -18,25 +18,33 @@ Firestore
 │     • uid do Firebase Auth = jogador com login
 │
 ├── seasons/
-│   └── 2026/ .................. documento-raiz ÚNICO para TODAS as temporadas (2026, 2027…)
-│       │   admins[]  ← lista de admins (e-mails/uids)  ← continua só aqui
-│       │   (campos antigos players[] / stages[] = cópia congelada do dia da virada; serve ao "Voltar ao modelo antigo")
-│       │
-│       ├── stages/{stageId} ... UMA etapa por documento
-│       │     name, date, time, location, address, type (nlholdem|knockout),
-│       │     season ("2027"…; ausente = 2026), isFinal, status (upcoming|finished), allowInscriptions,
-│       │     buyin, rebuy, addon, timechip, blindLevels[], ftContribution,
-│       │     results[] {playerId, position, points, knockouts}     ← colocações finais
-│       │     draft[]   {uid, pos, ko}                              ← rascunho durante a etapa
-│       │     publishedAt, photoChampion, photoFinalTable (links do Storage)
-│       │     finance {…}  buyinData[] {uid, rs, rd, addon}  cashGame {players, entries, cashouts}   ← FINANCEIRO
-│       │     redraw {at, tables, seats, assign[] {uid, t(mesa), p(lugar)}}                            ← sorteio de mesas
-│       │
-│       ├── regs/{stageId}__{uid} ... UMA inscrição por jogador/etapa
-│       │     stageId, uid, inscrito, late, ord (ordem de inscrição), lord (ordem na lista de late)
-│       │
-│       └── claims/{uid} ........ pedido de vínculo: jogador novo ↔ pré-cadastro "p_…"
-│             uid, candidate, via (email|nome), email, emailVerified, name, createdAt
+│   ├── 2026/ .................. documento-raiz GLOBAL
+│   │   │   admins[]  ← lista de admins (e-mails/uids): UMA só, vale para todas as temporadas
+│   │   │   (campos antigos players[] / stages[] = cópia congelada do dia da virada; serve ao "Voltar ao modelo antigo")
+│   │   ├── claims/{uid} ........ pedido de vínculo: jogador novo ↔ pré-cadastro "p_…" (global)
+│   │   ├── stages/{stageId} ... etapas da temporada 2026   ┐  uma pasta por temporada;
+│   │   └── regs/{stageId}__{uid} ... inscrições de 2026     ┘  a pasta nasce sozinha ao criar a 1ª etapa do ano
+│   │
+│   └── 2027/ .................. (nasce ao criar a 1ª etapa de 2027; sem documento-raiz próprio)
+│       ├── stages/{stageId}
+│       └── regs/{stageId}__{uid}
+│
+│   Etapa (stages/{stageId}):
+│       name, date, time, location, address, type (nlholdem|knockout),
+│       season ("2026"/"2027"…), isFinal, status (upcoming|finished), allowInscriptions,
+│       buyin, rebuy, addon, timechip, blindLevels[], ftContribution,
+│       results[] {playerId, position, points, knockouts}     ← colocações finais
+│       draft[]   {uid, pos, ko}                              ← rascunho durante a etapa
+│       publishedAt, photoChampion, photoFinalTable (links do Storage)
+│       finance {…}  buyinData[] {uid, rs, rd, addon}  cashGame {players, entries, cashouts}   ← FINANCEIRO
+│       redraw {at, tables, seats, assign[] {uid, t(mesa), p(lugar)}}                            ← sorteio de mesas
+│   Inscrição (regs/{stageId}__{uid}):
+│       stageId, uid, inscrito, late, ord (ordem de inscrição), lord (ordem na lista de late)
+│   Vínculo (claims/{uid}): uid, candidate, via (email|nome), email, emailVerified, name, createdAt
+│
+├── consents/{uid}__{versão} ... PROVA DO ACEITE da política de privacidade (não se edita nem se apaga)
+│     uid, version, at (horário do SERVIDOR), clientAt (relógio do aparelho)
+│     (aceites antigos migrados: clientAt original, source "migrado do cadastro", migratedAt)
 │
 └── clocks/ .................... relógio de blinds (tempo sempre derivado, nada de "tick" gravado)
       2026_{stageId} ........... estado do relógio de cada etapa (status, nível, marcos de tempo, stageId, updatedBy)
@@ -47,7 +55,7 @@ Storage (fotos)
 └── stages/{stageId}/photoChampion.jpg | photoFinalTable.jpg   (só admin grava)
 
 No aparelho do jogador (localStorage — só conveniência)
-    ppp_priv_{uid} (aceite da política neste aparelho) · ppp_stats_sel (seleção no gráfico) · ppp_photo_checks_v1 (diagnóstico)
+    ppp_priv_{uid} (cópia local do aceite; o registro oficial está no servidor) · ppp_stats_sel (seleção no gráfico) · ppp_photo_checks_v1 (diagnóstico)
 ```
 
 ## 2. Como as peças se ligam
@@ -61,10 +69,10 @@ claims/{uid} ───┘                              │                    (s
                                                 └─ photoChampion / photoFinalTable ──► Storage
 ```
 
-- **Temporada** não é um documento: é o campo `season` de cada etapa. O ranking, as estatísticas, o Hall of Fame e o pote da Premiação Final filtram por ele. Ao virar o ano, nenhuma etapa nova existe → o ranking do ano novo nasce zerado, e os dados do ano anterior ficam intactos.
+- **Temporada** = uma pasta (`seasons/{ano}/stages` e `/regs`) **e** o campo `season` de cada etapa. O ranking, as estatísticas, o Hall of Fame e o pote da Premiação Final filtram por esse campo. Ao virar o ano, nenhuma etapa nova existe → o ranking do ano novo nasce zerado, e os dados do ano anterior ficam intactos na pasta do ano.
 - **Temporada fechada** = o ano já passou (houve etapa) ou a Mesa Final do ano foi encerrada. Só então aparece o botão "Resumo da Temporada" no Ranking (calculado na hora a partir das etapas, nada é gravado).
 - **Jogador** é global (um só documento para todos os anos).
-- **Admins** ficam em `seasons/2026.admins`; as regras do Firestore e do Storage leem essa lista.
+- **Admins** ficam em `seasons/2026.admins` e **valem para todas as temporadas** (as regras do Firestore e do Storage sempre leem essa lista; criar 2027 não zera admins).
 
 ## 3. Quem lê / quem grava (regras finais publicadas)
 
@@ -72,9 +80,10 @@ claims/{uid} ───┘                              │                    (s
 |---|---|---|
 | `players/{uid}` | qualquer login | o próprio jogador (só o seu) · admin (todos) |
 | `seasons/2026` (admins + cópia antiga) | qualquer login | admin (e-mail verificado) |
-| `stages/{id}` (resultados, financeiro, redraw, fotos) | qualquer login | admin |
-| `regs/{etapa}__{uid}` | qualquer login | o próprio jogador, só a sua e só em etapa aberta · admin |
+| `seasons/{ano}/stages/{id}` (resultados, financeiro, redraw, fotos) | qualquer login | admin |
+| `seasons/{ano}/regs/{etapa}__{uid}` | qualquer login | o próprio jogador, só a sua e só em etapa aberta · admin |
 | `claims/{uid}` | o dono · admin | o dono · apagar: admin |
+| `consents/{uid}__{versão}` | o dono · admin | só criar (o dono, com horário do servidor); nunca editar nem apagar |
 | `clocks/*` | qualquer login | admin |
 | `config/*` | qualquer login | só o dono (e-mail principal verificado) |
 | Storage `avatars/{uid}` | qualquer login | o dono |
@@ -84,12 +93,12 @@ claims/{uid} ───┘                              │                    (s
 
 ## 4. Notificações push
 
-`players/{uid}.fcmTokens[]` → Cloud Functions no Google Cloud (`onseasonupdated`, `onstagewritten`) leem os tokens de `players` e enviam o push (inscrições abertas, resultado etc.). Elas escolhem a estrutura lendo `config/schema`.
+`players/{uid}.fcmTokens[]` → Cloud Functions no Google Cloud (`onseasonupdated`, `onstagewritten`) leem os tokens de `players` e enviam o push (inscrições abertas, resultado etc.). Elas escolhem a estrutura lendo `config/schema`. O gatilho `onstagewritten` precisa observar `seasons/{season}/stages/{stageId}` (todas as pastas de ano).
 
 ## 5. Pontos de atenção conhecidos
 
 1. Financeiro (`finance`, `buyinData`, `cashGame`) vive dentro do documento da etapa, que qualquer login consegue ler.
 2. `players` guarda e-mail e tokens de push de todos, legíveis por qualquer login.
 3. O documento `seasons/2026` ainda tem a cópia antiga de jogadores/etapas (com e-mails).
-4. O aceite da política de privacidade fica só no aparelho (`ppp_priv_*`), sem registro no servidor.
+4. (resolvido) O aceite da política é gravado no cadastro do jogador **e** em `consents/` com horário do servidor.
 Detalhes e correções sugeridas: `v2/AUDITORIA-2026-10-27.md`.
