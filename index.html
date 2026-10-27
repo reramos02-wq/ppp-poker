@@ -5536,6 +5536,7 @@ function renderAdmin(){
     <div><div class="st">Painel de <span class="ac">Admin</span></div><div class="ss">Ferramentas e configurações avançadas</div></div>
     <span class="atag">MASTER</span>
   </div><div class="dv"></div>
+  ${TOOLS_VIEW==="home"?backupBannerHtml():""}
   ${renderAdminTools()}
   </div>`;
 }
@@ -7099,6 +7100,17 @@ function renderToolsHome(){
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">💾</div>
+        <div style="flex:1">
+          <div style="font-weight:700;color:#fff;font-size:15px">Backup completo</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Jogadores, todas as temporadas, admins, vínculos e aceites num arquivo. ${(()=>{ const b=backupInfo(); return b.at?`Último neste aparelho: ${b.at.toLocaleDateString("pt-BR")} (há ${b.days} dia${b.days!==1?"s":""}).`:"Nenhum backup feito neste aparelho."; })()}</div>
+        </div>
+        <button class="btn by sm" onclick="window.ppBackup()">⬇ Baixar</button>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:10px;cursor:pointer" id="btn-tool-photos">
       <div style="display:flex;align-items:center;gap:12px">
         <div style="font-size:28px">🖼️</div>
@@ -7121,16 +7133,6 @@ function renderToolsHome(){
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:12px">
-        <div style="font-size:28px">🧹</div>
-        <div style="flex:1">
-          <div style="font-weight:700;color:#fff;font-size:15px">Limpar Duplicatas</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">Remove entradas duplicadas de mesmo UID, mantém dados do usuário</div>
-        </div>
-        <button class="btn by sm" id="btn-fix-dupes">▶ Executar</button>
-      </div>
-    </div>
 
     <div id="tools-log" style="background:#111;border:1px solid #333;padding:12px;border-radius:4px;font-size:12px;font-family:monospace;line-height:2;min-height:40px;margin-top:8px;display:none"></div>
   </div>`;
@@ -7151,23 +7153,80 @@ function askConfirm(msg, okLabel){
     ov.querySelector("#ask-no").addEventListener("click",()=>{ ov.remove(); res(false); });
   });
 }
+// ── BACKUP COMPLETO ── jogadores, todas as temporadas (etapas e inscrições), admins, vínculos, aceites e configurações num JSON só
+const BK_KEY = "ppp_last_backup", BK_DAYS = 30;
+function backupInfo(){ let t = null; try{ t = localStorage.getItem(BK_KEY); }catch(e){}
+  const d = t ? new Date(t) : null; const days = d && !isNaN(d) ? Math.floor((Date.now()-d.getTime())/86400000) : null;
+  return {at:d&&!isNaN(d)?d:null, days}; }
+function backupDue(){ const b = backupInfo(); return b.days===null || b.days>=BK_DAYS; }
+function backupBannerHtml(){
+  if(!IS_ADMIN || !backupDue()) return "";
+  const b = backupInfo();
+  return `<div class="card" style="border-left:3px solid var(--yellow);margin-bottom:12px"><div style="font-weight:700;color:#fff;font-size:14px">Backup em dia?</div>
+    <div style="font-size:12px;color:var(--muted);margin:4px 0 8px">${b.at?`Último backup neste aparelho: há ${b.days} dias.`:"Nenhum backup feito neste aparelho."} Recomendado a cada ${BK_DAYS} dias.</div>
+    <button class="btn by sm" onclick="window.ppBackup()">Baixar backup completo</button></div>`;
+}
+window.ppBackup = async function(){
+  if(!IS_ADMIN) return;
+  try{
+    showToast("Gerando backup…","yellow");
+    const safe = async fn => { try{ return await fn(); }catch(e){ return {erro:e.code||e.message}; } };
+    const docs = sn => { const a=[]; sn.forEach(d=>a.push({id:d.id, ...d.data()})); return a; };
+    const one = async ref => { const sn = await getDoc(ref); return sn.exists()?sn.data():null; };
+    const out = {app:"ppp-poker", geradoEm:new Date().toISOString(), estrutura:SCHEMA_V2?"v2":"antiga", geradoPor:(CURRENT_USER&&CURRENT_USER.email)||""};
+    if(SCHEMA_V2){
+      const all = await v2ReadAllSeasons(); const pS = await getDocs(collection(db,"players"));
+      out.jogadores = docs(pS);
+      out.temporadas = {}; v2Years().forEach(y=>{ out.temporadas[y] = {etapas:[], inscricoes:[]}; });
+      all.sd.forEach(d=>{ const y = V2_SEASON_OF[d.id]||DATA_SEASON; (out.temporadas[y] = out.temporadas[y]||{etapas:[],inscricoes:[]}).etapas.push(d); });
+      all.rg.forEach(r=>{ const y = V2_SEASON_OF[String(r.stageId)]||DATA_SEASON; (out.temporadas[y] = out.temporadas[y]||{etapas:[],inscricoes:[]}).inscricoes.push(r); });
+      out.vinculosPendentes = await safe(async()=>docs(await getDocs(collection(db,"claims"))));
+      out.aceites = await safe(async()=>docs(await getDocs(collection(db,"consents"))));
+    }
+    out.config = {admins:await safe(()=>one(v2AdminsRef())), schema:await safe(()=>one(doc(db,"config","schema"))), regras:await safe(()=>one(doc(db,"config","rules")))};
+    out.documentoAntigo = await safe(()=>one(doc(db,"seasons",DATA_SEASON)));
+    const txt = JSON.stringify(out,(k,v)=> (v && typeof v==="object" && typeof v.toDate==="function") ? v.toDate().toISOString() : v, 1);
+    const blob = new Blob([txt],{type:"application/json"}), url = URL.createObjectURL(blob), a = document.createElement("a");
+    const pad=n=>String(n).padStart(2,"0"), t=new Date(); a.href=url; a.download=`backup-ppp-poker-${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}-${pad(t.getHours())}${pad(t.getMinutes())}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+    try{ localStorage.setItem(BK_KEY, new Date().toISOString()); }catch(e){}
+    const nj = (out.jogadores||[]).length, ne = Object.values(out.temporadas||{}).reduce((n,x)=>n+x.etapas.length,0);
+    showToast(`Backup baixado: ${nj} jogadores, ${ne} etapas, ${Math.round(txt.length/1024)} KB. Guarde fora do celular.`,"green");
+    render();
+  }catch(e){ showToast("Falha no backup: "+(e.code||e.message),"red"); }
+};
 // ── Painel admin: estrutura de dados (migração, virada, volta) e vínculos pendentes ──
 let V2_LOG = ""; let V2_PERM = "";
 const esc = v => String(v==null?"":v).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Aceites da política: quantos jogadores com login têm o aceite registrado em consents/ (prova com horário do servidor)
+function consentPending(){
+  if(!V2.consentIds) return [];
+  return DB.players.filter(p=>!p.deleted && !String(p.uid).startsWith("p_") && p.privacyVersion && !V2.consentIds.has(p.uid+"__"+p.privacyVersion));
+}
+function consentStatusHtml(){
+  if(V2.consentErr) return `<div style="margin-top:6px">Aceites: não consegui ler <b>consents</b> (publique as regras novas).</div>`;
+  if(!V2.consentIds) return `<div style="margin-top:6px">Aceites: conferindo…</div>`;
+  const acc = DB.players.filter(p=>!p.deleted && !String(p.uid).startsWith("p_") && p.privacyVersion===PRIVACY_VERSION).length;
+  const login = DB.players.filter(p=>!p.deleted && !String(p.uid).startsWith("p_")).length, pend = consentPending().length;
+  return `<div style="margin-top:6px">Aceites da política v${esc(PRIVACY_VERSION)}: <b style="color:#fff">${acc} de ${login}</b> jogadores com login · registros pendentes em consents: <b style="color:${pend?"var(--yellow)":"var(--green)"}">${pend}</b></div>`;
+}
 function renderV2Panel(){
   if(!IS_ADMIN) return "";
+  if(V2.consentIds===undefined){ V2.consentIds = null;
+    getDocs(collection(db,"consents")).then(sn=>{ V2.consentIds = new Set(); sn.forEach(d=>V2.consentIds.add(d.id)); if(TAB==="admin"&&TOOLS_VIEW==="diagnose") render(); })
+      .catch(()=>{ V2.consentIds = new Set(); V2.consentErr = true; if(TAB==="admin"&&TOOLS_VIEW==="diagnose") render(); }); }
   const claims = SCHEMA_V2 ? (V2.claims||[]) : [];
   const btn = (id,txt,dis)=>`<button class="btn bo sm" ${dis?"disabled":""} onclick="window.v2Ui('${id}')" style="${dis?"opacity:.4":""}">${txt}</button>`;
   return `<div class="card" style="margin-bottom:12px;padding:12px">
     <div style="font-weight:700;color:#fff;margin-bottom:4px">Estrutura de dados: ${SCHEMA_V2?"nova (v2)":"antiga (documento único)"}</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${SCHEMA_V2?"Jogadores, etapas e inscrições em documentos separados.":"Copie para a estrutura nova e confira antes de virar. Nada é apagado do documento antigo."}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      ${btn("backup","💾 Baixar backup")}
             ${SCHEMA_V2 ? btn("rollback","↩ Voltar ao modelo antigo") : btn("migrate","1. Copiar e conferir")+btn("activate","2. Virar para a estrutura nova",!V2.verified)}
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;font-size:11px;color:var(--muted)">
+      ${consentStatusHtml()}
       Conta: <b style="color:#fff">${esc((CURRENT_USER&&CURRENT_USER.email)||"?")}</b> · e-mail verificado: <b style="color:${CURRENT_USER&&CURRENT_USER.emailVerified?"var(--green)":"var(--red)"}">${CURRENT_USER&&CURRENT_USER.emailVerified?"sim":"NÃO"}</b> · login: ${esc(((CURRENT_USER&&CURRENT_USER.providerData)||[]).map(x=>x.providerId).join(", ")||"?")}
-      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${btn("perm","🔎 Testar permissões")}${btn("consents","Registrar aceites existentes")}${V2._adNew==null?btn("admins","Mover admins para config/admins"):""}${CURRENT_USER&&!CURRENT_USER.emailVerified?btn("verify","✉ Enviar e-mail de verificação")+btn("verified","↻ Já verifiquei, atualizar"):""}</div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${consentPending().length?btn("consents","Registrar aceites existentes ("+consentPending().length+")"):""}${V2._adNew==null?btn("admins","Mover admins para config/admins"):""}${CURRENT_USER&&!CURRENT_USER.emailVerified?btn("verify","✉ Enviar e-mail de verificação")+btn("verified","↻ Já verifiquei, atualizar"):""}</div>
       ${V2_PERM?`<pre style="white-space:pre-wrap;font-size:11px;margin:6px 0 0">${esc(V2_PERM)}</pre>`:""}
     </div>
     ${V2_LOG?`<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:8px 0 0">${esc(V2_LOG)}</pre>`:""}
@@ -7189,15 +7248,7 @@ window.v2Ui = async function(act){
       V2_LOG = `Backup baixado: ${(d.players||[]).length} jogadores, ${(d.stages||[]).length} etapas, ${Math.round(txt.length/1024)} KB.\nGuarde o arquivo fora do celular (e-mail para você mesmo, Drive).`; render(); return;
     }
     if(act==="verify"){ await sendEmailVerification(CURRENT_USER); V2_PERM="E-mail de verificação enviado para "+CURRENT_USER.email+". Se não achar, olhe o spam."; render(); openVerifySentModal(CURRENT_USER.email); return; }
-    if(act==="verified"){ await CURRENT_USER.reload(); await CURRENT_USER.getIdToken(true); V2_PERM = CURRENT_USER.emailVerified ? "✓ E-mail verificado. Toque em “Testar permissões” para confirmar." : "Ainda não consta como verificado. Clique no link do e-mail e tente de novo."; render(); return; }
-    if(act==="perm"){ V2_PERM="Testando…"; render(); const out=[]; const t=async(nome,fn)=>{ try{ await fn(); out.push("✓ "+nome); }catch(e){ out.push("✗ "+nome+" → "+(e.code||"")+" "+e.message); } };
-      let tok=""; try{ const r=await CURRENT_USER.getIdTokenResult(true); tok="token: email="+r.claims.email+" email_verified="+r.claims.email_verified+" provedor="+(r.signInProvider||""); }catch(e){ tok="token: "+e.message; } out.push(tok);
-      await t("ler documento da temporada", ()=>getDoc(doc(db,"seasons",DATA_SEASON)));
-      await t("gravar no documento da temporada (só updatedAt)", ()=>updateDoc(doc(db,"seasons",DATA_SEASON),{updatedAt:serverTimestamp()}));
-      await t("transação no documento da temporada", ()=>runTransaction(db, async tx=>{ const sn=await tx.get(doc(db,"seasons",DATA_SEASON)); tx.update(doc(db,"seasons",DATA_SEASON),{updatedAt:serverTimestamp()}); }));
-      await t("ler config/schema", ()=>getDoc(doc(db,"config","schema")));
-      await t("ler jogadores (estrutura nova)", ()=>getDocs(collection(db,"players")));
-      V2_PERM=out.join("\n"); render(); return; }
+    if(act==="verified"){ await CURRENT_USER.reload(); await CURRENT_USER.getIdToken(true); V2_PERM = CURRENT_USER.emailVerified ? "✓ E-mail verificado." : "Ainda não consta como verificado. Clique no link do e-mail e tente de novo."; render(); return; }
     if(act==="migrate"){ V2_LOG=""; await v2Migrate(log); }
     else if(act==="admins"){
       try{ await setDoc(v2AdminsRef(), {list:[...(DB.admins||[])], updatedAt:serverTimestamp(), by:(CURRENT_USER&&CURRENT_USER.email)||""}); V2_LOG += `Admins copiados para config/admins (${(DB.admins||[]).length}).\n`; }
@@ -7209,7 +7260,7 @@ window.v2Ui = async function(act){
         const have = new Set(); (await getDocs(collection(db,"consents"))).forEach(d=>have.add(d.id));
         const fns = []; let n = 0;
         DB.players.forEach(pl=>{ const id = pl.uid+"__"+pl.privacyVersion; if(!pl.deleted && pl.privacyVersion && !String(pl.uid).startsWith("p_") && !have.has(id)){ n++; fns.push(b=>b.set(doc(db,"consents",id), {uid:pl.uid, version:pl.privacyVersion, clientAt:pl.privacyAcceptedAt||"", source:"migrado do cadastro", migratedAt:serverTimestamp()})); } });
-        await v2Batched(fns); V2_LOG += `Aceites registrados: ${n} novo(s), ${have.size} já existiam.\n`;
+        await v2Batched(fns); V2_LOG += `Aceites registrados: ${n} novo(s), ${have.size} já existiam.\n`; V2.consentIds = undefined;
       }catch(e){ V2_LOG += "Falha ao registrar aceites: "+(e.code||e.message)+"\n"; }
       render();
     }
@@ -7323,9 +7374,6 @@ function renderToolsAudit(){
   const nameMap={};
   players.forEach(p=>{const k=(p.name||"").toLowerCase().trim();if(!nameMap[k])nameMap[k]=[];nameMap[k].push(p);});
   const dupes = Object.entries(nameMap).filter(([k,v])=>v.length>1);
-  const uidMap={};
-  players.forEach(p=>{if(!uidMap[p.uid])uidMap[p.uid]=[];uidMap[p.uid].push(p);});
-  const uidDupes = Object.entries(uidMap).filter(([k,v])=>v.length>1);
 
   // Ghost UIDs
   const ghosts=[...allResultUids].filter(u=>!playerUids.has(u));
@@ -7341,7 +7389,6 @@ function renderToolsAudit(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
       <div class="ps"><div class="psv">${players.length}</div><div class="psl">Total jogadores</div></div>
       <div class="ps" style="${ghosts.length>0?"border-color:var(--red)":""}"><div class="psv" style="${ghosts.length>0?"color:var(--red)":""}">${ghosts.length}</div><div class="psl">UIDs fantasma</div></div>
-      <div class="ps" style="${uidDupes.length>0?"border-color:var(--red)":""}"><div class="psv" style="${uidDupes.length>0?"color:var(--red)":""}">${uidDupes.length}</div><div class="psl">UIDs duplicados</div></div>
       <div class="ps"><div class="psv">${mocks.length}</div><div class="psl">Sem conta (p_*)</div></div>
     </div>
 
@@ -7357,16 +7404,6 @@ function renderToolsAudit(){
       }).join("")}
     </div>`:""}
 
-    ${uidDupes.length>0?`
-    <div class="card" style="border-left:3px solid var(--red);margin-bottom:10px">
-      <div style="font-weight:700;color:var(--red);margin-bottom:8px">⚠ UIDs Duplicados (${uidDupes.length})</div>
-      ${uidDupes.map(([uid,list])=>`
-        <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
-          <div style="font-size:10px;color:var(--muted);font-family:monospace">${uid}</div>
-          ${list.map(p=>`<div style="font-size:12px;color:#fff;padding:2px 0">${p.name} / "${p.nickname}" ${p.email?`· ${p.email}`:""}</div>`).join("")}
-        </div>`).join("")}
-      <button class="btn by sm mt8" id="btn-fix-dupes-audit">🧹 Limpar duplicatas agora</button>
-    </div>`:""}
 
     ${dupes.length>0?`
     <div class="card" style="border-left:3px solid var(--yellow);margin-bottom:10px">
@@ -7378,7 +7415,7 @@ function renderToolsAudit(){
         </div>`).join("")}
     </div>`:""}
 
-    ${ghosts.length===0&&uidDupes.length===0&&dupes.length===0?`
+    ${ghosts.length===0&&dupes.length===0?`
     <div class="card" style="border-left:3px solid var(--green)">
       <div style="color:var(--green);font-weight:700">🎉 Base saudável! Nenhum problema encontrado.</div>
     </div>`:""}
@@ -7398,31 +7435,6 @@ function toolsLog(msg, cls=""){
   el.scrollTop = el.scrollHeight;
 }
 
-async function runFixDupes(){
-  const data = await srvRead();
-  let players = [...(data.players||[])];
-  const stages = data.stages||[];
-  const admins = data.admins||[];
-  const before = players.length;
-  const seen=new Map();
-  const cleaned=[];
-  players.forEach(p=>{
-    if(!seen.has(p.uid)){
-      seen.set(p.uid,cleaned.length);
-      cleaned.push({...p});
-    } else {
-      const idx=seen.get(p.uid);
-      const existing=cleaned[idx];
-      const pIsUser = p.email && p.nickname && p.nickname!==p.name.split(" ")[0];
-      const eIsUser = existing.email && existing.nickname && existing.nickname!==existing.name.split(" ")[0];
-      if(pIsUser && !eIsUser){ cleaned[idx]={...p}; toolsLog(`🔄 Preferindo: "${p.name}"`, "ok"); }
-      else { toolsLog(`🗑️ Removido: "${p.name}"`, "warn"); }
-    }
-  });
-  await srvWriteFull({players:cleaned,stages,admins});
-  DB.players=cleaned;
-  toolsLog(`✅ ${before} → ${cleaned.length} jogadores (${before-cleaned.length} removidos)`, "ok");
-}
 
 // ── CAMPOS DE ESTRUTURA (UI) ── usados na etapa e nas regras padrão; só aceitam números
 const stKoDefaults = () => ({ value: Number((DEFAULT_RULES.knockout||{}).koValue)||DEFAULT_KO_VALUE, per: Number((DEFAULT_RULES.knockout||{}).koPer)||DEFAULT_KO_PER_ENTRY });
@@ -9685,16 +9697,6 @@ function bindEvents(){
     });
   });
   document.getElementById("btn-tools-back")?.addEventListener("click",()=>{ TOOLS_VIEW="home"; DIAGNOSE_EDIT_UID=null; render(); });
-
-  // Diagnose fix-dupes (both from home and audit)
-  ["btn-fix-dupes","btn-fix-dupes-audit"].forEach(id=>{
-    document.getElementById(id)?.addEventListener("click", async()=>{
-      const el=document.getElementById(id); if(el)el.disabled=true;
-      const logEl=document.getElementById("tools-log"); if(logEl)logEl.innerHTML="";
-      try{ await runFixDupes(); render(); }catch(e){ toolsLog("❌ "+e.message,"err"); }
-      if(el)el.disabled=false;
-    });
-  });
 
   // Diagnose search
   document.getElementById("diagnose-search")?.addEventListener("input",function(){
