@@ -1,0 +1,32 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+    function isJpegPequeno() {
+      return request.resource.contentType == 'image/jpeg' && request.resource.size < 5 * 1024 * 1024;
+    }
+    // admin: e-mail principal (verificado) ou e-mail/uid na lista admins da temporada
+    function isAdmin() {
+      return signedIn() && request.auth.token.email_verified == true && (
+        request.auth.token.email in ['reramos02@gmail.com'] ||
+        request.auth.token.email in firestore.get(/databases/(default)/documents/seasons/2026).data.get('admins', []) ||
+        request.auth.uid in firestore.get(/databases/(default)/documents/seasons/2026).data.get('admins', [])
+      );
+    }
+
+    // foto de perfil: cada um só mexe na sua
+    match /avatars/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid && isJpegPequeno();
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // fotos das etapas (campeão e mesa final): só admin grava
+    match /stages/{stageId}/{arquivo} {
+      allow read: if signedIn();
+      allow write: if isAdmin() && isJpegPequeno();
+      allow delete: if isAdmin();
+    }
+  }
+}
