@@ -564,6 +564,7 @@ var _authTimeout = setTimeout(function(){
 </style>
 
 <style>
+.srch{position:relative;display:block;min-width:0}.srch .inp{padding-left:32px!important;width:100%;box-sizing:border-box}.srch .pi{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--muted);pointer-events:none}
 .pi{width:1.1em;height:1.1em;vertical-align:-.17em;display:inline-block;flex-shrink:0;--cut:#222}
 .pi-spade{color:#fff}
 .by .pi,.tb.on .pi{--cut:var(--yellow)}.br .pi{--cut:var(--red)}.bd .pi,.bo .pi{--cut:#222}
@@ -891,10 +892,16 @@ html:not(.pl) .sb-logo{padding:20px 18px 16px;gap:12px;}
 <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="5" fill="currentColor"/><path fill="currentColor" d="M2.5 22c0-5.5 4.3-8.5 9.5-8.5s9.5 3 9.5 8.5z"/></symbol>
 <symbol id="i-party" viewBox="0 0 24 24"><path fill="currentColor" d="M2 22l5-14 9 9z"/><path d="M12 4v3M19 6l-2 2M21 12h-3M16 1l1 2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
 <symbol id="i-table" viewBox="0 0 24 24"><path fill="currentColor" d="M8.5 5L10 7.4H14L15.5 5A7 7 0 0 1 15.5 19H8.5A7 7 0 0 1 8.5 5Z"/><path d="M8.6 10.2L9.6 9H14.4L15.4 10.2V15.2L14.4 16.2H9.6L8.6 15.2Z" fill="none" stroke="var(--cut)" stroke-width="1.1" stroke-linejoin="round" opacity=".0"/><circle cx="12" cy="13.2" r="3.1" fill="none" stroke="var(--cut)" stroke-width="1.2"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><path fill="currentColor" d="M2 5h20v14H2z"/><path d="M2.8 6.2L12 13.2l9.2-7" fill="none" stroke="var(--cut)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><path fill="currentColor" d="M2 4h20v16H2z"/><circle cx="8" cy="9.2" r="2.1" fill="var(--cut)"/><path fill="var(--cut)" d="M3.2 18.8l5.4-5.6 3.6 3.6 3.2-3.2 5.4 5.2z"/></symbol>
+<symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6.5" r="3.2" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="6" cy="17.5" r="3.2" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M8.6 8.4L21 18.5M8.6 15.6L21 5.5" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></symbol>
+<symbol id="i-move" viewBox="0 0 24 24"><path fill="currentColor" d="M8 2l5 6H3zM16 22l-5-6h10z"/><path d="M8 8v8M16 16V8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="M8 9h7.5a5 5 0 0 1 0 10H9" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><path fill="currentColor" d="M3 9l6-5.5v11z"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><circle cx="12" cy="7.3" r="1.7" fill="var(--cut)"/><path d="M12 11v6.5" stroke="var(--cut)" stroke-width="2.8" stroke-linecap="round"/></symbol>
 <symbol id="i-medal-1" viewBox="0 0 24 24"><path fill="#7a5200" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#FFC107"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#7a5200" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#7a5200">1</text></symbol><symbol id="i-medal-2" viewBox="0 0 24 24"><path fill="#4a5059" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#C9CED6"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#4a5059" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#4a5059">2</text></symbol><symbol id="i-medal-3" viewBox="0 0 24 24"><path fill="#5c3410" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#D2884A"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#5c3410" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#5c3410">3</text></symbol><symbol id="i-hourglass" viewBox="0 0 24 24"><path fill="currentColor" d="M5 1.5h14v2.2c0 3.4-2.6 5.600-4.800 8.300 2.200 2.700 4.800 4.900 4.800 8.300v2.200H5v-2.200c0-3.400 2.600-5.600 4.800-8.300C7.600 9.300 5 7.100 5 3.700z"/><path fill="var(--cut)" d="M8 3.500h8c0 2.300-2 3.700-4 5.300-2-1.600-4-3-4-5.300z" opacity=".55"/></symbol><symbol id="i-stopwatch" viewBox="0 0 24 24"><rect x="9" y="1" width="6" height="2.600" rx="1" fill="currentColor"/><circle cx="12" cy="14" r="8.500" fill="currentColor"/><path d="M12 8.500V14l3.500 2.200" fill="none" stroke="var(--cut)" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"/></symbol></defs></svg>
 <script>
 (function(){
-var MAP={"🃏": "cards", "🥊": "ko", "🏆": "trophy", "✓": "check", "✔": "check", "✅": "check", "✕": "close", "❌": "close", "→": "arrow-r", "⚠️": "warn", "⚠": "warn", "✏️": "edit", "✏": "edit", "📅": "calendar", "💰": "money", "💵": "money", "💸": "money", "🧾": "money", "↺": "reset", "🔄": "reset", "🏠": "home", "⚙️": "gear", "⚙": "gear", "🏅": "star", "🌟": "star", "⭐": "star", "☕": "coffee", "👥": "users", "👤": "user", "🔒": "lock", "🔓": "unlock", "🗑️": "trash", "🗑": "trash", "🧹": "broom", "🗺️": "map", "📸": "camera", "📷": "camera", "🔍": "search", "⛶": "fullscreen", "📤": "share", "⬇️": "download", "💾": "save", "📍": "pin", "📖": "book", "🔔": "bell", "🔕": "bell-off", "📋": "clipboard", "👑": "crown", "💬": "chat", "🏁": "flag", "🌐": "globe", "🔗": "link", "🎉": "party", "🏗️": "gear", "⏳": "hourglass", "⌛": "hourglass", "⏱": "stopwatch", "⏸": "pause", "▶": "play", "◀": "arrow-l", "🥇": "medal-1", "🥈": "medal-2", "🥉": "medal-3", "🔬": "search", "🚗": "pin"};
+var MAP={"🃏": "cards", "🥊": "ko", "🏆": "trophy", "✓": "check", "✔": "check", "✅": "check", "✕": "close", "❌": "close", "→": "arrow-r", "⚠️": "warn", "⚠": "warn", "✏️": "edit", "✏": "edit", "📅": "calendar", "💰": "money", "💵": "money", "💸": "money", "🧾": "money", "↺": "reset", "🔄": "reset", "🏠": "home", "⚙️": "gear", "⚙": "gear", "🏅": "star", "🌟": "star", "⭐": "star", "☕": "coffee", "👥": "users", "👤": "user", "🔒": "lock", "🔓": "unlock", "🗑️": "trash", "🗑": "trash", "🧹": "broom", "🗺️": "map", "📸": "camera", "📷": "camera", "🔍": "search", "⛶": "fullscreen", "📤": "share", "⬇️": "download", "💾": "save", "📍": "pin", "📖": "book", "🔔": "bell", "🔕": "bell-off", "📋": "clipboard", "👑": "crown", "💬": "chat", "🏁": "flag", "🌐": "globe", "🔗": "link", "🎉": "party", "🏗️": "gear", "⏳": "hourglass", "⌛": "hourglass", "⏱": "stopwatch", "⏸": "pause", "▶": "play", "◀": "arrow-l", "🥇": "medal-1", "🥈": "medal-2", "🥉": "medal-3", "🔬": "search", "🚗": "pin", "✉": "mail", "↻": "reset", "⬆": "share", "⇅": "move", "🖼": "image", "↩": "undo", "🔎": "search", "✂": "scissors", "✗": "close", "ℹ": "info"};
 var keys=Object.keys(MAP).sort(function(a,b){return b.length-a.length;}).map(function(k){return k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');});
 var RX=new RegExp('('+keys.join('|')+')\\uFE0F?','g');
 var SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,OPTION:1,TITLE:1,SVG:1,svg:1,INPUT:1};
@@ -5582,7 +5589,7 @@ function renderManageInscriptions(sid){
     <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--surface2);flex-shrink:0">
       <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600;letter-spacing:1px;text-transform:uppercase">Adicionar à Etapa</div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
-        <input id="manage-ins-search" class="inp" placeholder="🔍 Buscar jogador..." style="margin:0;flex:1;font-size:13px;padding:9px 12px"/>
+        <span class="srch" style="flex:1"><svg class="pi pi-search" aria-hidden="true"><use href="#i-search"/></svg><input id="manage-ins-search" class="inp" placeholder="Buscar jogador..." style="margin:0;font-size:13px;padding:9px 12px"/></span>
         <button id="manage-ins-create" class="btn by sm" style="font-size:12px;white-space:nowrap;flex-shrink:0">+ Criar</button>
       </div>
       <div id="manage-ins-results" style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto"></div>
@@ -6260,7 +6267,7 @@ function renderBuyinPlayer(s){
         <div style="font-size:12px;color:var(--muted)">${vals.addon>0?fmtBRL(vals.addon):"Sem valor cadastrado"}</div>
       </div>
       <button id="btn-bi-addon" style="background:${rec.addon?"var(--yellow)":"var(--surface2)"};border:2px solid var(--yellow);border-radius:6px;padding:10px 20px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:15px;cursor:pointer;color:${rec.addon?"#000":"var(--muted)"};transition:.2s">
-        ${rec.addon?"✅ SIM":"☐ NÃO"}
+        ${rec.addon?"✅ SIM":"✕ NÃO"}
       </button>
     </div>
 
@@ -6540,7 +6547,7 @@ function renderAdminStageDetail(s){
           Selecionar jogador
         </div>
         <div class="fr" style="margin-bottom:10px">
-          <input id="ins-search" class="inp" style="margin:0" placeholder="🔍 Buscar por nome..."/>
+          <span class="srch" style="width:100%"><svg class="pi pi-search" aria-hidden="true"><use href="#i-search"/></svg><input id="ins-search" class="inp" style="margin:0" placeholder="Buscar por nome..."/></span>
         </div>
         <div id="ins-list" style="max-height:300px;overflow-y:auto">
           ${notIn.map(p=>`
@@ -7180,7 +7187,7 @@ function renderToolsDiagnose(){
       <span style="background:rgba(245,168,0,.1);border:1px solid rgba(245,168,0,.25);color:var(--yellow);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px;letter-spacing:1px">⚠ ${unlinked} sem login</span>
     </div>
     <div class="fr" style="margin-bottom:10px">
-      <input class="inp" id="diagnose-search" placeholder="🔍 Buscar jogador..." style="margin:0"/>
+      <span class="srch" style="width:100%"><svg class="pi pi-search" aria-hidden="true"><use href="#i-search"/></svg><input class="inp" id="diagnose-search" placeholder="Buscar jogador..." style="margin:0"/></span>
     </div>
     <div id="diagnose-list">
       ${sorted.map(p=>{
@@ -7440,8 +7447,8 @@ function openStageModal(stage=null){
       <div class="fr"><label class="lbl">Endereço (para rota)</label><input class="inp" id="sf-a" value="${f.address||""}" placeholder="Ex: Rua Costa Carvalho, 234 - Pinheiros"/></div>
       <div class="fr"><label class="lbl">Formato</label>
         <select class="inp" id="sf-t">
-          <option value="nlholdem"${f.type==="nlholdem"?" selected":""}>🃏 NL Hold'em</option>
-          <option value="knockout"${f.type==="knockout"?" selected":""}>🥊 Progressive Knockout (PKO)</option>
+          <option value="nlholdem"${f.type==="nlholdem"?" selected":""}>NL Hold'em</option>
+          <option value="knockout"${f.type==="knockout"?" selected":""}>Progressive Knockout (PKO)</option>
         </select>
       </div>
       <div class="sep"></div>
