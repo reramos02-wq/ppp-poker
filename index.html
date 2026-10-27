@@ -1258,8 +1258,8 @@ function calcRankingMovement(type){
 
   const live = getLiveStage();
   const lastFinished = [...DB.stages]
-    .filter(s=>s.status==="finished")
-    .sort((a,b)=>b.date.localeCompare(a.date))[0];
+    .filter(s=>s.status==="finished" && ((s.season||DATA_SEASON)===ACTIVE_SEASON))
+    .sort((a,b)=>(b.date||"").localeCompare(a.date||""))[0];
   const targetStage = live || lastFinished;
   if(!targetStage) return {};
 
@@ -1986,8 +1986,14 @@ let RANK_TAB      = "geral";
 let LOGIN_TAB     = "login";
 
 const DATA_SEASON = "2026";            // documento/coleções onde os dados vivem (as etapas de 2027 entram aqui com season:"2027")
-const SEASONS = ["2026","2027"];
-let ACTIVE_SEASON = "2026";            // temporada em exibição (Etapas, Ranking, Estatísticas)
+const FIRST_SEASON = 2026, CUR_YEAR = new Date().getFullYear();
+// lista de temporadas: da primeira até o ano seguinte ao vigente (ou a maior que já tenha etapa)
+function seasonList(){
+  let max = Math.max(CUR_YEAR+1, FIRST_SEASON+1);
+  (typeof DB!=="undefined" && DB && DB.stages ? DB.stages : []).forEach(s=>{ const y = parseInt(s.season,10); if(y>max) max = y; });
+  const out = []; for(let y=FIRST_SEASON; y<=max; y++) out.push(String(y)); return out;
+}
+let ACTIVE_SEASON = String(Math.max(CUR_YEAR, FIRST_SEASON));   // temporada em exibição (Etapas, Ranking, Estatísticas): no virar do ano passa sozinha para a do ano vigente
 
 const SEED = { players: [], stages: [] }; // Data lives in Firestore
 
@@ -3931,7 +3937,7 @@ function renderNav(){
 
 function renderPage(){
   if(CLOCK_STAGE_ID) return renderClock();
-  if(TAB!=="ranking") STATS_VIEW = false;
+  if(TAB!=="ranking"){ STATS_VIEW = false; SUMMARY_VIEW = false; }
   switch(TAB){
     case "home":    return renderHome();
     case "ranking": return renderRanking();
@@ -3977,7 +3983,7 @@ function renderClockBanner(){
 
 // Banner "Premiação final de temporada" (pote acumulado) — usado no celular e no tablet/desktop
 function renderFTPrizeBanner(){
-  const pot = DB.stages.filter(s=>s.status==="finished"&&!s.isFinal).reduce((sum,s)=>sum+getFTContribution(s),0);
+  const pot = DB.stages.filter(s=>s.status==="finished"&&!s.isFinal&&((s.season||DATA_SEASON)===ACTIVE_SEASON)).reduce((sum,s)=>sum+getFTContribution(s),0);
   return `<button id="btn-ft-prize-home" class="ft-prize">
     <span class="ft-prize-ic">🏆</span>
     <span class="ft-prize-tx"><span class="ft-prize-t">Premiação final de temporada</span><span class="ft-prize-s">Pot acumulado da temporada ${ACTIVE_SEASON}</span></span>
@@ -3987,7 +3993,7 @@ function renderFTPrizeBanner(){
 
 function renderHomeDesktop(){
   const next  = getNextStage();
-  const done  = DB.stages.filter(s=>s.status==="finished");
+  const done  = DB.stages.filter(s=>s.status==="finished"&&((s.season||DATA_SEASON)===ACTIVE_SEASON));
   const geralTop = calcRankGeral().slice(0,5);
   const nlTop = calcRank("nlholdem").slice(0,5);
   const koTop = calcRank("knockout").slice(0,5);
@@ -4096,7 +4102,7 @@ function renderHomeDesktop(){
 // ── HOME MOBILE ───────────────────────────────────────────────────────────────
 function renderHome(){
   const next = getNextStage();
-  const done = DB.stages.filter(s=>s.status==="finished");
+  const done = DB.stages.filter(s=>s.status==="finished"&&((s.season||DATA_SEASON)===ACTIVE_SEASON));
   const geralTop = calcRankGeral().slice(0,3);
   const nlTop = calcRank("nlholdem").slice(0,3);
   const koTop = calcRank("knockout").slice(0,3);
@@ -4221,6 +4227,78 @@ function statsExtras(stages, players, season){
   return {rows, total:fin.length, rise, fall, cols:D.cols};
 }
 // ── STATS (fim) ──
+
+// ── RESUMO DA TEMPORADA (início) ── só existe para temporada FECHADA (ano já passou ou mesa final encerrada); antes disso fica oculto
+let SUMMARY_VIEW = false;
+function withSeason(y, fn){ const old = ACTIVE_SEASON; ACTIVE_SEASON = y; try{ return fn(); } finally{ ACTIVE_SEASON = old; } }
+function seasonFinalStage(y){ return DB.stages.find(s=>s.isFinal && (s.season||DATA_SEASON)===y && s.status==="finished" && (s.results||[]).length) || null; }
+function seasonClosed(y){
+  const yr = parseInt(y,10);
+  if(!isFinite(yr)) return false;
+  if(yr < CUR_YEAR) return DB.stages.some(s=>(s.season||DATA_SEASON)===y && s.status==="finished");   // ano passou (e houve temporada)
+  return !!seasonFinalStage(y);                                                                         // ano corrente: fecha quando a mesa final é encerrada
+}
+function seasonSummary(y){
+  const done = DB.stages.filter(s=>!s.isFinal && (s.season||DATA_SEASON)===y && s.status==="finished" && (s.results||[]).length)
+    .slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  const fin = seasonFinalStage(y);
+  const r = withSeason(y, ()=>({ geral:calcRankGeral(), nl:calcRank("nlholdem"), ko:calcRank("knockout"), hof:calcHOF() }));
+  const X = statsExtras(DB.stages, DB.players, y);
+  const top = (arr,k)=>arr.slice().sort((a,b)=>b[k]-a[k]||b.played-a.played)[0];
+  const best = (k)=>{ const t = top(X.rows,k); return t && t[k]>0 ? {uid:t.uid, v:t[k]} : null; };
+  const eff = X.rows.filter(o=>o.played>=2).map(o=>({uid:o.uid, v:o.pts/o.played})).sort((a,b)=>b.v-a.v)[0] || null;
+  const parts = done.reduce((n,s)=>n+(s.results||[]).length,0);
+  const biggest = done.slice().sort((a,b)=>(b.results||[]).length-(a.results||[]).length)[0] || null;
+  const winOf = s => { const w = (s.results||[]).find(x=>x.position===1); return w ? w.playerId : null; };
+  const podium = s => [1,2,3].map(p=>{ const w=(s.results||[]).find(x=>x.position===p); return w?w.playerId:null; });
+  return {
+    year:y, done, fin, nStages:done.length, nNL:done.filter(s=>s.type==="nlholdem").length, nKO:done.filter(s=>s.type==="knockout").length,
+    participations:parts, uniquePlayers:X.rows.length, avgPlayers: done.length?Math.round(parts/done.length*10)/10:0,
+    biggest: biggest?{name:biggest.name, n:(biggest.results||[]).length}:null,
+    totalKO: X.rows.reduce((n,o)=>n+o.ko,0),
+    champGeral:r.geral[0]||null, champNL:r.nl[0]||null, champKO:r.ko[0]||null, top3:r.geral.slice(0,3),
+    ftChampion: fin?winOf(fin):null, ftPodium: fin?podium(fin):null,
+    winners: r.hof.filter(h=>(h.wNL+h.wKO)>0).slice().sort((a,b)=>(b.wNL+b.wKO)-(a.wNL+a.wKO)||b.p-a.p).slice(0,5),
+    mostFT:best("ft"), mostKO:best("ko"), mostPlayed:best("played"), efficiency:eff, rise:X.rise, fall:X.fall,
+    stages: done.map(s=>({id:s.id, name:s.name, date:s.date, type:s.type, n:(s.results||[]).length, winner:winOf(s)}))
+  };
+}
+function renderSeasonSummary(){
+  const y = ACTIVE_SEASON, S = seasonSummary(y);
+  const who = (uid,extra)=>uid?`<div class="rr" data-profile="${uid}" style="cursor:pointer">${AV(uid)}<div class="ri"><div class="rn">${statsNick(uid)}</div>${extra?`<div class="rm">${extra}</div>`:""}</div></div>`:`<div style="font-size:13px;color:var(--muted)">—</div>`;
+  const rk = (c,lbl)=>c?`<div class="lbl" style="margin:14px 0 6px">${lbl}</div>${who(c.p.uid, c.total+" pts · "+c.stages+" etapa"+(c.stages!==1?"s":""))}`:"";
+  const fact = (v,l)=>`<div class="card" style="text-align:center;padding:12px 6px"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--yellow);line-height:1">${v}</div><div style="font-size:11px;color:var(--muted);margin-top:4px">${l}</div></div>`;
+  const pl = (o,unit)=>o?who(o.uid, (Number.isInteger(o.v)?o.v:o.v.toFixed(1))+" "+unit):`<div style="font-size:13px;color:var(--muted)">—</div>`;
+  const medals = ["🥇","🥈","🥉"];
+  return `<div class="sec">
+  <button id="btn-sum-back" class="btn bo mb10" style="font-size:12px">‹ Voltar</button>
+  <div class="st">Resumo da <span class="ac">Temporada</span></div><div class="ss">Temporada ${y}</div><div class="dv"></div>
+  <div class="card" style="border:1px solid #FFD700;background:rgba(255,215,0,.05);text-align:center">
+    <div style="font-size:30px">🏆</div>
+    <div class="lbl" style="margin:4px 0 8px">Grande vencedor da Mesa Final</div>
+    ${S.ftChampion?who(S.ftChampion, S.ftPodium&&S.ftPodium[1]?"Vice: "+statsNick(S.ftPodium[1])+(S.ftPodium[2]?" · 3º: "+statsNick(S.ftPodium[2]):""):""):`<div style="font-size:13px;color:var(--muted)">Mesa Final não realizada nesta temporada.</div>`}
+  </div>
+  <div class="lbl" style="margin:18px 0 6px">Campeões dos rankings</div>
+  ${rk(S.champGeral,"🏅 Ranking Geral")}${rk(S.champNL,"🃏 NL Hold'em")}${rk(S.champKO,"🥊 PKO")}
+  ${S.top3.length>1?`<div class="lbl" style="margin:14px 0 6px">Pódio do Ranking Geral</div>${S.top3.map((c,i)=>who(c.p.uid, medals[i]+" "+c.total+" pts")).join("")}`:""}
+  <div class="lbl" style="margin:18px 0 6px">Em números</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+    ${fact(S.nStages,"etapas")}${fact(S.uniquePlayers,"jogadores")}${fact(S.participations,"participações")}
+    ${fact(S.avgPlayers,"média por etapa")}${fact(S.totalKO,"eliminações")}${fact(S.nNL+" / "+S.nKO,"NL / PKO")}
+  </div>
+  ${S.biggest?`<div style="font-size:12px;color:var(--muted);margin-top:8px">Maior etapa: ${S.biggest.name} (${S.biggest.n} jogadores)</div>`:""}
+  ${S.winners.length?`<div class="lbl" style="margin:18px 0 6px">Maiores vencedores de etapas</div>${S.winners.map(h=>who(h.pl.uid, `${h.wNL+h.wKO} vitória${h.wNL+h.wKO!==1?"s":""} (🃏${h.wNL} · 🥊${h.wKO})`)).join("")}`:""}
+  <div class="lbl" style="margin:18px 0 6px">Destaques</div>
+  <div style="font-size:12px;color:var(--muted);margin:6px 0 2px">Mais mesas finais</div>${pl(S.mostFT,"mesas finais")}
+  <div style="font-size:12px;color:var(--muted);margin:10px 0 2px">Mais eliminações</div>${pl(S.mostKO,"eliminações")}
+  <div style="font-size:12px;color:var(--muted);margin:10px 0 2px">Mais presenças</div>${pl(S.mostPlayed,"etapas")}
+  <div style="font-size:12px;color:var(--muted);margin:10px 0 2px">Melhor aproveitamento (mín. 2 etapas)</div>${pl(S.efficiency,"pts por etapa")}
+  <div class="lbl" style="margin:18px 0 6px">Todas as etapas</div>
+  ${S.stages.map(s=>`<div class="card" style="padding:10px 12px"><div class="btw"><div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:#fff">${s.name}</div><div style="font-size:12px;color:var(--muted)">${fmtD(s.date)} · ${typeLbl(s.type)} · ${s.n} jogadores</div></div><div style="font-size:13px;color:var(--yellow);text-align:right">🥇 ${s.winner?statsNick(s.winner):"—"}</div></div></div>`).join("")}
+  </div>`;
+}
+// ── RESUMO DA TEMPORADA (fim) ──
+
 
 const RECAP_DAYS = 5;   // o banner da Início fica do dia seguinte até o 5º dia após a etapa
 // ── RESUMO (início) ── resumo pós-etapa: tudo derivado dos resultados publicados, aparece sozinho (nenhuma ação de admin)
@@ -4478,11 +4556,16 @@ function renderStats(){
 function renderRanking(){
   if(STATS_VIEW) return renderStats();
   if(FT_PRIZE_VIEW) return renderFTPrize();
+  const closed = seasonClosed(ACTIVE_SEASON);
+  if(SUMMARY_VIEW && closed) return renderSeasonSummary();
+  SUMMARY_VIEW = false;
   const list = RANK_TAB==="geral"?calcRankGeral():calcRank(RANK_TAB);
   const isKO = RANK_TAB==="knockout";
   const isGeral = RANK_TAB==="geral";
   return `<div class="sec">
-  <div class="st">Rank<span class="ac">ing</span></div><div class="ss">Temporada ${ACTIVE_SEASON}</div><div class="dv"></div>
+  <div class="st">Rank<span class="ac">ing</span></div><div class="ss">Temporada ${ACTIVE_SEASON}${closed?" · encerrada":""}</div><div class="dv"></div>
+  <div style="margin-bottom:14px">${seasonSwitcher()}</div>
+  ${closed?`<button id="btn-season-summary" class="btn by fw" style="margin-bottom:14px;font-size:13px">🏆 Resumo da Temporada ${ACTIVE_SEASON}</button>`:""}
   <div class="tabs">
     <button class="tb${RANK_TAB==="geral"?" on":""}" data-rtab="geral">🏅 Geral</button>
     <button class="tb${RANK_TAB==="nlholdem"?" on":""}" data-rtab="nlholdem">🃏 NL Hold'em</button>
@@ -4599,7 +4682,7 @@ const recapType = t => t==="knockout" ? "PKO" : "NL Hold'em";
 const recapNames = l => l.map(u=>statsNick(u)).join(", ");
 // Dados do resumo atual (ou null fora da janela). O prêmio é calculado numa CÓPIA da etapa, para não gravar dados financeiros padrão na etapa real.
 function recapCurrent(sid){
-  const st = sid ? DB.stages.find(x=>x.id===sid && x.status==="finished" && (x.results||[]).length) : SEASONS.map(y=>recapPick(DB.stages, y, new Date())).find(Boolean); if(!st) return null;
+  const st = sid ? DB.stages.find(x=>x.id===sid && x.status==="finished" && (x.results||[]).length) : seasonList().map(y=>recapPick(DB.stages, y, new Date())).find(Boolean); if(!st) return null;
   let prizeInfo = null;
   try{
     const ghost = {...st, finance: st.finance ? JSON.parse(JSON.stringify(st.finance)) : undefined};
@@ -4781,7 +4864,7 @@ async function openRecapModal(sid){
 // ── RESUMO UI (fim) ──
 // ── Seletor de temporada (Etapas) ──
 function seasonSwitcher(){
-  const i = SEASONS.indexOf(ACTIVE_SEASON);
+  const SEASONS = seasonList(), i = SEASONS.indexOf(ACTIVE_SEASON);
   const b = (to,txt,dis)=>`<button class="btn bo sm" ${dis?"disabled":""} onclick="window.setSeasonView('${to}')" style="min-width:34px;font-size:16px;line-height:1;${dis?"opacity:.35":""}" aria-label="${txt}">${txt}</button>`;
   return `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
     ${b(SEASONS[i-1]||ACTIVE_SEASON,"‹",i<=0)}
@@ -4789,7 +4872,7 @@ function seasonSwitcher(){
     ${b(SEASONS[i+1]||ACTIVE_SEASON,"›",i>=SEASONS.length-1)}
   </div>`;
 }
-window.setSeasonView = function(y){ if(!SEASONS.includes(y)) return; ACTIVE_SEASON = y; STAGE_DETAIL = null; render(); };
+window.setSeasonView = function(y){ if(!seasonList().includes(y)) return; ACTIVE_SEASON = y; STAGE_DETAIL = null; render(); };
 function renderStages(){
   // Cash game management takes priority over everything
   if(CASHGAME_MGMT){
@@ -9339,6 +9422,8 @@ function bindEvents(){
   document.getElementById("btn-ft-prize")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; render(); });
   document.getElementById("btn-ft-prize-home")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=true; TAB="ranking"; render(); });
   document.getElementById("btn-ft-prize-back")?.addEventListener("click",()=>{ FT_PRIZE_VIEW=false; render(); });
+  document.getElementById("btn-season-summary")?.addEventListener("click",()=>{ SUMMARY_VIEW=true; render(); window.scrollTo(0,0); });
+  document.getElementById("btn-sum-back")?.addEventListener("click",()=>{ SUMMARY_VIEW=false; render(); });
   document.querySelectorAll("[data-recap-share]").forEach(b=>b.addEventListener("click",()=>openRecapModal(b.dataset.recapShare)));
   document.getElementById("btn-stats-open")?.addEventListener("click",()=>{ TAB="ranking"; STATS_VIEW=true; FT_PRIZE_VIEW=false; render(); window.scrollTo(0,0); });
   document.getElementById("btn-stats-back")?.addEventListener("click",()=>{ STATS_VIEW=false; render(); });
