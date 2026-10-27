@@ -5311,6 +5311,7 @@ function closeProfile(){ PROFILE_FILTER="geral"; const el=document.getElementByI
 
 // ── RULES ─────────────────────────────────────────────────────────────────────
 function openEditRulesModal(){
+  if(!IS_ADMIN) return;   // só admin edita os padrões
   const wrap=document.getElementById("result-modal");
   wrap.innerHTML="";
   const ov=document.createElement("div");
@@ -5382,7 +5383,7 @@ function renderRules(){
   return `<div class="sec">
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2px">
     <div><div class="st">Regr<span class="ac">as</span></div><div class="ss">Formatos e pontuação</div></div>
-    <button onclick="openEditRulesModal()" class="btn bo sm" style="flex-shrink:0;margin-top:6px">✏️ Editar Padrão</button>
+    ${IS_ADMIN?`<button onclick="openEditRulesModal()" class="btn bo sm" style="flex-shrink:0;margin-top:6px">✏️ Editar Padrão</button>`:""}
   </div><div class="dv"></div>
   <div class="tabs">
     <button class="tb${RULES_TAB==="nlholdem"?" on":""}" data-rtab2="nlholdem">🃏 NL Ranking</button>
