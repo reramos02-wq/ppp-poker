@@ -890,6 +890,7 @@ html:not(.pl) .sb-logo{padding:20px 18px 16px;gap:12px;}
 <symbol id="i-save" viewBox="0 0 24 24"><path fill="currentColor" d="M3 3h15l3 3v15H3z"/><rect x="7" y="3" width="8" height="6" fill="var(--cut)"/><rect x="7" y="13" width="10" height="8" fill="var(--cut)"/></symbol>
 <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="5" fill="currentColor"/><path fill="currentColor" d="M2.5 22c0-5.5 4.3-8.5 9.5-8.5s9.5 3 9.5 8.5z"/></symbol>
 <symbol id="i-party" viewBox="0 0 24 24"><path fill="currentColor" d="M2 22l5-14 9 9z"/><path d="M12 4v3M19 6l-2 2M21 12h-3M16 1l1 2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="11" rx="5.5" fill="currentColor"/><rect x="6.3" y="9" width="11.4" height="6" rx="3" fill="none" stroke="var(--cut)" stroke-width="1.3"/><circle cx="8" cy="3.6" r="1.7" fill="currentColor"/><circle cx="12" cy="3.6" r="1.7" fill="currentColor"/><circle cx="16" cy="3.6" r="1.7" fill="currentColor"/><circle cx="8" cy="20.4" r="1.7" fill="currentColor"/><circle cx="12" cy="20.4" r="1.7" fill="currentColor"/><circle cx="16" cy="20.4" r="1.7" fill="currentColor"/><circle cx="1.6" cy="12" r="1.3" fill="currentColor"/><circle cx="22.4" cy="12" r="1.3" fill="currentColor"/></symbol>
 <symbol id="i-medal-1" viewBox="0 0 24 24"><path fill="#7a5200" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#FFC107"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#7a5200" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#7a5200">1</text></symbol><symbol id="i-medal-2" viewBox="0 0 24 24"><path fill="#4a5059" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#C9CED6"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#4a5059" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#4a5059">2</text></symbol><symbol id="i-medal-3" viewBox="0 0 24 24"><path fill="#5c3410" d="M6.5 1.5h4.2l2.3 7.5-3.6 1.2zM17.5 1.5h-4.2l-2.3 7.5 3.6 1.2z"/><circle cx="12" cy="15" r="7.5" fill="#D2884A"/><circle cx="12" cy="15" r="5.6" fill="none" stroke="#5c3410" stroke-width="1" opacity=".55"/><text x="12" y="19" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="900" font-size="11" fill="#5c3410">3</text></symbol><symbol id="i-hourglass" viewBox="0 0 24 24"><path fill="currentColor" d="M5 1.5h14v2.2c0 3.4-2.6 5.600-4.800 8.300 2.200 2.700 4.800 4.900 4.800 8.300v2.200H5v-2.200c0-3.400 2.600-5.600 4.800-8.300C7.600 9.300 5 7.100 5 3.700z"/><path fill="var(--cut)" d="M8 3.500h8c0 2.300-2 3.700-4 5.300-2-1.600-4-3-4-5.300z" opacity=".55"/></symbol><symbol id="i-stopwatch" viewBox="0 0 24 24"><rect x="9" y="1" width="6" height="2.600" rx="1" fill="currentColor"/><circle cx="12" cy="14" r="8.500" fill="currentColor"/><path d="M12 8.500V14l3.500 2.200" fill="none" stroke="var(--cut)" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"/></symbol></defs></svg>
 <script>
 (function(){
@@ -4998,8 +4999,11 @@ function renderStageDetail(sid){
         <button class="btn bo sm" data-buyin-mgmt="${s.id}" style="font-size:12px;border-color:var(--yellow);color:var(--yellow)">💰 Financeiro</button>
         <button class="btn bo sm" data-cashgame-mgmt="${s.id}" style="font-size:12px;border-color:var(--green);color:var(--green)">🃏 Cash Game</button>
         <button class="btn bo sm" data-open-clock="${s.id}" style="font-size:12px;border-color:var(--blue);color:var(--blue)">⏱ Relógio</button>
+        ${s.status==="upcoming"?`<button class="btn bo sm" onclick="window.openRedraw('${s.id}')" style="font-size:12px"><svg class="pi pi-table" aria-hidden="true"><use href="#i-table"/></svg> Redraw</button>`:""}
       </div>
     </div>`:""}
+
+    ${redrawUserCard(s)}
 
     <!-- Action buttons -->
     ${s.status==="upcoming"?`
@@ -7654,6 +7658,101 @@ function openCashOutModal(s, uid, onConfirm){
 
 
 
+
+// ── REDRAW (início) ── sorteio aleatório dos jogadores ainda no torneio nas mesas. Posição = M<mesa> P<lugar> (ex.: M1 P5)
+// s.redraw = {at, tables, seats, assign:[{uid,t,p}]}
+function redrawEligible(s){
+  const dr = s.draft||[], rs = s.results||[];
+  return (s.inscriptions||[]).filter(uid=>{
+    const d = dr.find(r=>r.uid===uid); if(d && String(d.pos||"").trim()!=="") return false;   // já caiu (colocação no rascunho)
+    if(rs.some(r=>r.playerId===uid && r.position)) return false;                                // já caiu (resultado)
+    return true;
+  });
+}
+// Puro: devolve {ok:true, assign} ou {ok:false, error}. Mesas equilibradas (diferença máx. de 1 jogador) e lugares sorteados.
+function redrawBuild(uids, tables, seats, rnd){
+  rnd = rnd || Math.random;
+  const T = Number(tables), S = Number(seats), n = uids.length;
+  if(!Number.isInteger(T) || T<1) return {ok:false, error:"Informe a quantidade de mesas."};
+  if(!Number.isInteger(S) || S<2) return {ok:false, error:"Informe os lugares por mesa (mínimo 2)."};
+  if(n<1) return {ok:false, error:"Nenhum jogador sem colocação para sortear."};
+  if(T>n) return {ok:false, error:`Há ${T} mesas para só ${n} jogador${n!==1?"es":""}. Reduza as mesas.`};
+  if(T*S<n) return {ok:false, error:`Mesas insuficientes: ${n} jogadores e só ${T*S} lugares (${T} × ${S}). Aumente mesas ou lugares.`};
+  const a = uids.slice(); for(let i=a.length-1;i>0;i--){ const j = Math.floor(rnd()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  const byT = Array.from({length:T},()=>[]); a.forEach((u,i)=>byT[i%T].push(u));
+  const assign = [];
+  byT.forEach((list,ti)=>{
+    const pool = Array.from({length:S},(_,i)=>i+1); for(let i=pool.length-1;i>0;i--){ const j = Math.floor(rnd()*(i+1)); [pool[i],pool[j]] = [pool[j],pool[i]]; }
+    const seatsT = pool.slice(0,list.length).sort((x,y)=>x-y);
+    list.forEach((u,k)=>assign.push({uid:u, t:ti+1, p:seatsT[k]}));
+  });
+  return {ok:true, assign};
+}
+const redrawLabel = a => `M${a.t} P${a.p}`;
+function redrawActive(s){   // só quem ainda está no torneio
+  if(!s || !s.redraw || !Array.isArray(s.redraw.assign)) return [];
+  const el = new Set(redrawEligible(s)); return s.redraw.assign.filter(a=>el.has(a.uid));
+}
+function redrawTablesHtml(list){
+  const tabs = {}; list.forEach(a=>{ (tabs[a.t] = tabs[a.t]||[]).push(a); });
+  return Object.keys(tabs).map(Number).sort((a,b)=>a-b).map(t=>`<div style="margin-top:10px"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:1px;color:var(--yellow)">MESA ${t} · ${tabs[t].length} jogador${tabs[t].length!==1?"es":""}</div>
+    ${tabs[t].sort((a,b)=>a.p-b.p).map(a=>`<div style="display:flex;gap:10px;font-size:14px;padding:3px 0;border-bottom:1px solid #1c1c1c"><span style="min-width:62px;color:var(--yellow);font-weight:700">${redrawLabel(a)}</span><span style="color:#fff">${esc(statsNick(a.uid))}</span></div>`).join("")}</div>`).join("");
+}
+function redrawUserCard(s){
+  if(!s || s.status!=="upcoming") return "";
+  const act = redrawActive(s); if(!act.length) return "";
+  const mine = CURRENT_USER_UID ? act.find(a=>a.uid===CURRENT_USER_UID) : null;
+  return `<div class="card" style="border:1px solid var(--yellow);margin-bottom:12px">
+    <div class="lbl" style="display:flex;align-items:center;gap:6px"><svg class="pi pi-table" aria-hidden="true"><use href="#i-table"/></svg> Redraw</div>
+    ${mine?`<div style="text-align:center;margin:8px 0 4px"><div style="font-size:12px;color:var(--muted)">Sua posição</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:44px;line-height:1;color:var(--yellow);letter-spacing:2px">${redrawLabel(mine)}</div><div style="font-size:12px;color:var(--muted);margin-top:4px">Mesa ${mine.t} · Lugar ${mine.p}</div></div>`:`<div style="font-size:13px;color:var(--muted);margin-top:6px">Redraw realizado. Você não está em nenhuma mesa.</div>`}
+    <details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px;color:var(--blue)">Ver todas as mesas</summary>${redrawTablesHtml(act)}</details>
+  </div>`;
+}
+window.openRedraw = function(sid){
+  if(!IS_ADMIN) return;
+  const s = DB.stages.find(x=>x.id===sid); if(!s) return;
+  document.getElementById("redraw-modal")?.remove();
+  const el = redrawEligible(s), n = el.length, prev = s.redraw;
+  const defT = prev&&prev.tables ? prev.tables : Math.max(1, Math.ceil(n/9)), defS = prev&&prev.seats ? prev.seats : 9;
+  const ov = document.createElement("div"); ov.id = "redraw-modal";
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box";
+  const hasPrev = prev && redrawActive(s).length;
+  ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:4px;padding:20px;width:100%;max-width:460px;max-height:90vh;overflow:auto">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#fff;display:flex;align-items:center;gap:8px"><svg class="pi pi-table" aria-hidden="true" style="width:24px;height:24px"><use href="#i-table"/></svg> Redraw · ${esc(s.name)}</div>
+    <div style="font-size:13px;color:var(--muted);margin:6px 0 14px">Sorteia, aleatoriamente, os <b style="color:#fff">${n}</b> jogador${n!==1?"es":""} que ainda não têm colocação.</div>
+    <div style="display:flex;gap:10px">
+      <label style="flex:1;font-size:12px;color:var(--muted)">Mesas<input id="rd-t" type="number" inputmode="numeric" min="1" value="${defT}" style="width:100%;box-sizing:border-box;margin-top:4px"/></label>
+      <label style="flex:1;font-size:12px;color:var(--muted)">Lugares por mesa<input id="rd-s" type="number" inputmode="numeric" min="2" value="${defS}" style="width:100%;box-sizing:border-box;margin-top:4px"/></label>
+    </div>
+    <div id="rd-info" style="font-size:12px;margin-top:8px"></div>
+    ${hasPrev?`<div style="font-size:12px;color:var(--yellow);margin-top:8px">Já existe um redraw. Sortear de novo substitui as posições atuais.</div>`:""}
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn by fw" id="rd-go">${hasPrev?"Sortear de novo":"Sortear"}</button><button class="btn bo" id="rd-x">Fechar</button></div>
+    <div id="rd-out">${hasPrev?`<div class="lbl" style="margin-top:16px">Posições atuais</div>${redrawTablesHtml(redrawActive(s))}`:""}</div>
+  </div>`;
+  document.body.appendChild(ov);
+  const q = id=>ov.querySelector(id);
+  const info = ()=>{ const T=Number(q("#rd-t").value), S=Number(q("#rd-s").value), r = redrawBuild(el,T,S);
+    q("#rd-info").innerHTML = r.ok ? `<span style="color:var(--green)">✓ ${T} mesa${T!==1?"s":""} · ${T*S} lugares · ${n} jogadores</span>` : `<span style="color:var(--red)">${esc(r.error)}</span>`; return r; };
+  q("#rd-t").addEventListener("input",info); q("#rd-s").addEventListener("input",info); info();
+  q("#rd-x").addEventListener("click",()=>ov.remove());
+  q("#rd-go").addEventListener("click", async()=>{
+    const T=Number(q("#rd-t").value), S=Number(q("#rd-s").value);
+    const fresh = DB.stages.find(x=>x.id===sid); if(!fresh) return;
+    const r = redrawBuild(redrawEligible(fresh), T, S);
+    if(!r.ok){ info(); showToast(r.error,"red"); return; }                       // quantidade insuficiente: não sorteia
+    if(hasPrev && !(await askConfirm("Substituir o redraw atual por um novo sorteio?","Sortear de novo"))) return;
+    const redraw = {at:Date.now(), tables:T, seats:S, assign:r.assign};
+    try{
+      await seasonUpdate({ stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,redraw}:x)), updatedAt: serverTimestamp() });
+      fresh.redraw = redraw;
+      showToast("Redraw realizado","green");
+      q("#rd-out").innerHTML = `<div class="lbl" style="margin-top:16px">Posições sorteadas</div>${redrawTablesHtml(r.assign)}`;
+      q("#rd-go").textContent = "Sortear de novo";
+      render();
+    }catch(err){ showToast("Erro: "+err.message,"red"); }
+  });
+};
+// ── REDRAW (fim) ──
 
 // ── RESULT MODAL ──────────────────────────────────────────────────────────────
 let autoSaveTimer = null;
