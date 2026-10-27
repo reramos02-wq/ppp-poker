@@ -2306,7 +2306,7 @@ function v2Kick(user){
   const ys = v2Years();
   if(!(V2.players && V2.seasonLoaded && ys.every(y=>V2.stageBy[y] && V2.regsBy[y]))) return;
   const stageDocs = [], regs = [];
-  ys.forEach(y=>{ V2.stageBy[y].forEach(d=>{ V2_SEASON_OF[d.id] = y; stageDocs.push(d); }); V2.regsBy[y].forEach(r=>regs.push(r)); });
+  ys.forEach(y=>{ V2.stageBy[y].forEach(d=>{ V2_SEASON_OF[d.id] = y; stageDocs.push(String(d.season)===String(y) ? d : {...d, season:String(y)}); }); V2.regsBy[y].forEach(r=>regs.push(r)); });
   handleServerData({players:v2SortPlayers(V2.players), stages:v2AssembleStages(stageDocs, regs), admins:V2.admins||[]}, user, true);
 }
 function v2Listen(user){
