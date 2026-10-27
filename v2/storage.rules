@@ -6,12 +6,17 @@ service firebase.storage {
     function isJpegPequeno() {
       return request.resource.contentType == 'image/jpeg' && request.resource.size < 5 * 1024 * 1024;
     }
-    // admin: e-mail principal (verificado) ou e-mail/uid na lista admins da temporada
+    // admin: e-mail principal (verificado) ou e-mail/uid na lista de admins (config/admins; enquanto não existir, a antiga em seasons/2026)
+    function adminList() {
+      return firestore.exists(/databases/(default)/documents/config/admins)
+        ? firestore.get(/databases/(default)/documents/config/admins).data.get('list', [])
+        : firestore.get(/databases/(default)/documents/seasons/2026).data.get('admins', []);
+    }
     function isAdmin() {
       return signedIn() && request.auth.token.email_verified == true && (
         request.auth.token.email in ['reramos02@gmail.com'] ||
-        request.auth.token.email in firestore.get(/databases/(default)/documents/seasons/2026).data.get('admins', []) ||
-        request.auth.uid in firestore.get(/databases/(default)/documents/seasons/2026).data.get('admins', [])
+        request.auth.token.email in adminList() ||
+        request.auth.uid in adminList()
       );
     }
 

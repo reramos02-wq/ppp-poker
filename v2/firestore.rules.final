@@ -7,12 +7,17 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function verified() { return signedIn() && request.auth.token.email_verified == true; }
     // admin = e-mail principal OU e-mail/uid na lista admins da temporada (sempre com e-mail verificado)
-    // admins vivem em seasons/2026 e valem para TODAS as temporadas (o parâmetro "season" é ignorado de propósito)
-    function isAdmin(season) {
+    // lista de admins: config/admins {list:[…]} (única, vale para todas as temporadas); enquanto não existir, usa a antiga em seasons/2026
+    function adminList() {
+      return exists(/databases/$(database)/documents/config/admins)
+        ? get(/databases/$(database)/documents/config/admins).data.get('list', [])
+        : get(/databases/$(database)/documents/seasons/2026).data.get('admins', []);
+    }
+    function isAdmin(season) {   // o parâmetro "season" é ignorado de propósito
       return verified() && (
         request.auth.token.email in ['reramos02@gmail.com'] ||
-        request.auth.token.email in get(/databases/$(database)/documents/seasons/2026).data.get('admins', []) ||
-        request.auth.uid in get(/databases/$(database)/documents/seasons/2026).data.get('admins', [])
+        request.auth.token.email in adminList() ||
+        request.auth.uid in adminList()
       );
     }
 
@@ -40,11 +45,12 @@ service cloud.firestore {
           && regId.matches('.*__' + request.auth.uid)
           && get(/databases/$(database)/documents/seasons/$(season)/stages/$(regId.split('__')[0])).data.status != 'finished';
       }
-      match /claims/{uid} {
-        allow create, update: if signedIn() && request.auth.uid == uid;
-        allow read: if signedIn() && (request.auth.uid == uid || isAdmin(season));
-        allow delete: if isAdmin(season);
-      }
+    }
+
+    match /claims/{uid} {
+      allow create, update: if signedIn() && request.auth.uid == uid;
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin('2026'));
+      allow delete: if isAdmin('2026');
     }
 
     match /players/{uid} {
@@ -67,6 +73,9 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /config/admins {   // qualquer admin edita a lista (como antes); o resto de config/ é só do dono
+      allow write: if isAdmin('2026');
+    }
     match /config/{doc} {
       allow read: if signedIn();
       allow write: if verified() && request.auth.token.email in ['reramos02@gmail.com'];

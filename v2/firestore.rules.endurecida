@@ -6,12 +6,17 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
     function verified() { return signedIn() && request.auth.token.email_verified == true; }
-    // admins vivem em seasons/2026 e valem para TODAS as temporadas (o parâmetro "season" é ignorado de propósito)
-    function isAdmin(season) {
+    // lista de admins: config/admins {list:[…]} (única, vale para todas as temporadas); enquanto não existir, usa a antiga em seasons/2026
+    function adminList() {
+      return exists(/databases/$(database)/documents/config/admins)
+        ? get(/databases/$(database)/documents/config/admins).data.get('list', [])
+        : get(/databases/$(database)/documents/seasons/2026).data.get('admins', []);
+    }
+    function isAdmin(season) {   // o parâmetro "season" é ignorado de propósito
       return verified() && (
         request.auth.token.email in ['reramos02@gmail.com'] ||
-        request.auth.token.email in get(/databases/$(database)/documents/seasons/2026).data.get('admins', []) ||
-        request.auth.uid in get(/databases/$(database)/documents/seasons/2026).data.get('admins', [])
+        request.auth.token.email in adminList() ||
+        request.auth.uid in adminList()
       );
     }
     // caracteres permitidos em link de foto (sem aspas, parênteses, < > nem espaço)
@@ -44,19 +49,20 @@ service cloud.firestore {
           && regId.matches('.*__' + request.auth.uid)
           && get(/databases/$(database)/documents/seasons/$(season)/stages/$(regId.split('__')[0])).data.status != 'finished';
       }
-      // pedido de vínculo com pré-cadastro: e-mail e "verificado" têm de bater com o login real (antes o jogador podia forjar e ser aprovado sozinho)
-      match /claims/{uid} {
-        allow create, update: if signedIn() && request.auth.uid == uid
-          && request.resource.data.uid == uid
-          && request.resource.data.keys().hasOnly(['uid','candidate','via','email','emailVerified','name','createdAt'])
-          && request.resource.data.candidate is string && request.resource.data.candidate.matches('p_.*')
-          && request.resource.data.via in ['email','nome']
-          && request.resource.data.email == request.auth.token.get('email', '')
-          && (request.resource.data.emailVerified != true || request.auth.token.get('email_verified', false) == true)
-          && txtOk(request.resource.data.get('name', ''), 120);
-        allow read: if signedIn() && (request.auth.uid == uid || isAdmin(season));
-        allow delete: if isAdmin(season);
-      }
+    }
+
+    // pedido de vínculo com pré-cadastro: e-mail e "verificado" têm de bater com o login real (antes o jogador podia forjar e ser aprovado sozinho)
+    match /claims/{uid} {
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.keys().hasOnly(['uid','candidate','via','email','emailVerified','name','createdAt'])
+        && request.resource.data.candidate is string && request.resource.data.candidate.matches('p_.*')
+        && request.resource.data.via in ['email','nome']
+        && request.resource.data.email == request.auth.token.get('email', '')
+        && (request.resource.data.emailVerified != true || request.auth.token.get('email_verified', false) == true)
+        && txtOk(request.resource.data.get('name', ''), 120);
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin('2026'));
+      allow delete: if isAdmin('2026');
     }
 
     match /players/{uid} {
@@ -85,6 +91,9 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /config/admins {   // qualquer admin edita a lista (como antes); o resto de config/ é só do dono
+      allow write: if isAdmin('2026');
+    }
     match /config/{doc} {
       allow read: if signedIn();
       allow write: if verified() && request.auth.token.email in ['reramos02@gmail.com'];

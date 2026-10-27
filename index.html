@@ -2222,7 +2222,8 @@ const v2SeasonRef = () => doc(db,"seasons",DATA_SEASON);
 const v2PlayerRef = uid => doc(db,"players",uid);
 const v2StageRef  = (id, y) => doc(db,"seasons",String(y||v2SeasonForStage(id)),"stages",id);
 const v2RegRef    = (id, y) => doc(db,"seasons",String(y||v2SeasonForStage(id.split("__")[0])),"regs",id);
-const v2ClaimRef  = uid => doc(db,"seasons",DATA_SEASON,"claims",uid);
+const v2ClaimRef  = uid => doc(db,"claims",uid);                  // pedidos de vínculo (globais)
+const v2AdminsRef = () => doc(db,"config","admins");              // lista de admins (única, vale para todas as temporadas): {list:[…]}
 async function v2Batched(fns){     // lotes de até 400 operações
   for(let i=0;i<fns.length;i+=400){ const b = writeBatch(db); fns.slice(i,i+400).forEach(fn=>fn(b)); await b.commit(); }
 }
@@ -2260,7 +2261,7 @@ async function v2Commit(parts){
   ops.players.set.forEach(pl=>{ BASE.players[pl.uid] = JSON.stringify(pl); });
   ops.players.del.forEach(uid=>{ delete BASE.players[uid]; });
   if(IS_ADMIN && parts.admins && JSON.stringify(parts.admins)!==BASE.admins){
-    await updateDoc(v2SeasonRef(), {admins: parts.admins, updatedAt: serverTimestamp()}); BASE.admins = JSON.stringify(parts.admins);
+    await setDoc(v2AdminsRef(), {list: parts.admins, updatedAt: serverTimestamp()}); BASE.admins = JSON.stringify(parts.admins); V2._adNew = [...parts.admins];
   }
   return ops;
 }
@@ -2286,8 +2287,9 @@ async function v2ReadAllSeasons(){
 async function srvRead(){
   if(!SCHEMA_V2){ const snap = await getDoc(doc(db,"seasons",DATA_SEASON)); const d = snap.data()||{}; return {players:[...(d.players||[])], stages:[...(d.stages||[])], admins:d.admins||[]}; }
   const [pS,all,seas] = await Promise.all([getDocs(collection(db,"players")), v2ReadAllSeasons(), getDoc(v2SeasonRef())]);
+  const adN = await getDoc(v2AdminsRef()).catch(()=>null);
   const players = [], sd = all.sd, rg = all.rg; pS.forEach(d=>players.push({...d.data(), uid:d.id}));
-  return {players: v2SortPlayers(players), stages: v2AssembleStages(sd, rg), admins: (seas.exists()?seas.data().admins:[])||[]};
+  return {players: v2SortPlayers(players), stages: v2AssembleStages(sd, rg), admins: (adN && adN.exists() ? (adN.data().list||[]) : (seas.exists()?seas.data().admins:[]))||[]};
 }
 async function srvWriteFull(full){
   if(!SCHEMA_V2){ await setDoc(doc(db,"seasons",DATA_SEASON), {players:full.players, stages:full.stages, admins:full.admins, updatedAt:serverTimestamp()}); return; }
@@ -2295,7 +2297,7 @@ async function srvWriteFull(full){
   cur.players.forEach(p=>{ bp[p.uid] = JSON.stringify(p); }); cur.stages.forEach(st=>{ bs[st.id] = JSON.stringify(st); });
   const ops = v2Diff(bp, bs, sanitizePlayers(full.players), sanitizeStages(full.stages), {isAdmin:true, uid:CURRENT_USER_UID, deleteMissing:true});
   await v2ApplyOps(ops);
-  if(JSON.stringify(full.admins||[])!==JSON.stringify(cur.admins||[])) await updateDoc(v2SeasonRef(), {admins:full.admins||[], updatedAt:serverTimestamp()});
+  if(JSON.stringify(full.admins||[])!==JSON.stringify(cur.admins||[])) await setDoc(v2AdminsRef(), {list:full.admins||[], updatedAt:serverTimestamp()});
 }
 // Montagem dos dados vindos do servidor (estrutura nova)
 function v2Kick(user){
@@ -2315,9 +2317,13 @@ function v2Listen(user){
     push(onSnapshot(collection(db,"seasons",y,"stages"), snap=>{ const a=[]; snap.forEach(d=>a.push({...d.data(), id:d.id})); V2.stageBy[y] = a; v2Kick(user); }, e=>{ err("stages "+y)(e); if(y!==DATA_SEASON){ V2.stageBy[y] = V2.stageBy[y]||[]; v2Kick(user); } }));
     push(onSnapshot(collection(db,"seasons",y,"regs"), snap=>{ const a=[]; snap.forEach(d=>a.push(d.data())); V2.regsBy[y] = a; v2Kick(user); }, e=>{ err("regs "+y)(e); if(y!==DATA_SEASON){ V2.regsBy[y] = V2.regsBy[y]||[]; v2Kick(user); } }));
   });
-  push(onSnapshot(v2SeasonRef(), snap=>{ V2.admins = snap.exists() ? (snap.data().admins||[]) : []; V2.seasonLoaded = true; v2Kick(user); }, err("season")));
+  // admins: config/admins (novo); enquanto ele não existir, vale a lista antiga em seasons/2026
+  const mixAdmins = ()=>{ V2.admins = V2._adNew!=null ? V2._adNew : (V2._adOld||[]); V2.seasonLoaded = V2._adNewLoaded && V2._adOldLoaded; v2Kick(user); };
+  V2._adNew = null; V2._adOld = null; V2._adNewLoaded = false; V2._adOldLoaded = false;
+  push(onSnapshot(v2AdminsRef(), snap=>{ V2._adNew = snap.exists() ? (snap.data().list||[]) : null; V2._adNewLoaded = true; mixAdmins(); }, e=>{ err("admins")(e); V2._adNewLoaded = true; mixAdmins(); }));
+  push(onSnapshot(v2SeasonRef(), snap=>{ V2._adOld = snap.exists() ? (snap.data().admins||[]) : []; V2._adOldLoaded = true; mixAdmins(); }, err("season")));
   if(IS_ADMIN || ADMIN_EMAILS.includes(user && user.email)){
-    push(onSnapshot(collection(db,"seasons",DATA_SEASON,"claims"), snap=>{ V2.claims = []; snap.forEach(d=>V2.claims.push({...d.data(), uid:d.id})); v2AutoApprove(); if(TAB==="admin" && TOOLS_VIEW==="diagnose") render(); }, err("claims")));
+    push(onSnapshot(collection(db,"claims"), snap=>{ V2.claims = []; snap.forEach(d=>V2.claims.push({...d.data(), uid:d.id})); v2AutoApprove(); if(TAB==="admin" && TOOLS_VIEW==="diagnose") render(); }, err("claims")));
   }
 }
 // ── vínculos por aprovação do admin (jogador novo que bate com um pré-cadastro) ──
@@ -7161,7 +7167,7 @@ function renderV2Panel(){
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;font-size:11px;color:var(--muted)">
       Conta: <b style="color:#fff">${esc((CURRENT_USER&&CURRENT_USER.email)||"?")}</b> · e-mail verificado: <b style="color:${CURRENT_USER&&CURRENT_USER.emailVerified?"var(--green)":"var(--red)"}">${CURRENT_USER&&CURRENT_USER.emailVerified?"sim":"NÃO"}</b> · login: ${esc(((CURRENT_USER&&CURRENT_USER.providerData)||[]).map(x=>x.providerId).join(", ")||"?")}
-      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${btn("perm","🔎 Testar permissões")}${btn("consents","Registrar aceites existentes")}${CURRENT_USER&&!CURRENT_USER.emailVerified?btn("verify","✉ Enviar e-mail de verificação")+btn("verified","↻ Já verifiquei, atualizar"):""}</div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${btn("perm","🔎 Testar permissões")}${btn("consents","Registrar aceites existentes")}${V2._adNew==null?btn("admins","Mover admins para config/admins"):""}${CURRENT_USER&&!CURRENT_USER.emailVerified?btn("verify","✉ Enviar e-mail de verificação")+btn("verified","↻ Já verifiquei, atualizar"):""}</div>
       ${V2_PERM?`<pre style="white-space:pre-wrap;font-size:11px;margin:6px 0 0">${esc(V2_PERM)}</pre>`:""}
     </div>
     ${V2_LOG?`<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:8px 0 0">${esc(V2_LOG)}</pre>`:""}
@@ -7193,6 +7199,11 @@ window.v2Ui = async function(act){
       await t("ler jogadores (estrutura nova)", ()=>getDocs(collection(db,"players")));
       V2_PERM=out.join("\n"); render(); return; }
     if(act==="migrate"){ V2_LOG=""; await v2Migrate(log); }
+    else if(act==="admins"){
+      try{ await setDoc(v2AdminsRef(), {list:[...(DB.admins||[])], updatedAt:serverTimestamp(), by:(CURRENT_USER&&CURRENT_USER.email)||""}); V2_LOG += `Admins copiados para config/admins (${(DB.admins||[]).length}).\n`; }
+      catch(e){ V2_LOG += "Falha ao copiar admins: "+(e.code||e.message)+"\n"; }
+      render();
+    }
     else if(act==="consents"){
       try{
         const have = new Set(); (await getDocs(collection(db,"consents"))).forEach(d=>have.add(d.id));
