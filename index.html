@@ -2158,7 +2158,9 @@ function v2AssembleStages(stageDocs, regDocs){
     const rs = by[d.id] || [];
     const ins = rs.filter(r=>r.inscrito!==false).slice().sort((a,b)=>(a.ord??1e15)-(b.ord??1e15) || String(a.uid).localeCompare(String(b.uid))).map(r=>r.uid);
     const late = rs.filter(r=>r.late===true).slice().sort((a,b)=>(a.lord??1e15)-(b.lord??1e15) || String(a.uid).localeCompare(String(b.uid))).map(r=>r.uid);
-    return {...d, inscriptions:ins, lateList:late};
+    const {updatedAt, updatedBy, ...rest} = d;
+    if(typeof V2!=="undefined") V2.stageMeta[d.id] = {at: updatedAt && updatedAt.toDate ? updatedAt.toDate() : null, by: updatedBy||""};
+    return {...rest, inscriptions:ins, lateList:late};
   });
 }
 // Normaliza uma etapa do formato antigo para comparar com a montada da estrutura nova
@@ -2213,7 +2215,7 @@ function v2Diff(baseP, baseS, locP, locS, o){
 
 // ── V2 CAMADA (início) ── gravação/leitura da estrutura nova. Só é usada quando config/schema.version === 2 (chave desligada por padrão)
 let SCHEMA_V2 = false;
-const V2 = {players:null, stageBy:{}, regsBy:{}, admins:null, seasonLoaded:false, claims:[], verified:false};
+const V2 = {stageMeta:{}, players:null, stageBy:{}, regsBy:{}, admins:null, seasonLoaded:false, claims:[], verified:false};
 // Cada temporada tem a sua pasta: seasons/{ano}/stages e seasons/{ano}/regs. Os admins e os pedidos de vínculo ficam em seasons/2026 (valem para todos os anos).
 const V2_SEASON_OF = {};                                  // id da etapa → ano da pasta onde o documento vive
 function v2Years(){ const out=[]; for(let y=FIRST_SEASON; y<=Math.max(CUR_YEAR+1, FIRST_SEASON+1); y++) out.push(String(y)); return out; }
@@ -2229,7 +2231,7 @@ async function v2Batched(fns){     // lotes de até 400 operações
 }
 async function v2ApplyOps(ops){
   const fns = [];
-  ops.stages.set.forEach(d=>{ const y = v2SeasonForStage(d.id, d); V2_SEASON_OF[d.id] = y; fns.push(b=>b.set(v2StageRef(d.id,y), deepSanitize(d))); });
+  ops.stages.set.forEach(d=>{ const y = v2SeasonForStage(d.id, d); V2_SEASON_OF[d.id] = y; fns.push(b=>b.set(v2StageRef(d.id,y), deepSanitize(d))); if(IS_ADMIN) fns.push(b=>b.update(v2StageRef(d.id,y), {updatedAt:serverTimestamp(), updatedBy:(CURRENT_USER&&CURRENT_USER.email)||""})); });
   ops.stages.del.forEach(id=>{ const y = v2SeasonForStage(id); fns.push(b=>b.delete(v2StageRef(id,y))); });
   ops.regs.set.forEach(r=>{ const y = v2SeasonForStage(String(r.data.stageId||r.id.split("__")[0])); fns.push(b=>b.set(v2RegRef(r.id,y), r.data, {merge:true})); });
   ops.regs.del.forEach(id=>{ const y = v2SeasonForStage(id.split("__")[0]); fns.push(b=>b.delete(v2RegRef(id,y))); });
@@ -7066,7 +7068,35 @@ function renderFTPrize(){
   </div>`;
 }
 
+// ── SAÚDE DO SISTEMA ── resumo de tudo que precisa de atenção, admins e últimas alterações
+function renderToolsHealth(){
+  consentLoad();
+  const ok=(t)=>`<span style="color:var(--green)">${t}</span>`, bad=(t)=>`<span style="color:var(--yellow)">${t}</span>`;
+  const rows=[]; const add=(label,good,txt)=>rows.push(`<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="width:16px;flex:none;color:${good?"var(--green)":"var(--yellow)"}">${good?"✓":"⚠"}</span><div style="flex:1"><div style="color:#fff;font-weight:600">${esc(label)}</div><div style="font-size:12px;color:var(--muted)">${txt}</div></div></div>`);
+  add("Estrutura de dados", SCHEMA_V2, SCHEMA_V2?"Nova estrutura ativa (pastas por ano).":"Ainda na estrutura antiga.");
+  const adminsNew = V2._adNew!=null;
+  add("Lista de admins", adminsNew||!SCHEMA_V2, adminsNew?"Lida de config/admins ("+(DB.admins||[]).length+").":"Ainda lida do documento antigo. Rode \"Mover admins\" no Diagnóstico.");
+  const b = backupInfo(); add("Backup", !backupDue(), b.at?`Último há ${b.days} dia${b.days!==1?"s":""} (neste aparelho).`:"Nenhum backup feito neste aparelho.");
+  const cp = V2.consentIds?consentPending().length:null;
+  add("Aceites da política", cp===0, cp===null?"Conferindo…":(cp===0?"Todos registrados.":cp+" pendente(s) de registro. Veja o Diagnóstico."));
+  const nc = (V2.claims||[]).length; add("Vínculos pendentes", nc===0, nc===0?"Nenhum pedido aguardando.":nc+" pedido(s) aguardando aprovação.");
+  const noLogin = DB.players.filter(p=>!p.deleted && String(p.uid).startsWith("p_")).length;
+  add("Jogadores sem login", true, noLogin+" cadastrado(s) pelo admin, ainda sem vínculo com conta Google.");
+  const mailOf = e => String(e||"").trim().toLowerCase();
+  const admins = (DB.admins||[]).map(a=>{ const pl = DB.players.find(p=>!p.deleted && mailOf(p.email)===mailOf(a));
+    return {a, pl, linked: !!pl && !String(pl.uid).startsWith("p_")}; });
+  const adminRows = admins.map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px"><div style="flex:1;min-width:0"><div style="color:#fff;overflow:hidden;text-overflow:ellipsis">${esc(x.a)}</div><div style="font-size:11px;color:var(--muted)">${x.pl?esc(x.pl.nickname||x.pl.name):"sem jogador com esse e-mail"}</div></div><div style="font-size:11px">${x.linked?ok("com login"):bad(x.pl?"sem login":"sem conta")}</div></div>`).join("");
+  const stg = DB.stages.map(st=>({st, m:V2.stageMeta[st.id]})).filter(x=>x.m&&x.m.at).sort((a,b)=>b.m.at-a.m.at).slice(0,8);
+  const stgRows = stg.length ? stg.map(x=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="color:#fff;font-weight:600">${esc(x.st.name||x.st.id)}</div><div style="color:var(--muted)">${esc(x.m.by||"—")} · ${x.m.at.toLocaleDateString("pt-BR")} ${x.m.at.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</div></div>`).join("") : `<div style="font-size:12px;color:var(--muted);padding:6px 0">Ainda sem registros. Passa a aparecer a partir da próxima alteração feita por um admin.</div>`;
+  const H = t=>`<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin:16px 0 4px">${t}</div>`;
+  return `<div><button class="btn sm" id="btn-tools-back" style="margin-bottom:12px">‹ Voltar</button>
+    ${H("Saúde do sistema")}<div class="card">${rows.join("")}</div>
+    ${H("Admins ("+admins.length+")")}<div class="card">${adminRows||'<div style="font-size:12px;color:var(--muted)">Nenhum admin na lista.</div>'}<div style="font-size:11px;color:var(--muted);margin-top:8px">"sem conta" significa que nenhum jogador usa esse e-mail: confira se não é um endereço antigo ou digitado errado.</div></div>
+    ${H("Últimas alterações em etapas")}<div class="card">${stgRows}</div></div>`;
+}
+
 function renderAdminTools(){
+  if(TOOLS_VIEW==="health")      return renderToolsHealth();
   if(TOOLS_VIEW==="diagnose")    return renderToolsDiagnose();
   if(TOOLS_VIEW==="audit")       return renderToolsAudit();
   if(TOOLS_VIEW==="fin_ranking") return renderFinancialRanking();
@@ -7077,6 +7107,17 @@ function renderAdminTools(){
 function renderToolsHome(){
   return `<div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px">Ferramentas de Manutenção</div>
+
+    <div class="card" style="margin-bottom:10px;cursor:pointer" id="btn-tool-health">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">✅</div>
+        <div>
+          <div style="font-weight:700;color:#fff;font-size:15px">Saúde do sistema</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">O que precisa de atenção, admins e quem alterou cada etapa por último</div>
+        </div>
+        <div style="margin-left:auto;color:var(--muted)">›</div>
+      </div>
+    </div>
 
     <div class="card" style="margin-bottom:10px;cursor:pointer" id="btn-tool-diagnose">
       <div style="display:flex;align-items:center;gap:12px">
@@ -7199,6 +7240,11 @@ window.ppBackup = async function(){
 let V2_LOG = ""; let V2_PERM = "";
 const esc = v => String(v==null?"":v).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 // Aceites da política: quantos jogadores com login têm o aceite registrado em consents/ (prova com horário do servidor)
+function consentLoad(){
+  if(V2.consentIds!==undefined) return; V2.consentIds = null;
+  getDocs(collection(db,"consents")).then(sn=>{ V2.consentIds = new Set(); sn.forEach(d=>V2.consentIds.add(d.id)); if(TAB==="admin"&&(TOOLS_VIEW==="diagnose"||TOOLS_VIEW==="health")) render(); })
+    .catch(()=>{ V2.consentIds = new Set(); V2.consentErr = true; if(TAB==="admin"&&(TOOLS_VIEW==="diagnose"||TOOLS_VIEW==="health")) render(); });
+}
 function consentPending(){
   if(!V2.consentIds) return [];
   return DB.players.filter(p=>!p.deleted && !String(p.uid).startsWith("p_") && p.privacyVersion && !V2.consentIds.has(p.uid+"__"+p.privacyVersion));
@@ -7212,9 +7258,7 @@ function consentStatusHtml(){
 }
 function renderV2Panel(){
   if(!IS_ADMIN) return "";
-  if(V2.consentIds===undefined){ V2.consentIds = null;
-    getDocs(collection(db,"consents")).then(sn=>{ V2.consentIds = new Set(); sn.forEach(d=>V2.consentIds.add(d.id)); if(TAB==="admin"&&TOOLS_VIEW==="diagnose") render(); })
-      .catch(()=>{ V2.consentIds = new Set(); V2.consentErr = true; if(TAB==="admin"&&TOOLS_VIEW==="diagnose") render(); }); }
+  consentLoad();
   const claims = SCHEMA_V2 ? (V2.claims||[]) : [];
   const btn = (id,txt,dis)=>`<button class="btn bo sm" ${dis?"disabled":""} onclick="window.v2Ui('${id}')" style="${dis?"opacity:.4":""}">${txt}</button>`;
   return `<div class="card" style="margin-bottom:12px;padding:12px">
@@ -9649,6 +9693,7 @@ function bindEvents(){
   };
 
   // Admin tools — home
+  document.getElementById("btn-tool-health")?.addEventListener("click",()=>{ TOOLS_VIEW="health"; render(); });
   document.getElementById("btn-tool-diagnose")?.addEventListener("click",()=>{ TOOLS_VIEW="diagnose"; render(); });
   document.getElementById("btn-tool-audit")?.addEventListener("click",()=>{ TOOLS_VIEW="audit"; render(); });
   document.getElementById("btn-tool-fin-ranking")?.addEventListener("click",()=>{ TOOLS_VIEW="fin_ranking"; render(); });
