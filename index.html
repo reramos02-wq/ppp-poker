@@ -1731,11 +1731,19 @@ function getFTContribution(s){
 // POT LÍQUIDO = base para cálculo do ITM
 // NLH: POT FINAL − Taxa FT
 // PKO: POT FINAL − Taxa FT − KO Pool (calculado pelas entradas/rebuys, não pelos resultados)
+// Pote Mesa Final acumulado na temporada da etapa (1/3 da contribuição FT de cada etapa finalizada, exceto a Final)
+function ftPotMesaFinal(s){
+  const y = (s&&s.season)||DATA_SEASON;
+  return DB.stages.filter(x=>x.status==="finished" && !x.isFinal && ((x.season||DATA_SEASON)===y))
+    .reduce((sum,x)=>sum+getFTContribution(x)/3, 0);
+}
+// Na etapa Final, o admin pode marcar para somar o Pote Mesa Final à premiação
+function ftPrizeIncluded(s){ return !!(s && s.isFinal && s.finance && s.finance.includeFtPrize); }
 function calcPotLiquido(s){
   const potFinal = calcPotFinal(s);
   const taxaFT   = calcTaxaFT(s);
   const koDeduct = s.type==="knockout" ? calcKOFromEntries(s) : 0;
-  return potFinal - taxaFT - koDeduct;
+  return potFinal - taxaFT - koDeduct + (ftPrizeIncluded(s) ? ftPotMesaFinal(s) : 0);
 }
 
 // ITM distribution table based on number of inscribed players.
@@ -6129,11 +6137,20 @@ function renderBuyinPremiacao(s){
       </div>
     </div>`).join("");
 
-  return `
+  const ftBox = s.isFinal ? `
+    <label class="card" style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;cursor:pointer;border-left:3px solid var(--blue)">
+      <input type="checkbox" id="bi-ft-include" ${ftPrizeIncluded(s)?"checked":""} style="width:20px;height:20px;margin-top:2px;accent-color:var(--yellow);flex:none"/>
+      <span style="flex:1">
+        <span style="display:block;font-weight:700;color:#fff;font-size:14px">Incluir prêmio de FT na premiação</span>
+        <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px">Soma o Pote Mesa Final da temporada ${esc(String(s.season||DATA_SEASON))} (<b style="color:var(--yellow)">${fmtBRL(ftPotMesaFinal(s))}</b>) ao Pot Líquido desta etapa.</span>
+      </span>
+    </label>` : "";
+  return `${ftBox}
     <div style="background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;padding:12px 16px;margin-bottom:16px">
       <div style="font-size:12px;color:var(--muted)">Pot Líquido (base do cálculo)</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--yellow)">${fmtBRL(potLiquido)}</div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">${numPlayers} inscritos · Faixa ITM ${isPKO?"PKO":"NLH"} aplicada automaticamente</div>
+      ${ftPrizeIncluded(s)?`<div style="font-size:11px;color:var(--yellow);margin-top:4px">Inclui ${fmtBRL(ftPotMesaFinal(s))} do Pote Mesa Final</div>`:""}
       ${isPKO&&koTotal>0?`<div style="font-size:11px;color:var(--yellow);margin-top:4px">🥊 Bounties: ${fmtBRL(koTotal)} (separados do ITM)</div>`:""}
     </div>
 
@@ -6252,7 +6269,8 @@ function renderBuyinGeral(s){
         <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:var(--muted);font-size:12px">Arrecadado</span><span style="color:#fff;font-size:13px">${fmtBRL(arrecadado)}</span></div>
         <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:var(--muted);font-size:12px">Custos Fixos</span><span style="color:var(--red);font-size:13px">− ${fmtBRL(custosFixos)}</span></div>
         <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:#fff;font-size:13px;font-weight:700">Pot Final</span><span style="color:var(--yellow);font-size:15px;font-weight:900">${fmtBRL(potFinal)}</span></div>
-        <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:#fff;font-size:13px;font-weight:700">Pot Líquido</span><span style="color:var(--yellow);font-size:15px;font-weight:900">${fmtBRL(potLiquido)}</span></div>
+        <div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:#fff;font-size:13px;font-weight:700">Pot Líquido</span><span style="color:var(--yellow);font-size:15px;font-weight:900">${fmtBRL(potLiquido)}</span></div
+        ${ftPrizeIncluded(s)?`<div class="row" style="justify-content:space-between;padding:3px 0"><span style="color:var(--muted);font-size:11px">incluindo Pote Mesa Final (FT)</span><span style="color:var(--muted);font-size:11px">${fmtBRL(ftPotMesaFinal(s))}</span></div>`:""}>
       </div>
 
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Jogadores</div>
@@ -9395,6 +9413,17 @@ function bindEvents(){
       fin.prizeOverrides = override;
       await saveFinanceData(); requestAnimationFrame(render);
     });
+  });
+  document.getElementById("bi-ft-include")?.addEventListener("change", async function(){
+    const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
+    const fin = getFinanceData(s), oldTot = Math.max(0, calcPotLiquido(s) - calcCaixinhaTorneioTotal(s));
+    fin.includeFtPrize = !!this.checked;
+    const newTot = Math.max(0, calcPotLiquido(s) - calcCaixinhaTorneioTotal(s));
+    // valores já editados à mão mantêm a proporção entre posições
+    if(fin.prizeOverrides && fin.prizeOverrides.length && oldTot>0){
+      fin.prizeOverrides = fin.prizeOverrides.map(o=>({...o, value: (o.value!==undefined&&o.value!==null&&o.value!=="") ? (Number(o.value)||0)*newTot/oldTot : o.value}));
+    }
+    await saveFinanceData(); requestAnimationFrame(render);
   });
   document.getElementById("bi-ko-value")?.addEventListener("change", async function(){
     const s = DB.stages.find(x=>x.id===BUYIN_MGMT); if(!s) return;
