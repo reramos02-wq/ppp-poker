@@ -7007,6 +7007,20 @@ function renderToolsHome(){
 }
 
 // ── DIAGNOSE ──────────────────────────────────────────────────────────────────
+// Confirmação dentro do app (o confirm() do navegador pode ser bloqueado e falhar sem aviso)
+function askConfirm(msg, okLabel){
+  return new Promise(res=>{
+    document.getElementById("ask-modal")?.remove();
+    const ov = document.createElement("div"); ov.id = "ask-modal";
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1100;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box";
+    ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:4px;padding:20px;width:100%;max-width:420px">
+      <div style="font-size:14px;color:var(--text);line-height:1.5;margin-bottom:16px;white-space:pre-line">${esc(msg)}</div>
+      <div style="display:flex;gap:8px"><button class="btn by fw" id="ask-ok">${esc(okLabel||"Confirmar")}</button><button class="btn bo" id="ask-no">Cancelar</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector("#ask-ok").addEventListener("click",()=>{ ov.remove(); res(true); });
+    ov.querySelector("#ask-no").addEventListener("click",()=>{ ov.remove(); res(false); });
+  });
+}
 // ── Painel admin: estrutura de dados (migração, virada, volta) e vínculos pendentes ──
 let V2_LOG = ""; let V2_PERM = "";
 const esc = v => String(v==null?"":v).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -7055,8 +7069,8 @@ window.v2Ui = async function(act){
       await t("ler jogadores (estrutura nova)", ()=>getDocs(collection(db,"players")));
       V2_PERM=out.join("\n"); render(); return; }
     if(act==="migrate"){ V2_LOG=""; await v2Migrate(log); }
-    else if(act==="activate"){ if(!V2.verified) return; if(!confirm("Virar para a estrutura nova? Os usuários passam a ler e gravar nela. Dá para voltar pelo mesmo painel.")) return; await v2Activate(); V2_LOG="Virada feita. O app recarrega sozinho."; }
-    else if(act==="rollback"){ if(!confirm("Voltar ao modelo antigo? O estado atual é copiado de volta para o documento da temporada.")) return; V2_LOG=""; await v2Rollback(log); }
+    else if(act==="activate"){ if(!V2.verified) return; if(!(await askConfirm("Virar para a estrutura nova?\nOs usuários passam a ler e gravar nela. Dá para voltar pelo mesmo painel.","Virar agora"))){ V2_LOG += "Virada cancelada.\n"; render(); return; } V2_LOG += "Gravando a chave…\n"; render(); await v2Activate(); const chk = await getDoc(doc(db,"config","schema")); V2_LOG += (chk.exists() && chk.data().version===2) ? "✓ Virada feita (config/schema = 2). O app recarrega sozinho.\n" : "✗ A chave não foi gravada. Tente de novo.\n"; }
+    else if(act==="rollback"){ if(!(await askConfirm("Voltar ao modelo antigo?\nO estado atual é copiado de volta para o documento da temporada.","Voltar ao antigo"))) return; V2_LOG=""; await v2Rollback(log); }
     else if(act.startsWith("approve:")){ const c=V2.claims.find(x=>x.uid===act.slice(8)); if(c && await v2ApproveClaim(c)) showToast("Vínculo aprovado","green"); }
     else if(act.startsWith("reject:")){ await deleteDoc(v2ClaimRef(act.slice(7))); }
   }catch(e){ V2_LOG += "Erro: "+e.message+"\n"; }
