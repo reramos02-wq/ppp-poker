@@ -7725,8 +7725,9 @@ window.openRedraw = function(sid){
       <label style="flex:1;font-size:12px;color:var(--muted)">Lugares por mesa<input id="rd-s" type="number" inputmode="numeric" min="2" value="${defS}" style="width:100%;box-sizing:border-box;margin-top:4px"/></label>
     </div>
     <div id="rd-info" style="font-size:12px;margin-top:8px"></div>
-    ${hasPrev?`<div style="font-size:12px;color:var(--yellow);margin-top:8px">Já existe um redraw. Sortear de novo substitui as posições atuais.</div>`:""}
-    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn by fw" id="rd-go">${hasPrev?"Sortear de novo":"Sortear"}</button><button class="btn bo" id="rd-x">Fechar</button></div>
+    ${hasPrev?`<div style="font-size:12px;color:var(--yellow);margin-top:8px">Já existe um redraw. Refazer substitui as posições atuais; Resetar apaga todas.</div>`:""}
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn by fw" id="rd-go">${hasPrev?"Refazer redraw":"Sortear"}</button><button class="btn bo" id="rd-x">Fechar</button></div>
+    ${hasPrev?`<button class="btn bd fw" id="rd-reset" style="margin-top:8px">Resetar redraw</button>`:""}
     <div id="rd-out">${hasPrev?`<div class="lbl" style="margin-top:16px">Posições atuais</div>${redrawTablesHtml(redrawActive(s))}`:""}</div>
   </div>`;
   document.body.appendChild(ov);
@@ -7735,19 +7736,31 @@ window.openRedraw = function(sid){
     q("#rd-info").innerHTML = r.ok ? `<span style="color:var(--green)">✓ ${T} mesa${T!==1?"s":""} · ${T*S} lugares · ${n} jogadores</span>` : `<span style="color:var(--red)">${esc(r.error)}</span>`; return r; };
   q("#rd-t").addEventListener("input",info); q("#rd-s").addEventListener("input",info); info();
   q("#rd-x").addEventListener("click",()=>ov.remove());
+  q("#rd-reset")?.addEventListener("click", async()=>{
+    if(!(await askConfirm("Resetar o redraw? Todas as posições (M/P) sorteadas serão apagadas e deixam de aparecer para os jogadores.","Continuar"))) return;
+    if(!(await askConfirm("Confirmação final: apagar o redraw desta etapa? Essa ação não pode ser desfeita.","Sim, resetar"))) return;
+    try{
+      await seasonUpdate({ stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,redraw:null}:x)), updatedAt: serverTimestamp() });
+      const f = DB.stages.find(x=>x.id===sid); if(f) f.redraw = null;
+      showToast("Redraw resetado","green"); ov.remove(); render();
+    }catch(err){ showToast("Erro: "+err.message,"red"); }
+  });
   q("#rd-go").addEventListener("click", async()=>{
     const T=Number(q("#rd-t").value), S=Number(q("#rd-s").value);
     const fresh = DB.stages.find(x=>x.id===sid); if(!fresh) return;
     const r = redrawBuild(redrawEligible(fresh), T, S);
     if(!r.ok){ info(); showToast(r.error,"red"); return; }                       // quantidade insuficiente: não sorteia
-    if(hasPrev && !(await askConfirm("Substituir o redraw atual por um novo sorteio?","Sortear de novo"))) return;
+    if(hasPrev){
+      if(!(await askConfirm("Refazer o redraw? As posições atuais (M/P) de todos os jogadores serão substituídas por um novo sorteio.","Continuar"))) return;
+      if(!(await askConfirm("Confirmação final: os jogadores já viram as posições atuais. Tem certeza que quer sortear de novo?","Sim, refazer"))) return;
+    }
     const redraw = {at:Date.now(), tables:T, seats:S, assign:r.assign};
     try{
       await seasonUpdate({ stages: sanitizeStages(DB.stages.map(x=>x.id===sid?{...x,redraw}:x)), updatedAt: serverTimestamp() });
       fresh.redraw = redraw;
       showToast("Redraw realizado","green");
       q("#rd-out").innerHTML = `<div class="lbl" style="margin-top:16px">Posições sorteadas</div>${redrawTablesHtml(r.assign)}`;
-      q("#rd-go").textContent = "Sortear de novo";
+      q("#rd-go").textContent = "Refazer redraw";
       render();
     }catch(err){ showToast("Erro: "+err.message,"red"); }
   });
