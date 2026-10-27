@@ -2302,7 +2302,8 @@ function v2Listen(user){
 const _v2Approving = new Set();
 async function v2ApproveClaim(c){
   const cand = DB.players.find(x=>x.uid===c.candidate), mine = DB.players.find(x=>x.uid===c.uid);
-  if(!cand || !mine || cand.uid===mine.uid){ try{ await deleteDoc(v2ClaimRef(c.uid)); }catch(e){} return false; }
+  // só se vincula a pré-cadastro sem login ("p_…"); nunca a conta real de outra pessoa (o documento do vínculo é escrito pelo próprio jogador e não é confiável)
+  if(!cand || !mine || cand.uid===mine.uid || !String(cand.uid).startsWith("p_")){ try{ await deleteDoc(v2ClaimRef(c.uid)); }catch(e){} return false; }
   DB.stages = DB.stages.map(st=>remapUidDeep(st, cand.uid, mine.uid));                 // histórico passa para o uid real
   const merged = {...cand, ...mine, uid:mine.uid, email: mine.email || cand.email || ""};
   DB.players = DB.players.filter(x=>x.uid!==cand.uid).map(x=>x.uid===mine.uid ? merged : x);
@@ -2315,7 +2316,7 @@ function v2AutoApprove(){
   if(!SCHEMA_V2 || !IS_ADMIN) return;
   V2.claims.forEach(c=>{
     const cand = DB.players.find(x=>x.uid===c.candidate);
-    if(_v2Approving.has(c.uid) || !cand || c.via!=="email" || c.emailVerified!==true || !cand.email || String(cand.email).toLowerCase()!==String(c.email||"").toLowerCase()) return;
+    if(_v2Approving.has(c.uid) || !cand || !String(cand.uid).startsWith("p_") || c.via!=="email" || c.emailVerified!==true || !cand.email || String(cand.email).toLowerCase()!==String(c.email||"").toLowerCase()) return;
     _v2Approving.add(c.uid); v2ApproveClaim(c).then(ok=>{ if(ok){ showToast("Vínculo aprovado: "+(cand.name||""),"green"); render(); } }).catch(e=>{ console.warn("auto-aprovação:", e.message); }).finally(()=>_v2Approving.delete(c.uid));
   });
 }

@@ -1,0 +1,83 @@
+rules_version = '2';
+// REGRAS FINAIS + ENDURECIMENTO (auditoria de 27/10/2026). Troca direta da "final": mesmas permissões, com validação do que cada jogador pode gravar.
+// Teste no Playground do Firebase antes de publicar. Para voltar, republique v2/firestore.rules.final.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function isAdmin(season) {
+      return verified() && (
+        request.auth.token.email in ['reramos02@gmail.com'] ||
+        request.auth.token.email in get(/databases/$(database)/documents/seasons/$(season)).data.get('admins', []) ||
+        request.auth.uid in get(/databases/$(database)/documents/seasons/$(season)).data.get('admins', [])
+      );
+    }
+    // caracteres permitidos em link de foto (sem aspas, parênteses, < > nem espaço)
+    function urlOk(u) {
+      return u is string && u.size() <= 800 &&
+        (u == '' || u.matches('https://(firebasestorage[.]googleapis[.]com|lh3[.]googleusercontent[.]com)/[A-Za-z0-9._~:/?#@!$&*+,;=%-]*'));
+    }
+    function txtOk(t, max) { return t is string && t.size() <= max; }
+
+    match /seasons/{season} {
+      allow read: if signedIn();
+      allow write: if isAdmin(season);
+
+      match /stages/{stageId} {
+        allow read: if signedIn();
+        allow write: if isAdmin(season);
+      }
+      match /regs/{regId} {
+        allow read: if signedIn();
+        allow write: if isAdmin(season);
+        allow create, update: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && regId == request.resource.data.stageId + '__' + request.auth.uid
+          && request.resource.data.keys().hasOnly(['stageId','uid','inscrito','late','ord','lord'])
+          && request.resource.data.inscrito is bool
+          && request.resource.data.late is bool
+          && get(/databases/$(database)/documents/seasons/$(season)/stages/$(request.resource.data.stageId)).data.get('allowInscriptions', true) != false
+          && get(/databases/$(database)/documents/seasons/$(season)/stages/$(request.resource.data.stageId)).data.status != 'finished';
+        allow delete: if signedIn()
+          && regId.matches('.*__' + request.auth.uid)
+          && get(/databases/$(database)/documents/seasons/$(season)/stages/$(regId.split('__')[0])).data.status != 'finished';
+      }
+      // pedido de vínculo com pré-cadastro: e-mail e "verificado" têm de bater com o login real (antes o jogador podia forjar e ser aprovado sozinho)
+      match /claims/{uid} {
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.uid == uid
+          && request.resource.data.keys().hasOnly(['uid','candidate','via','email','emailVerified','name','createdAt'])
+          && request.resource.data.candidate is string && request.resource.data.candidate.matches('p_.*')
+          && request.resource.data.via in ['email','nome']
+          && request.resource.data.email == request.auth.token.get('email', '')
+          && (request.resource.data.emailVerified != true || request.auth.token.get('email_verified', false) == true)
+          && txtOk(request.resource.data.get('name', ''), 120);
+        allow read: if signedIn() && (request.auth.uid == uid || isAdmin(season));
+        allow delete: if isAdmin(season);
+      }
+    }
+
+    match /players/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid
+        && txtOk(request.resource.data.get('name', ''), 80)
+        && txtOk(request.resource.data.get('nickname', ''), 40)
+        && txtOk(request.resource.data.get('email', ''), 120)
+        && urlOk(request.resource.data.get('photoURL', ''))
+        && request.resource.data.get('fcmTokens', []) is list
+        && request.resource.data.get('fcmTokens', []).size() <= 50;
+      allow write: if isAdmin('2026');
+    }
+
+    match /config/{doc} {
+      allow read: if signedIn();
+      allow write: if verified() && request.auth.token.email in ['reramos02@gmail.com'];
+    }
+
+    match /clocks/{clockId} {
+      allow read: if signedIn();
+      allow write: if isAdmin(clockId.split('_')[0]);
+    }
+  }
+}
