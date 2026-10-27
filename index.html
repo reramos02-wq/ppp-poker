@@ -4606,6 +4606,20 @@ function renderStats(){
   </div>`;
 }
 
+// Premiação do Ranking Geral: % do Pote Ranking (1/3 da contribuição FT de cada etapa finalizada, exceto a Final) por posição
+const RANK_PRIZE_PCT = [40,28,17,10,5];
+function rankPrizePot(y){
+  return DB.stages.filter(s=>s.status==="finished" && !s.isFinal && ((s.season||DATA_SEASON)===String(y)))
+    .reduce((sum,s)=>sum+getFTContribution(s)/3, 0);
+}
+function rankPrizeBox(closed){
+  const pot = rankPrizePot(ACTIVE_SEASON);
+  const rows = RANK_PRIZE_PCT.map((pc,i)=>`<div style="flex:1;min-width:58px;text-align:center;background:var(--bg-dark);border-radius:4px;padding:6px 4px"><div style="font-size:10px;color:var(--muted)">${i+1}º · ${pc}%</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:14px;color:var(--yellow)">${fmtBRL(pot*pc/100)}</div></div>`).join("");
+  return `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--yellow)">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;letter-spacing:1.5px;color:var(--yellow);text-transform:uppercase">Premiação do Ranking</div><div style="font-size:12px;color:var(--muted)">Pote ${fmtBRL(pot)}</div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${rows}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">${closed?"Valores finais da temporada.":"Previsão pela posição atual. O pote cresce a cada etapa."}</div></div>`;
+}
 function renderRanking(){
   if(STATS_VIEW) return renderStats();
   if(FT_PRIZE_VIEW) return renderFTPrize();
@@ -4626,12 +4640,14 @@ function renderRanking(){
   </div>
   <button id="btn-ft-prize" class="btn bo fw" style="margin-bottom:14px;border-color:#FFD700;color:#FFD700;font-size:13px">🏆 Premiação Final de Temporada</button>
   ${list.length===0?'<div class="empty">Nenhum resultado registrado.</div>':''}
+  ${isGeral&&list.length?rankPrizeBox(closed):""}
   ${isGeral&&list.length?`<div class="ft-legend"><span class="ft-dot"></span>Mesa final · top 9 do ranking geral</div>`:""}
   <div class="rl">${list.map((r,i)=>{const isFinalTable=isGeral&&i<9;return`<div class="rr" data-profile="${r.p.uid}" style="cursor:pointer${isFinalTable?";border-left:3px solid #FFD700;background:rgba(255,215,0,0.04)":""}">
     <div class="rpos ${pcls(i)}">${i+1}</div>${AV(r.p.uid)}
     <div class="ri">
       <div class="rn">${r.p.nickname}${movementBadge(r.p.uid,RANK_TAB)}</div>
       <div class="rm">${r.stages} etapa${r.stages!==1?"s":""}${isKO?` · 🥊 ${r.ko}`:""}${isGeral&&r.ko>0?` · 🥊 ${r.ko}`:""}${isGeral?` <span style="font-size:10px;color:var(--muted)">(🃏${r.nlPts} + 🥊${r.koPts})</span>`:""}</div>
+      ${isGeral&&i<RANK_PRIZE_PCT.length?`<div style="font-size:11px;color:var(--yellow);font-weight:700">Prêmio ${closed?"":"previsto "}${fmtBRL(rankPrizePot(ACTIVE_SEASON)*RANK_PRIZE_PCT[i]/100)}</div>`:""}
     </div>
     <div class="rvw"><span class="rv">${r.total}</span><span class="rvl">pts</span></div>
   </div>`}).join("")}</div>
