@@ -31,6 +31,11 @@ service cloud.firestore {
         allow read: if signedIn();
         allow write: if isAdmin(season);
       }
+      // custos da temporada (descontados do pote da premiação final): todos leem, só admin grava
+      match /meta/{docId} {
+        allow read: if signedIn();
+        allow write: if isAdmin(season);
+      }
       match /regs/{regId} {
         allow read: if signedIn();
         allow write: if isAdmin(season);

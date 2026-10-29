@@ -84,6 +84,7 @@ claims/{uid} ───┘                              │                    (s
 | `seasons/2026` (só a cópia antiga) | qualquer login | admin (e-mail verificado) |
 | `seasons/{ano}/stages/{id}` (resultados, financeiro, redraw, fotos) | qualquer login | admin |
 | `seasons/{ano}/regs/{etapa}__{uid}` | qualquer login | o próprio jogador, só a sua e só em etapa aberta · admin |
+| `seasons/{ano}/meta/finance` | qualquer login | só admin (custos da temporada descontados do pote da premiação final: `costs:[{id,label,value}]`) |
 | `claims/{uid}` | o dono · admin | o dono (validado) · apagar: admin |
 | `consents/{uid}__{versão}` | o dono · admin | só criar (o dono, com horário do servidor); nunca editar nem apagar |
 | `clocks/*` | qualquer login | admin |
