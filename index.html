@@ -5298,6 +5298,38 @@ function trophySvg(champs){   // champs: [{name, nick, year}] do mais antigo ao 
   [pedW+30,pedW+70].forEach((w,i)=>{ s+=`<rect x="${210-w/2}" y="${stepsY+i*16}" width="${w}" height="16" fill="url(#trSt)" stroke="#0a0a0c"/><rect x="${210-w/2}" y="${stepsY+i*16}" width="${w}" height="2.5" fill="#55555c"/>`; });
   return s+`</g></svg>`;
 }
+// Troféus NL Hold'em (duas cartas A e K) e PKO (luva): mesmo corpo do troféu Geral, figura encaixada na base, placa de campeão no meio e logo PPP no topo
+function trophyGameSvg(champs, kind){
+  const GOLD="#F8B70B", GOLD2="#b88600", n=Math.max(champs.length,1), pw=176, ph=60, gx=10, gy=8, rows=Math.ceil(n/2);
+  const BASE=410, pedY=BASE, pedH=18+rows*(ph+gy)+8, stepsY=pedY+pedH, W=490, H=stepsY+2*16+14, pedW=2*pw+3*gx+8, u="trg"+kind;
+  const F='font-family="Barlow Condensed, DejaVu Sans Condensed, Arial Narrow, sans-serif"';
+  const SPADE="M0 -17 C-15 -4 -17 4 -10 8 C-6 10 -2 8 0 5 C2 8 6 10 10 8 C17 4 15 -4 0 -17Z M-3 6 L-5 17 L5 17 L3 6Z", HEART="M0 15 C-18 2 -16 -14 -7 -14 C-3 -14 0 -11 0 -8 C0 -11 3 -14 7 -14 C16 -14 18 2 0 15Z";
+  const card=(cx,cy,rot,idx,suit)=>{ const w=128,h=206; return `<g transform="translate(${cx} ${cy}) rotate(${rot})"><rect x="${-w/2}" y="${-h/2}" width="${w}" height="${h}" rx="14" fill="#0b0b0d" stroke="${GOLD}" stroke-width="6"/><rect x="${-w/2+10}" y="${-h/2+10}" width="${w-20}" height="${h-20}" rx="8" fill="none" stroke="#2a2a30" stroke-width="2"/><text x="${-w/2+24}" y="${-h/2+42}" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-weight="800" font-size="32" fill="${GOLD}">${idx}</text><g transform="translate(${-w/2+24} ${-h/2+60}) scale(.72)"><path d="${suit}" fill="${GOLD}"/></g><g transform="translate(8 ${-h/2+82}) scale(1.9)"><path d="${suit}" fill="${GOLD}"/></g></g>`; };
+  const glove=`<path d="M96 292 C80 240 62 196 66 142 C70 78 118 34 176 38 C236 42 272 92 266 150 C263 180 258 214 248 248 L240 292 Z" fill="url(#${u}Lat)" stroke="${GOLD}" stroke-width="9" stroke-linejoin="round"/><path d="M70 168 C28 168 20 222 56 250 C78 266 108 252 112 226" fill="url(#${u}Lat)" stroke="${GOLD}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M104 200 C150 214 214 214 252 196" fill="none" stroke="${GOLD2}" stroke-width="4" stroke-dasharray="7 6"/><path d="M150 62 C190 56 232 80 240 118" fill="none" stroke="#fff6cc" stroke-opacity=".5" stroke-width="7" stroke-linecap="round"/><rect x="92" y="290" width="160" height="46" rx="6" fill="#0e0e11" stroke="${GOLD}" stroke-width="8"/><rect x="92" y="306" width="160" height="14" fill="${GOLD}"/><g transform="translate(172 166) scale(1.5)"><path d="${SPADE}" fill="none" stroke="${GOLD}" stroke-width="2.4"/></g>`;
+  const isN = kind==="nlh", l2 = isN ? "NL HOLD'EM" : "PKO", py = isN ? 336 : 358;
+  const lh=170*296/526, cy=250;
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-width:420px;height:auto;display:block;margin:0 auto" role="img" aria-label="Troféu do campeão do ranking ${isN?"NL Hold'em":"PKO"}"><g transform="translate(35 0)">
+  <defs><pattern id="${u}Lat" width="22" height="22" patternUnits="userSpaceOnUse"><rect width="22" height="22" fill="#141417"/><path d="M11 3 L16 8 L11 13 L6 8Z" fill="#232328"/><circle cx="0" cy="18" r="3.2" fill="#232328"/><circle cx="22" cy="18" r="3.2" fill="#232328"/><circle cx="11" cy="21" r="3.2" fill="#232328"/></pattern>
+  <linearGradient id="${u}St" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3a40"/><stop offset="1" stop-color="#1b1b1f"/></linearGradient>${TROPHY_LOGO.mka.replace('mka',u+'Mka')}${TROPHY_LOGO.mkb.replace('mkb',u+'Mkb')}</defs>
+  <circle cx="335" cy="${cy}" r="112" fill="none" stroke="${GOLD}" stroke-width="12"/><circle cx="335" cy="${cy}" r="86" fill="none" stroke="#2c2c31" stroke-width="16"/><circle cx="335" cy="${cy}" r="66" fill="none" stroke="${GOLD}" stroke-width="8"/>
+  <polygon points="60,128 150,86 150,58 318,28 354,28 354,${BASE} 60,${BASE}" fill="url(#${u}Lat)" stroke="${GOLD}" stroke-width="9" stroke-linejoin="round"/>
+  <polygon points="72,138 162,96 162,68 322,40 342,40 342,${BASE-12} 72,${BASE-12}" fill="none" stroke="#0a0a0c" stroke-width="3"/>
+  <svg x="${207-85}" y="78" width="170" height="${lh}" viewBox="372 445 526 296"><path d="${TROPHY_LOGO.p[0]}" fill="${GOLD}" fill-rule="evenodd" mask="url(#${u}Mkb)"/><path d="${TROPHY_LOGO.p[1]}" fill="#8b8b8e" fill-rule="evenodd" mask="url(#${u}Mka)"/><path d="${TROPHY_LOGO.p[2]}" fill="#f4f4f2" fill-rule="evenodd"/></svg>`;
+  s += isN ? card(150,292,-5,"A",SPADE)+card(266,296,5,"K",HEART) : `<g transform="translate(54 149) scale(.92)">${glove}</g>`;
+  s+=`<rect x="82" y="${py}" width="250" height="54" rx="3" fill="#050506" stroke="${GOLD}" stroke-width="2"/><text x="207" y="${py+23}" text-anchor="middle" ${F} font-weight="700" font-size="17" letter-spacing="1.5" fill="#f4f4f2">CAMPEÃO DO</text><text x="207" y="${py+45}" text-anchor="middle" ${F} font-weight="800" font-size="20" letter-spacing="1.5" fill="${GOLD}">${l2}</text>`;
+  s+=`<rect x="${210-pedW/2}" y="${pedY}" width="${pedW}" height="${pedH}" fill="#0e0e11" stroke="${GOLD}" stroke-width="4"/><rect x="${210-pedW/2+6}" y="${pedY+6}" width="${pedW-12}" height="${pedH-12}" fill="none" stroke="${GOLD2}" stroke-width="1.5"/>`;
+  for(let i=0;i<n;i++){
+    const c=champs[i]||null, r=Math.floor(i/2), col=i%2, inrow=(r<rows-1||n%2===0)?2:1;
+    const x0=210-(inrow*pw+(inrow-1)*gx)/2+col*(pw+gx), y0=pedY+14+r*(ph+gy), cx=x0+pw/2;
+    s+=`<rect x="${x0}" y="${y0}" width="${pw}" height="${ph}" fill="#050506" stroke="${GOLD}" stroke-width="1.8"/>`;
+    if(c){
+      const tl=c.name.length>20?` textLength="${pw-22}" lengthAdjust="spacingAndGlyphs"`:"", tk=(c.nick||"").length>18?` textLength="${pw-22}" lengthAdjust="spacingAndGlyphs"`:"";
+      s+=`<text x="${cx}" y="${y0+18}" text-anchor="middle" ${F} font-weight="700" font-size="13" fill="#f4f4f2"${tl}>${esc(c.name)}</text><text x="${cx}" y="${y0+34}" text-anchor="middle" ${F} font-weight="600" font-size="12" fill="#d9d9d6"${tk}>${c.nick?esc('"'+c.nick+'"'):""}</text><text x="${cx}" y="${y0+51}" text-anchor="middle" ${F} font-weight="800" font-size="14" letter-spacing="2" fill="${GOLD}">${esc(String(c.year))}</text>`;
+    }
+  }
+  [pedW+30,pedW+70].forEach((w,i)=>{ s+=`<rect x="${210-w/2}" y="${stepsY+i*16}" width="${w}" height="16" fill="url(#${u}St)" stroke="#0a0a0c"/><rect x="${210-w/2}" y="${stepsY+i*16}" width="${w}" height="2.5" fill="#55555c"/>`; });
+  return s+`</g></svg>`;
+}
 function hofRankingHtml(){
   const subs = [["geral","🏅","Geral"],["nlholdem","🃏","NL Hold'em"],["knockout","🥊","PKO"]];
   // um campeão por temporada encerrada → agrupa por jogador: quantos títulos e em que anos
@@ -5325,7 +5357,8 @@ function hofRankingHtml(){
   <div class="dv"></div>
   ${hofTabsHtml()}
   <div class="tabs" style="margin-bottom:16px">${subs.map(t=>`<button class="tb${HOF_RK===t[0]?" on":""}" data-hof-rk="${t[0]}">${t[1]} ${t[2]}</button>`).join("")}</div>
-  ${HOF_RK==="geral"?`<div style="margin:4px 0 18px">${trophySvg(seasonList().filter(y=>seasonClosed(y)).map(y=>{ const t = withSeason(y, ()=>calcRankGeral()[0]); return t?{name:t.p.name, nick:t.p.nickname, year:y}:null; }).filter(Boolean))}</div>`:""}
+  <div style="margin:4px 0 18px">${(()=>{ const ch = seasonList().filter(y=>seasonClosed(y)).map(y=>{ const t = withSeason(y, ()=> (HOF_RK==="geral"?calcRankGeral():calcRank(HOF_RK))[0]); return t?{name:t.p.name, nick:t.p.nickname, year:y}:null; }).filter(Boolean);
+    return HOF_RK==="geral" ? trophySvg(ch) : trophyGameSvg(ch, HOF_RK==="nlholdem"?"nlh":"pko"); })()}</div>
   ${rows || `<div class="empty">Os campeões aparecem aqui quando cada temporada for encerrada.</div>`}
   </div>`;
 }
